@@ -1,4 +1,6 @@
 use reed_solomon_erasure::galois_8::ReedSolomon;
+use rand::rngs::SmallRng;
+use rand::{RngExt, SeedableRng};
 
 fn checksum_bytes(data: &[u8]) -> u64 {
     data.iter().fold(0xcbf29ce484222325u64, |acc, &b| {
@@ -24,6 +26,21 @@ fn fixed_4x2_shards() -> Vec<Vec<u8>> {
         vec![0u8; 16],
         vec![0u8; 16],
     ]
+}
+
+fn seeded_data(len: usize, seed: u64) -> Vec<u8> {
+    let mut rng = SmallRng::seed_from_u64(seed);
+    (0..len).map(|_| rng.random::<u8>()).collect()
+}
+
+fn repeated_pattern_data(len: usize, pattern: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(len);
+    while out.len() < len {
+        let remaining = len - out.len();
+        let take = core::cmp::min(remaining, pattern.len());
+        out.extend_from_slice(&pattern[..take]);
+    }
+    out
 }
 
 #[test]
@@ -89,4 +106,40 @@ fn golden_verify_detects_corruption_4x2_incrementing_input() {
     shards[5][3] ^= 0xff;
 
     assert!(!rs.verify(&shards).unwrap());
+}
+
+#[test]
+fn golden_encode_4x2_seeded_random_input() {
+    let rs = ReedSolomon::new(4, 2).unwrap();
+    let data = seeded_data(61, 0xA5A5_1024);
+    let mut shards = rs.split(&data).unwrap();
+    shards.extend(vec![vec![0u8; shards[0].len()]; 2]);
+    rs.encode(&mut shards).unwrap();
+
+    assert!(rs.verify(&shards).unwrap());
+    assert_eq!(checksum_shards(&shards), 0x81458d413eb7d9cc);
+}
+
+#[test]
+fn golden_encode_4x2_all_zero_input() {
+    let rs = ReedSolomon::new(4, 2).unwrap();
+    let data = vec![0u8; 61];
+    let mut shards = rs.split(&data).unwrap();
+    shards.extend(vec![vec![0u8; shards[0].len()]; 2]);
+    rs.encode(&mut shards).unwrap();
+
+    assert!(rs.verify(&shards).unwrap());
+    assert_eq!(checksum_shards(&shards), 0xb82e0d6749372cdb);
+}
+
+#[test]
+fn golden_encode_4x2_repeated_pattern_input() {
+    let rs = ReedSolomon::new(4, 2).unwrap();
+    let data = repeated_pattern_data(61, &[0xDE, 0xAD, 0xBE, 0xEF]);
+    let mut shards = rs.split(&data).unwrap();
+    shards.extend(vec![vec![0u8; shards[0].len()]; 2]);
+    rs.encode(&mut shards).unwrap();
+
+    assert!(rs.verify(&shards).unwrap());
+    assert_eq!(checksum_shards(&shards), 0x0de38c74d7643ce3);
 }

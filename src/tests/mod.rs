@@ -354,6 +354,45 @@ fn test_reconstruct_some_rejects_invalid_required_flags_length() {
 }
 
 #[test]
+fn test_reconstruct_some_recovers_only_requested_among_multiple_missing_data_shards() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut shards = make_random_shards!(1024, 6);
+    r.encode(&mut shards).unwrap();
+    let original = shards.clone();
+
+    let mut shards = shards_to_option_shards(&shards);
+    shards[0] = None;
+    shards[2] = None;
+
+    let mut required = vec![false; 6];
+    required[2] = true;
+
+    r.reconstruct_some(&mut shards, &required).unwrap();
+
+    assert!(shards[0].is_none());
+    assert_eq!(shards[2].as_ref().unwrap(), &original[2]);
+}
+
+#[test]
+fn test_reconstruct_some_allows_required_flag_for_present_shard() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut shards = make_random_shards!(1024, 6);
+    r.encode(&mut shards).unwrap();
+    let original = shards.clone();
+
+    let mut shards = shards_to_option_shards(&shards);
+    shards[4] = None;
+
+    let mut required = vec![false; 6];
+    required[1] = true;
+
+    r.reconstruct_some(&mut shards, &required).unwrap();
+
+    assert_eq!(shards[1].as_ref().unwrap(), &original[1]);
+    assert!(shards[4].is_none());
+}
+
+#[test]
 fn test_reed_solomon_clone() {
     let r1 = ReedSolomon::new(10, 3).unwrap();
     let r2 = r1.clone();

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
 
