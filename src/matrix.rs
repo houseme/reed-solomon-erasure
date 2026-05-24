@@ -82,7 +82,7 @@ impl<F: Field> Matrix<F> {
     #[cfg(test)]
     pub fn make_random(size: usize) -> Matrix<F>
     where
-        rand::distributions::Standard: rand::distributions::Distribution<F::Elem>,
+        rand::distr::StandardUniform: rand::distr::Distribution<F::Elem>,
     {
         let mut vec: Vec<Vec<F::Elem>> = vec![vec![Default::default(); size]; size];
         for v in vec.iter_mut() {

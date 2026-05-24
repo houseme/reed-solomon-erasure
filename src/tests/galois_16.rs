@@ -48,10 +48,10 @@ quickcheck! {
 
         let mut corrupt_pos_s = Vec::with_capacity(corrupt);
         for _ in 0..corrupt {
-            let mut pos = rand::random::<usize>() % (data + parity);
+            let mut pos = rand::random_range(0..(data + parity));
 
             while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
-                pos = rand::random::<usize>() % (data + parity);
+                pos = rand::random_range(0..(data + parity));
             }
 
             corrupt_pos_s.push(pos);
@@ -123,10 +123,10 @@ quickcheck! {
 
         let mut corrupt_pos_s = Vec::with_capacity(corrupt);
         for _ in 0..corrupt {
-            let mut pos = rand::random::<usize>() % (data + parity);
+            let mut pos = rand::random_range(0..(data + parity));
 
             while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
-                pos = rand::random::<usize>() % (data + parity);
+                pos = rand::random_range(0..(data + parity));
             }
 
             corrupt_pos_s.push(pos);
@@ -172,10 +172,10 @@ quickcheck! {
 
         let mut corrupt_pos_s = Vec::with_capacity(corrupt);
         for _ in 0..corrupt {
-            let mut pos = rand::random::<usize>() % (data + parity);
+            let mut pos = rand::random_range(0..(data + parity));
 
             while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
-                pos = rand::random::<usize>() % (data + parity);
+                pos = rand::random_range(0..(data + parity));
             }
 
             corrupt_pos_s.push(pos);
@@ -235,10 +235,10 @@ quickcheck! {
 
         let mut corrupt_pos_s = Vec::with_capacity(corrupt);
         for _ in 0..corrupt {
-            let mut pos = rand::random::<usize>() % (data + parity);
+            let mut pos = rand::random_range(0..(data + parity));
 
             while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
-                pos = rand::random::<usize>() % (data + parity);
+                pos = rand::random_range(0..(data + parity));
             }
 
             corrupt_pos_s.push(pos);
