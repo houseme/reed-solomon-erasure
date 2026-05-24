@@ -1020,6 +1020,113 @@ fn test_encode_sep_par_matches_encode_sep() {
 
 #[cfg(feature = "std")]
 #[test]
+fn test_encode_single_sep_par_matches_encode_single_sep() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let shards = make_random_shards!(256 * 1024, 14);
+    let (data, parity_src) = shards.split_at(10);
+    let mut expected_parity = parity_src.to_vec();
+    let mut actual_parity = parity_src.to_vec();
+
+    for i in 0..10 {
+        r.encode_single_sep(i, &data[i], &mut expected_parity).unwrap();
+        r.encode_single_sep_par(i, &data[i], &mut actual_parity)
+            .unwrap();
+    }
+
+    assert_eq_shards(&expected_parity, &actual_parity);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_encode_single_opt_matches_encode_single() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut expected = make_random_shards!(256 * 1024, 14);
+    let mut actual = expected.clone();
+
+    for i in 0..10 {
+        r.encode_single(i, &mut expected).unwrap();
+        r.encode_single_opt(i, &mut actual).unwrap();
+    }
+
+    assert_eq_shards(&expected, &actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_encode_single_sep_opt_matches_encode_single_sep_for_small_shards() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let shards = make_random_shards!(8 * 1024, 14);
+    let (data, parity_src) = shards.split_at(10);
+    let mut expected_parity = parity_src.to_vec();
+    let mut actual_parity = parity_src.to_vec();
+
+    assert!(!r.parallel_policy(8 * 1024, 4).use_parallel);
+
+    for i in 0..10 {
+        r.encode_single_sep(i, &data[i], &mut expected_parity).unwrap();
+        r.encode_single_sep_opt(i, &data[i], &mut actual_parity)
+            .unwrap();
+    }
+
+    assert_eq_shards(&expected_parity, &actual_parity);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_encode_single_sep_opt_matches_encode_single_sep_for_large_shards() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let shards = make_random_shards!(256 * 1024, 14);
+    let (data, parity_src) = shards.split_at(10);
+    let mut expected_parity = parity_src.to_vec();
+    let mut actual_parity = parity_src.to_vec();
+
+    assert!(r.parallel_policy(256 * 1024, 4).use_parallel);
+
+    for i in 0..10 {
+        r.encode_single_sep(i, &data[i], &mut expected_parity).unwrap();
+        r.encode_single_sep_opt(i, &data[i], &mut actual_parity)
+            .unwrap();
+    }
+
+    assert_eq_shards(&expected_parity, &actual_parity);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_encode_single_opt_matches_encode_single_for_small_shards() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut expected = make_random_shards!(8 * 1024, 14);
+    let mut actual = expected.clone();
+
+    assert!(!r.parallel_policy(8 * 1024, 4).use_parallel);
+
+    for i in 0..10 {
+        r.encode_single(i, &mut expected).unwrap();
+        r.encode_single_opt(i, &mut actual).unwrap();
+    }
+
+    assert_eq_shards(&expected, &actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_encode_single_opt_matches_encode_single_for_large_shards() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut expected = make_random_shards!(256 * 1024, 14);
+    let mut actual = expected.clone();
+
+    assert!(r.parallel_policy(256 * 1024, 4).use_parallel);
+
+    for i in 0..10 {
+        r.encode_single(i, &mut expected).unwrap();
+        r.encode_single_opt(i, &mut actual).unwrap();
+    }
+
+    assert_eq_shards(&expected, &actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
 fn test_encode_par_matches_encode() {
     let r = ReedSolomon::new(10, 4).unwrap();
     let mut expected = make_random_shards!(256 * 1024, 14);

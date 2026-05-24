@@ -865,6 +865,94 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     #[cfg(feature = "std")]
+    /// Constructs the parity shards partially using only one data shard on the
+    /// std-only parallel fast path.
+    pub fn encode_single_sep_par<U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+        &self,
+        i_data: usize,
+        single_data: &[F::Elem],
+        parity: &mut [U],
+    ) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+        U: Send,
+    {
+        check_slice_index!(data => self, i_data);
+        check_piece_count!(parity => self, parity);
+        check_slices!(multi => parity, single => single_data);
+
+        let parity_rows = self.get_parity_rows();
+        let shard_len = single_data.len();
+        let decision = self.parallel_policy(shard_len, parity.len());
+        if !decision.use_parallel {
+            self.code_single_slice(&parity_rows, i_data, single_data, parity);
+            return Ok(());
+        }
+
+        let chunk_len = decision.chunk_len;
+        parity.par_iter_mut().enumerate().for_each(|(i_row, output)| {
+            let coefficient = parity_rows[i_row][i_data];
+            let output = output.as_mut();
+
+            let mut start = 0;
+            while start < shard_len {
+                let end = core::cmp::min(start + chunk_len, shard_len);
+                let output_chunk = &mut output[start..end];
+                let input_chunk = &single_data[start..end];
+                if i_data == 0 {
+                    F::mul_slice(coefficient, input_chunk, output_chunk);
+                } else {
+                    F::mul_slice_add(coefficient, input_chunk, output_chunk);
+                }
+                start = end;
+            }
+        });
+
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    /// Constructs the parity shards partially using one data shard and
+    /// automatically chooses serial/parallel execution.
+    pub fn encode_single_sep_opt<U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+        &self,
+        i_data: usize,
+        single_data: &[F::Elem],
+        parity: &mut [U],
+    ) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+        U: Send,
+    {
+        if self.parallel_policy(single_data.len(), parity.len()).use_parallel {
+            self.encode_single_sep_par(i_data, single_data, parity)
+        } else {
+            self.encode_single_sep(i_data, single_data, parity)
+        }
+    }
+
+    #[cfg(feature = "std")]
+    /// Constructs parity shards partially from the indexed data shard and
+    /// automatically chooses serial/parallel execution.
+    pub fn encode_single_opt<T, U>(&self, i_data: usize, mut shards: T) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+        T: AsRef<[U]> + AsMut<[U]>,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send,
+    {
+        let slices = shards.as_mut();
+
+        check_slice_index!(data => self, i_data);
+        check_piece_count!(all=> self, slices);
+        check_slices!(multi => slices);
+
+        let (mut_input, output) = slices.split_at_mut(self.data_shard_count);
+        let input = mut_input[i_data].as_ref();
+
+        self.encode_single_sep_opt(i_data, input, output)
+    }
+
+    #[cfg(feature = "std")]
     /// Constructs parity shards using the std-only parallel fast path when the
     /// shard container satisfies the required thread-safety bounds.
     pub fn encode_par<T, U>(&self, mut shards: T) -> Result<(), Error>

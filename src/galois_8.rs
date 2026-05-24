@@ -545,7 +545,7 @@ fn slice_xor(input: &[u8], out: &mut [u8]) {
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
-extern "C" {
+unsafe extern "C" {
     fn reedsolomon_gal_mul(
         low: *const u8,
         high: *const u8,
