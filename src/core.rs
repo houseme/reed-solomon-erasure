@@ -29,6 +29,8 @@ const DATA_DECODE_MATRIX_CACHE_CAPACITY: usize = 254;
 const CODE_SLICE_MIN_CHUNK_BYTES: usize = 16 * 1024;
 const CODE_SLICE_DEFAULT_CHUNK_BYTES: usize = 64 * 1024;
 const CODE_SLICE_LARGE_CHUNK_BYTES: usize = 256 * 1024;
+#[cfg(feature = "std")]
+const PARALLEL_MIN_SHARD_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatrixMode {
@@ -87,28 +89,97 @@ impl ReconstructionCacheMetrics {
     }
 }
 
-// /// Parameters for parallelism.
-// #[derive(PartialEq, Debug, Clone, Copy)]
-// pub struct ParallelParam {
-//     /// Number of bytes to split the slices into for computations
-//     /// which can be done in parallel.
-//     ///
-//     /// Default is 32768.
-//     pub bytes_per_encode: usize,
-// }
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParallelPolicy {
+    pub min_parallel_shard_bytes: usize,
+    pub min_bytes_per_job: usize,
+    pub max_jobs: usize,
+}
 
-// impl ParallelParam {
-//     /// Create a new `ParallelParam` with the given split arity.
-//     pub fn new(bytes_per_encode: usize) -> ParallelParam {
-//         ParallelParam { bytes_per_encode }
-//     }
-// }
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParallelDecision {
+    pub use_parallel: bool,
+    pub jobs: usize,
+    pub chunk_len: usize,
+}
 
-// impl Default for ParallelParam {
-//     fn default() -> Self {
-//         ParallelParam::new(32768)
-//     }
-// }
+#[cfg(feature = "std")]
+impl Default for ParallelPolicy {
+    fn default() -> Self {
+        Self {
+            min_parallel_shard_bytes: PARALLEL_MIN_SHARD_BYTES,
+            min_bytes_per_job: CODE_SLICE_LARGE_CHUNK_BYTES,
+            max_jobs: 0,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl ParallelPolicy {
+    pub fn decide(
+        &self,
+        shard_size: usize,
+        data_shards: usize,
+        output_shards: usize,
+        available_parallelism: usize,
+    ) -> ParallelDecision {
+        if shard_size == 0 || data_shards == 0 || output_shards == 0 {
+            return ParallelDecision {
+                use_parallel: false,
+                jobs: 1,
+                chunk_len: shard_size,
+            };
+        }
+
+        let available_parallelism = available_parallelism.max(1);
+        let max_jobs = if self.max_jobs == 0 {
+            available_parallelism
+        } else {
+            core::cmp::min(self.max_jobs, available_parallelism)
+        }
+        .max(1);
+
+        let min_parallel_shard_bytes = self.min_parallel_shard_bytes.max(1);
+        let min_bytes_per_job = self.min_bytes_per_job.max(CODE_SLICE_MIN_CHUNK_BYTES);
+
+        let chunk_count = shard_size.div_ceil(min_bytes_per_job).max(1);
+        let available_jobs = output_shards.saturating_mul(chunk_count).max(1);
+        let jobs = core::cmp::min(max_jobs, available_jobs).max(1);
+
+        if shard_size < min_parallel_shard_bytes || jobs < 2 {
+            return ParallelDecision {
+                use_parallel: false,
+                jobs: 1,
+                chunk_len: core::cmp::min(Self::serial_chunk_len(shard_size), shard_size),
+            };
+        }
+
+        let chunks_per_output = core::cmp::max(1, jobs.div_ceil(output_shards));
+        let chunk_len = shard_size
+            .div_ceil(chunks_per_output)
+            .clamp(CODE_SLICE_MIN_CHUNK_BYTES, min_bytes_per_job);
+
+        ParallelDecision {
+            use_parallel: true,
+            jobs,
+            chunk_len: core::cmp::min(chunk_len, shard_size),
+        }
+    }
+
+    fn serial_chunk_len(shard_size: usize) -> usize {
+        if shard_size <= CODE_SLICE_MIN_CHUNK_BYTES {
+            shard_size
+        } else if shard_size <= CODE_SLICE_DEFAULT_CHUNK_BYTES {
+            CODE_SLICE_MIN_CHUNK_BYTES
+        } else if shard_size <= 4 * 1024 * 1024 {
+            CODE_SLICE_DEFAULT_CHUNK_BYTES
+        } else {
+            CODE_SLICE_LARGE_CHUNK_BYTES
+        }
+    }
+}
 
 /// Bookkeeper for shard by shard encoding.
 ///
@@ -645,7 +716,7 @@ impl<F: Field> ReedSolomon<F> {
         self.code_some_slices_chunked(matrix_rows, inputs, outputs);
     }
 
-    fn code_some_slices_chunked<T: AsRef<[F::Elem]>, U: AsMut<[F::Elem]>>(
+    pub(crate) fn code_some_slices_chunked<T: AsRef<[F::Elem]>, U: AsMut<[F::Elem]>>(
         &self,
         matrix_rows: &[&[F::Elem]],
         inputs: &[T],
@@ -675,7 +746,13 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     pub(crate) fn code_chunk_len(&self, shard_len: usize) -> usize {
-        let chunk = if shard_len <= CODE_SLICE_MIN_CHUNK_BYTES {
+        let chunk = Self::serial_code_chunk_len(shard_len);
+
+        core::cmp::min(chunk, shard_len)
+    }
+
+    fn serial_code_chunk_len(shard_len: usize) -> usize {
+        if shard_len <= CODE_SLICE_MIN_CHUNK_BYTES {
             shard_len
         } else if shard_len <= CODE_SLICE_DEFAULT_CHUNK_BYTES {
             CODE_SLICE_MIN_CHUNK_BYTES
@@ -683,9 +760,33 @@ impl<F: Field> ReedSolomon<F> {
             CODE_SLICE_DEFAULT_CHUNK_BYTES
         } else {
             CODE_SLICE_LARGE_CHUNK_BYTES
-        };
+        }
+    }
 
-        core::cmp::min(chunk, shard_len)
+    #[cfg(feature = "std")]
+    pub fn parallel_policy(&self, shard_len: usize, output_shards: usize) -> ParallelDecision {
+        self.parallel_policy_with(
+            shard_len,
+            output_shards,
+            std::thread::available_parallelism()
+                .map(|parallelism| parallelism.get())
+                .unwrap_or(1),
+        )
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn parallel_policy_with(
+        &self,
+        shard_len: usize,
+        output_shards: usize,
+        available_parallelism: usize,
+    ) -> ParallelDecision {
+        ParallelPolicy::default().decide(
+            shard_len,
+            self.data_shard_count,
+            output_shards,
+            available_parallelism,
+        )
     }
 
     #[cfg(feature = "std")]
@@ -708,8 +809,13 @@ impl<F: Field> ReedSolomon<F> {
 
         let parity_rows = self.get_parity_rows();
         let shard_len = data[0].as_ref().len();
-        let chunk_len = self.code_chunk_len(shard_len);
         let data_shard_count = self.data_shard_count;
+        let decision = self.parallel_policy(shard_len, parity.len());
+        if !decision.use_parallel {
+            self.code_some_slices(&parity_rows, data, parity);
+            return Ok(());
+        }
+        let chunk_len = decision.chunk_len;
 
         parity.par_iter_mut().enumerate().for_each(|(i_row, output)| {
             let matrix_row = parity_rows[i_row];
@@ -821,7 +927,13 @@ impl<F: Field> ReedSolomon<F> {
             return;
         }
 
-        let chunk_len = self.code_chunk_len(shard_len);
+        let decision = self.parallel_policy(shard_len, outputs.len());
+        if !decision.use_parallel {
+            self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+            return;
+        }
+
+        let chunk_len = decision.chunk_len;
         let data_shard_count = self.data_shard_count;
 
         outputs
@@ -888,6 +1000,8 @@ impl<F: Field> ReedSolomon<F> {
 
         let mut valid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(data_shard_count);
         let mut invalid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(self.total_shard_count);
+        let mut missing_data_indices: SmallVec<[usize; 32]> = SmallVec::new();
+        let mut missing_parity_indices: SmallVec<[usize; 32]> = SmallVec::new();
 
         for (matrix_row, shard) in shards.iter().enumerate() {
             match shard.as_ref() {
@@ -896,50 +1010,47 @@ impl<F: Field> ReedSolomon<F> {
                         valid_indices.push(matrix_row);
                     }
                 }
-                None => invalid_indices.push(matrix_row),
+                None => {
+                    invalid_indices.push(matrix_row);
+                    if matrix_row < data_shard_count {
+                        missing_data_indices.push(matrix_row);
+                    } else if !data_only {
+                        missing_parity_indices.push(matrix_row);
+                    }
+                }
             }
         }
 
         let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
 
-        let missing_data_indices: Vec<usize> = invalid_indices
-            .iter()
-            .copied()
-            .filter(|i| *i < data_shard_count)
-            .collect();
-
         if !missing_data_indices.is_empty() {
-            let matrix_rows: SmallVec<[&[F::Elem]; 32]> = missing_data_indices
-                .iter()
-                .map(|&idx| data_decode_matrix.get_row(idx))
-                .collect();
-
-            let sub_shards_snapshot: Vec<Vec<F::Elem>> = valid_indices
-                .iter()
-                .map(|&idx| {
-                    shards[idx]
-                        .as_ref()
-                        .expect("valid shard index must be present")
-                        .clone()
-                })
-                .collect();
-            let sub_shards: SmallVec<[&[F::Elem]; 32]> = sub_shards_snapshot
-                .iter()
-                .map(|shard| shard.as_slice())
-                .collect();
+            let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+                SmallVec::with_capacity(missing_data_indices.len());
+            for &idx in &missing_data_indices {
+                matrix_rows.push(data_decode_matrix.get_row(idx));
+            }
 
             let mut recovered_data: Vec<Vec<F::Elem>> =
                 missing_data_indices.iter().map(|_| vec![F::zero(); shard_len]).collect();
-            let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_data
-                .iter_mut()
-                .map(|shard| shard.as_mut_slice())
-                .collect();
 
-            self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
-            drop(outputs);
+            {
+                let mut sub_shards: SmallVec<[&[F::Elem]; 32]> =
+                    SmallVec::with_capacity(data_shard_count);
+                for &idx in &valid_indices {
+                    let shard = shards[idx].as_deref().ok_or(Error::TooFewShardsPresent)?;
+                    sub_shards.push(shard);
+                }
 
-            for (position, &idx) in missing_data_indices.iter().enumerate() {
-                shards[idx] = Some(recovered_data[position].clone());
+                let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_data
+                    .iter_mut()
+                    .map(|shard| shard.as_mut_slice())
+                    .collect();
+
+                self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
+            }
+
+            for (idx, recovered) in missing_data_indices.into_iter().zip(recovered_data.into_iter()) {
+                shards[idx] = Some(recovered);
             }
         }
 
@@ -947,47 +1058,37 @@ impl<F: Field> ReedSolomon<F> {
             return Ok(());
         }
 
-        let missing_parity_indices: Vec<usize> = invalid_indices
-            .iter()
-            .copied()
-            .filter(|i| *i >= data_shard_count)
-            .collect();
-
         if missing_parity_indices.is_empty() {
             return Ok(());
         }
 
         let parity_rows = self.get_parity_rows();
-        let matrix_rows: SmallVec<[&[F::Elem]; 32]> = missing_parity_indices
-            .iter()
-            .map(|&idx| parity_rows[idx - data_shard_count])
-            .collect();
+        let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+            SmallVec::with_capacity(missing_parity_indices.len());
+        for &idx in &missing_parity_indices {
+            matrix_rows.push(parity_rows[idx - data_shard_count]);
+        }
 
         let mut recovered_parity: Vec<Vec<F::Elem>> =
             missing_parity_indices.iter().map(|_| vec![F::zero(); shard_len]).collect();
-        let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_parity
-            .iter_mut()
-            .map(|shard| shard.as_mut_slice())
-            .collect();
 
-        let all_data_snapshot: Vec<Vec<F::Elem>> = (0..data_shard_count)
-            .map(|idx| {
-                shards[idx]
-                    .as_ref()
-                    .expect("all data shards must be present before parity reconstruction")
-                    .clone()
-            })
-            .collect();
-        let all_data: SmallVec<[&[F::Elem]; 32]> = all_data_snapshot
-            .iter()
-            .map(|shard| shard.as_slice())
-            .collect();
+        {
+            let mut all_data: SmallVec<[&[F::Elem]; 32]> = SmallVec::with_capacity(data_shard_count);
+            for idx in 0..data_shard_count {
+                let shard = shards[idx].as_deref().ok_or(Error::TooFewShardsPresent)?;
+                all_data.push(shard);
+            }
 
-        self.code_some_slices_par_raw(&matrix_rows, &all_data, &mut outputs);
-        drop(outputs);
+            let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_parity
+                .iter_mut()
+                .map(|shard| shard.as_mut_slice())
+                .collect();
 
-        for (position, &idx) in missing_parity_indices.iter().enumerate() {
-            shards[idx] = Some(recovered_parity[position].clone());
+            self.code_some_slices_par_raw(&matrix_rows, &all_data, &mut outputs);
+        }
+
+        for (idx, recovered) in missing_parity_indices.into_iter().zip(recovered_parity.into_iter()) {
+            shards[idx] = Some(recovered);
         }
         Ok(())
     }

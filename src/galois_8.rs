@@ -60,7 +60,16 @@ impl crate::ReedSolomon<Field> {
         T: AsRef<[U]> + AsMut<[U]>,
         U: AsRef<[u8]> + AsMut<[u8]> + Send + Sync,
     {
-        self.encode_par(shards)
+        let shard_len = shards
+            .as_ref()
+            .first()
+            .map(|shard| shard.as_ref().len())
+            .unwrap_or(0);
+        if self.parallel_policy(shard_len, self.parity_shard_count()).use_parallel {
+            self.encode_par(shards)
+        } else {
+            self.encode(shards)
+        }
     }
 
     #[cfg(feature = "std")]
@@ -69,7 +78,12 @@ impl crate::ReedSolomon<Field> {
         T: AsRef<[u8]> + Sync,
         U: AsRef<[u8]> + AsMut<[u8]> + Send,
     {
-        self.encode_sep_par(data, parity)
+        let shard_len = data.first().map(|shard| shard.as_ref().len()).unwrap_or(0);
+        if self.parallel_policy(shard_len, parity.len()).use_parallel {
+            self.encode_sep_par(data, parity)
+        } else {
+            self.encode_sep(data, parity)
+        }
     }
 
     #[cfg(feature = "std")]
@@ -77,7 +91,12 @@ impl crate::ReedSolomon<Field> {
     where
         T: AsRef<[u8]> + Sync,
     {
-        self.verify_par(slices)
+        let shard_len = slices.first().map(|shard| shard.as_ref().len()).unwrap_or(0);
+        if self.parallel_policy(shard_len, self.parity_shard_count()).use_parallel {
+            self.verify_par(slices)
+        } else {
+            self.verify(slices)
+        }
     }
 
     #[cfg(feature = "std")]
@@ -90,12 +109,26 @@ impl crate::ReedSolomon<Field> {
         T: AsRef<[u8]> + Sync,
         U: AsRef<[u8]> + AsMut<[u8]> + Send,
     {
-        self.verify_with_buffer_par(slices, buffer)
+        let shard_len = slices.first().map(|shard| shard.as_ref().len()).unwrap_or(0);
+        if self.parallel_policy(shard_len, buffer.len()).use_parallel {
+            self.verify_with_buffer_par(slices, buffer)
+        } else {
+            self.verify_with_buffer(slices, buffer)
+        }
     }
 
     #[cfg(feature = "std")]
     pub fn reconstruct_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
-        self.reconstruct_internal_option_vec_par(shards, false)
+        let shard_len = shards
+            .iter()
+            .find_map(|shard| shard.as_ref().map(|shard| shard.len()))
+            .unwrap_or(0);
+        let missing = shards.iter().filter(|shard| shard.is_none()).count();
+        if self.parallel_policy(shard_len, missing).use_parallel {
+            self.reconstruct_internal_option_vec_par(shards, false)
+        } else {
+            self.reconstruct(shards)
+        }
     }
 
     #[cfg(feature = "std")]
@@ -103,7 +136,20 @@ impl crate::ReedSolomon<Field> {
         &self,
         shards: &mut [Option<Vec<u8>>],
     ) -> Result<(), crate::Error> {
-        self.reconstruct_internal_option_vec_par(shards, true)
+        let shard_len = shards
+            .iter()
+            .find_map(|shard| shard.as_ref().map(|shard| shard.len()))
+            .unwrap_or(0);
+        let missing_data = shards
+            .iter()
+            .take(self.data_shard_count())
+            .filter(|shard| shard.is_none())
+            .count();
+        if self.parallel_policy(shard_len, missing_data).use_parallel {
+            self.reconstruct_internal_option_vec_par(shards, true)
+        } else {
+            self.reconstruct_data(shards)
+        }
     }
 
     #[cfg(feature = "std")]
@@ -183,7 +229,11 @@ impl crate::ReedSolomon<Field> {
                 let mut recovered = vec![0u8; shard_len];
                 let matrix_rows = [data_decode_matrix.get_row(i)];
                 let mut outputs = [&mut recovered[..]];
-                self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
+                if self.parallel_policy(shard_len, 1).use_parallel {
+                    self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
+                } else {
+                    self.code_some_slices_chunked(&matrix_rows, &sub_shards, &mut outputs);
+                }
                 shards[i] = Some(recovered);
             }
 

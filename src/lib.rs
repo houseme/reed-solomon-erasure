@@ -43,6 +43,10 @@ pub use crate::errors::SBSError;
 
 pub use crate::core::CodecOptions;
 pub use crate::core::MatrixMode;
+#[cfg(feature = "std")]
+pub use crate::core::ParallelDecision;
+#[cfg(feature = "std")]
+pub use crate::core::ParallelPolicy;
 pub use crate::core::ReedSolomon;
 pub use crate::core::ShardByShard;
 

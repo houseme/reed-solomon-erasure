@@ -5,6 +5,8 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+#[cfg(feature = "std")]
+use super::{ParallelDecision, ParallelPolicy};
 use super::{galois_8, CodecOptions, Error, MatrixMode, SBSError};
 use rand::{self, rng, RngExt};
 
@@ -431,6 +433,45 @@ fn test_code_chunk_len_very_large_shards_use_large_chunk() {
 }
 
 #[cfg(feature = "std")]
+#[test]
+fn test_parallel_policy_keeps_small_shards_serial() {
+    let policy = ParallelPolicy::default();
+
+    assert_eq!(
+        ParallelDecision {
+            use_parallel: false,
+            jobs: 1,
+            chunk_len: 16 * 1024,
+        },
+        policy.decide(16 * 1024, 10, 4, 8)
+    );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_parallel_policy_enables_large_shards_with_multiple_jobs() {
+    let policy = ParallelPolicy::default();
+    let decision = policy.decide(1024 * 1024, 10, 4, 8);
+
+    assert!(decision.use_parallel);
+    assert!(decision.jobs > 1);
+    assert!(decision.chunk_len >= 16 * 1024);
+    assert!(decision.chunk_len <= 256 * 1024);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_reed_solomon_parallel_policy_uses_available_parallelism() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let serial = r.parallel_policy_with(1024 * 1024, 4, 1);
+    let parallel = r.parallel_policy_with(1024 * 1024, 4, 8);
+
+    assert!(!serial.use_parallel);
+    assert!(parallel.use_parallel);
+    assert!(parallel.jobs > serial.jobs);
+}
+
+#[cfg(feature = "std")]
 struct ParallelHelperBenchResult {
     operation: &'static str,
     data_shards: usize,
@@ -599,10 +640,11 @@ fn bench_reconstruct_some_required_data_pair(
     data_shards: usize,
     parity_shards: usize,
     shard_size: usize,
+    required_count: usize,
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
     let iterations = 3usize;
-    let bytes = shard_size as f64;
+    let bytes = (required_count * shard_size) as f64;
 
     let mut serial_total = 0.0;
     let mut optimized_total = 0.0;
@@ -612,32 +654,42 @@ fn bench_reconstruct_some_required_data_pair(
         r.encode(&mut shards).unwrap();
 
         let mut serial = shards_to_option_shards(&shards);
-        serial[0] = None;
-        serial[2] = None;
+        for i in 0..required_count {
+            serial[i * 2] = None;
+        }
 
         let serial_start = Instant::now();
         r.reconstruct_data(&mut serial).unwrap();
         serial_total += serial_start.elapsed().as_secs_f64();
 
         let mut optimized = shards_to_option_shards(&shards);
-        optimized[0] = None;
-        optimized[2] = None;
+        for i in 0..required_count {
+            optimized[i * 2] = None;
+        }
         let mut required = vec![false; data_shards + parity_shards];
-        required[2] = true;
+        for i in 0..required_count {
+            required[i * 2] = true;
+        }
 
         let optimized_start = Instant::now();
         r.reconstruct_some(&mut optimized, &required).unwrap();
         optimized_total += optimized_start.elapsed().as_secs_f64();
 
-        assert!(optimized[0].is_none());
-        assert_eq!(serial[2], optimized[2]);
+        for i in 0..required_count {
+            assert_eq!(serial[i * 2], optimized[i * 2]);
+        }
     }
 
     let serial_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / serial_total;
     let parallel_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / optimized_total;
 
     ParallelHelperBenchResult {
-        operation: "reconstruct_some_required_data_vs_reconstruct_data",
+        operation: match required_count {
+            1 => "reconstruct_some_required_1_vs_reconstruct_data",
+            2 => "reconstruct_some_required_2_vs_reconstruct_data",
+            4 => "reconstruct_some_required_4_vs_reconstruct_data",
+            _ => "reconstruct_some_required_n_vs_reconstruct_data",
+        },
         data_shards,
         parity_shards,
         shard_size,
@@ -706,8 +758,12 @@ fn benchmark_parallel_helpers_quantify_gain() {
         bench_reconstruct_pair(10, 4, 1024 * 1024, true),
         bench_reconstruct_pair(32, 16, 1024 * 1024, false),
         bench_reconstruct_pair(32, 16, 1024 * 1024, true),
-        bench_reconstruct_some_required_data_pair(10, 4, 1024 * 1024),
-        bench_reconstruct_some_required_data_pair(32, 16, 1024 * 1024),
+        bench_reconstruct_some_required_data_pair(10, 4, 1024 * 1024, 1),
+        bench_reconstruct_some_required_data_pair(10, 4, 1024 * 1024, 2),
+        bench_reconstruct_some_required_data_pair(10, 4, 1024 * 1024, 4),
+        bench_reconstruct_some_required_data_pair(32, 16, 1024 * 1024, 1),
+        bench_reconstruct_some_required_data_pair(32, 16, 1024 * 1024, 2),
+        bench_reconstruct_some_required_data_pair(32, 16, 1024 * 1024, 4),
     ];
 
     assert!(results.iter().all(|result| result.serial_mb_s.is_finite()));
@@ -974,6 +1030,21 @@ fn test_galois_8_encode_opt_matches_encode() {
 
 #[cfg(feature = "std")]
 #[test]
+fn test_galois_8_encode_opt_matches_encode_for_small_shards() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut expected = make_random_shards!(8 * 1024, 14);
+    let mut actual = expected.clone();
+
+    assert!(!r.parallel_policy(8 * 1024, 4).use_parallel);
+
+    r.encode(&mut expected).unwrap();
+    r.encode_opt(&mut actual).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
 fn test_galois_8_verify_opt_matches_verify() {
     let r = ReedSolomon::new(10, 4).unwrap();
     let mut shards = make_random_shards!(256 * 1024, 14);
@@ -991,6 +1062,25 @@ fn test_galois_8_verify_opt_matches_verify() {
 
 #[cfg(feature = "std")]
 #[test]
+fn test_galois_8_verify_with_buffer_opt_matches_verify_with_buffer() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected_buffer = make_random_shards!(256 * 1024, 4);
+    let mut actual_buffer = expected_buffer.clone();
+
+    let expected = r.verify_with_buffer(&shards, &mut expected_buffer).unwrap();
+    let actual = r
+        .verify_with_buffer_opt(&shards, &mut actual_buffer)
+        .unwrap();
+
+    assert_eq!(expected, actual);
+    assert_eq!(expected_buffer, actual_buffer);
+}
+
+#[cfg(feature = "std")]
+#[test]
 fn test_galois_8_reconstruct_data_opt_matches_reconstruct_data() {
     let r = ReedSolomon::new(10, 4).unwrap();
     let mut shards = make_random_shards!(256 * 1024, 14);
@@ -1001,6 +1091,27 @@ fn test_galois_8_reconstruct_data_opt_matches_reconstruct_data() {
     expected[1] = None;
 
     let mut actual = expected.clone();
+
+    r.reconstruct_data(&mut expected).unwrap();
+    r.reconstruct_data_opt(&mut actual).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_reconstruct_data_opt_matches_reconstruct_data_for_small_shards() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(8 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected = shards_to_option_shards(&shards);
+    expected[0] = None;
+    expected[1] = None;
+
+    let mut actual = expected.clone();
+
+    assert!(!r.parallel_policy(8 * 1024, 2).use_parallel);
 
     r.reconstruct_data(&mut expected).unwrap();
     r.reconstruct_data_opt(&mut actual).unwrap();
