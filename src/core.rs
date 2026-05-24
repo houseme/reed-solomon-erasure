@@ -812,6 +812,82 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     #[cfg(feature = "std")]
+    fn code_some_slices_par_chunked<T, U>(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[T],
+        outputs: &mut [U],
+        chunk_len: usize,
+    ) where
+        F::Elem: Send + Sync,
+        T: AsRef<[F::Elem]> + Sync,
+        U: AsMut<[F::Elem]> + Send,
+    {
+        let shard_len = inputs.first().map(|input| input.as_ref().len()).unwrap_or(0);
+        if shard_len == 0 {
+            return;
+        }
+
+        let data_shard_count = self.data_shard_count;
+        outputs.par_iter_mut().enumerate().for_each(|(i_row, output)| {
+            let matrix_row = matrix_rows[i_row];
+            let output = output.as_mut();
+
+            let mut start = 0;
+            while start < shard_len {
+                let end = core::cmp::min(start + chunk_len, shard_len);
+                let output_chunk = &mut output[start..end];
+
+                F::mul_slice(matrix_row[0], &inputs[0].as_ref()[start..end], output_chunk);
+                for i_input in 1..data_shard_count {
+                    F::mul_slice_add(
+                        matrix_row[i_input],
+                        &inputs[i_input].as_ref()[start..end],
+                        output_chunk,
+                    );
+                }
+
+                start = end;
+            }
+        });
+    }
+
+    #[cfg(feature = "std")]
+    fn code_single_slice_par_chunked<U: AsMut<[F::Elem]> + Send>(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        i_input: usize,
+        input: &[F::Elem],
+        outputs: &mut [U],
+        chunk_len: usize,
+    ) where
+        F::Elem: Send + Sync,
+    {
+        let shard_len = input.len();
+        if shard_len == 0 {
+            return;
+        }
+
+        outputs.par_iter_mut().enumerate().for_each(|(i_row, output)| {
+            let coefficient = matrix_rows[i_row][i_input];
+            let output = output.as_mut();
+
+            let mut start = 0;
+            while start < shard_len {
+                let end = core::cmp::min(start + chunk_len, shard_len);
+                let output_chunk = &mut output[start..end];
+                let input_chunk = &input[start..end];
+                if i_input == 0 {
+                    F::mul_slice(coefficient, input_chunk, output_chunk);
+                } else {
+                    F::mul_slice_add(coefficient, input_chunk, output_chunk);
+                }
+                start = end;
+            }
+        });
+    }
+
+    #[cfg(feature = "std")]
     /// Constructs parity shards using the std-only parallel fast path when the
     /// input/output types satisfy the required thread-safety bounds.
     pub fn encode_sep_par<T, U>(&self, data: &[T], parity: &mut [U]) -> Result<(), Error>
@@ -831,35 +907,12 @@ impl<F: Field> ReedSolomon<F> {
 
         let parity_rows = self.get_parity_rows();
         let shard_len = data[0].as_ref().len();
-        let data_shard_count = self.data_shard_count;
         let decision = self.parallel_policy(shard_len, parity.len());
         if !decision.use_parallel {
             self.code_some_slices(&parity_rows, data, parity);
             return Ok(());
         }
-        let chunk_len = decision.chunk_len;
-
-        parity.par_iter_mut().enumerate().for_each(|(i_row, output)| {
-            let matrix_row = parity_rows[i_row];
-            let output = output.as_mut();
-
-            let mut start = 0;
-            while start < shard_len {
-                let end = core::cmp::min(start + chunk_len, shard_len);
-                let output_chunk = &mut output[start..end];
-
-                F::mul_slice(matrix_row[0], &data[0].as_ref()[start..end], output_chunk);
-                for i_input in 1..data_shard_count {
-                    F::mul_slice_add(
-                        matrix_row[i_input],
-                        &data[i_input].as_ref()[start..end],
-                        output_chunk,
-                    );
-                }
-
-                start = end;
-            }
-        });
+        self.code_some_slices_par_chunked(&parity_rows, data, parity, decision.chunk_len);
 
         Ok(())
     }
@@ -882,31 +935,18 @@ impl<F: Field> ReedSolomon<F> {
         check_slices!(multi => parity, single => single_data);
 
         let parity_rows = self.get_parity_rows();
-        let shard_len = single_data.len();
-        let decision = self.parallel_policy(shard_len, parity.len());
+        let decision = self.parallel_policy(single_data.len(), parity.len());
         if !decision.use_parallel {
             self.code_single_slice(&parity_rows, i_data, single_data, parity);
             return Ok(());
         }
-
-        let chunk_len = decision.chunk_len;
-        parity.par_iter_mut().enumerate().for_each(|(i_row, output)| {
-            let coefficient = parity_rows[i_row][i_data];
-            let output = output.as_mut();
-
-            let mut start = 0;
-            while start < shard_len {
-                let end = core::cmp::min(start + chunk_len, shard_len);
-                let output_chunk = &mut output[start..end];
-                let input_chunk = &single_data[start..end];
-                if i_data == 0 {
-                    F::mul_slice(coefficient, input_chunk, output_chunk);
-                } else {
-                    F::mul_slice_add(coefficient, input_chunk, output_chunk);
-                }
-                start = end;
-            }
-        });
+        self.code_single_slice_par_chunked(
+            &parity_rows,
+            i_data,
+            single_data,
+            parity,
+            decision.chunk_len,
+        );
 
         Ok(())
     }
@@ -924,7 +964,8 @@ impl<F: Field> ReedSolomon<F> {
         F::Elem: Send + Sync,
         U: Send,
     {
-        if self.parallel_policy(single_data.len(), parity.len()).use_parallel {
+        let decision = self.parallel_policy(single_data.len(), parity.len());
+        if decision.use_parallel {
             self.encode_single_sep_par(i_data, single_data, parity)
         } else {
             self.encode_single_sep(i_data, single_data, parity)
@@ -948,8 +989,20 @@ impl<F: Field> ReedSolomon<F> {
 
         let (mut_input, output) = slices.split_at_mut(self.data_shard_count);
         let input = mut_input[i_data].as_ref();
-
-        self.encode_single_sep_opt(i_data, input, output)
+        let decision = self.parallel_policy(input.len(), output.len());
+        let parity_rows = self.get_parity_rows();
+        if decision.use_parallel {
+            self.code_single_slice_par_chunked(
+                &parity_rows,
+                i_data,
+                input,
+                output,
+                decision.chunk_len,
+            );
+        } else {
+            self.code_single_slice(&parity_rows, i_data, input, output);
+        }
+        Ok(())
     }
 
     #[cfg(feature = "std")]
@@ -1042,30 +1095,7 @@ impl<F: Field> ReedSolomon<F> {
             self.code_some_slices_chunked(matrix_rows, inputs, outputs);
             return;
         }
-
-        let chunk_len = decision.chunk_len;
-        let data_shard_count = self.data_shard_count;
-
-        outputs
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(i_row, output)| {
-                let matrix_row = matrix_rows[i_row];
-                let output = &mut output[..];
-
-                let mut start = 0;
-                while start < shard_len {
-                    let end = core::cmp::min(start + chunk_len, shard_len);
-                    let out_chunk = &mut output[start..end];
-
-                    F::mul_slice(matrix_row[0], &inputs[0][start..end], out_chunk);
-                    for i_input in 1..data_shard_count {
-                        F::mul_slice_add(matrix_row[i_input], &inputs[i_input][start..end], out_chunk);
-                    }
-
-                    start = end;
-                }
-            });
+        self.code_some_slices_par_chunked(matrix_rows, inputs, outputs, decision.chunk_len);
     }
 
     #[cfg(feature = "std")]

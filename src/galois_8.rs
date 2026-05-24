@@ -313,6 +313,7 @@ impl crate::ReedSolomon<Field> {
                 .iter()
                 .map(|shard| shard.as_slice())
                 .collect();
+            let use_parallel = self.parallel_policy(shard_len, 1).use_parallel;
 
             for i in 0..self.data_shard_count() {
                 if !required[i] || shards[i].is_some() {
@@ -322,7 +323,7 @@ impl crate::ReedSolomon<Field> {
                 let mut recovered = vec![0u8; shard_len];
                 let matrix_rows = [data_decode_matrix.get_row(i)];
                 let mut outputs = [&mut recovered[..]];
-                if self.parallel_policy(shard_len, 1).use_parallel {
+                if use_parallel {
                     self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
                 } else {
                     self.code_some_slices_chunked(&matrix_rows, &sub_shards, &mut outputs);
