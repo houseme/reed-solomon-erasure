@@ -629,6 +629,7 @@ dependencies = [
  "parking_lot",
  "quickcheck",
  "rand",
+ "rayon",
  "smallvec",
  "spin",
 ]

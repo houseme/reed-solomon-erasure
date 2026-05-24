@@ -26,7 +26,7 @@ license = "MIT"
 
 [features]
 default = ["std"] # simd off by default
-std = ["parking_lot"]
+std = ["parking_lot", "rayon"]
 simd-accel = ["cc", "libc"]
 
 [badges]
@@ -42,6 +42,7 @@ libm = "0.2.16"
 hashlink = { version = "0.11", default-features = false }
 # Efficient `Mutex` implementation for `std` environment
 parking_lot = { version = "0.12.5", optional = true }
+rayon = { version = "1.12", optional = true }
 smallvec = "1.15"
 # `Mutex` implementation for `no_std` environment with the same high-level API as `parking_lot`
 spin = { version = "0.12.0", default-features = false, features = ["spin_mutex"] }

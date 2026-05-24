@@ -15,6 +15,8 @@ use hashlink::LruCache;
 
 #[cfg(feature = "std")]
 use parking_lot::Mutex;
+#[cfg(feature = "std")]
+use rayon::prelude::*;
 #[cfg(not(feature = "std"))]
 use spin::Mutex;
 
@@ -22,6 +24,9 @@ use super::Field;
 use super::ReconstructShard;
 
 const DATA_DECODE_MATRIX_CACHE_CAPACITY: usize = 254;
+const CODE_SLICE_MIN_CHUNK_BYTES: usize = 16 * 1024;
+const CODE_SLICE_DEFAULT_CHUNK_BYTES: usize = 64 * 1024;
+const CODE_SLICE_LARGE_CHUNK_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatrixMode {
@@ -596,9 +601,191 @@ impl<F: Field> ReedSolomon<F> {
         inputs: &[T],
         outputs: &mut [U],
     ) {
-        for i_input in 0..self.data_shard_count {
-            self.code_single_slice(matrix_rows, i_input, inputs[i_input].as_ref(), outputs);
+        self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+    }
+
+    fn code_some_slices_chunked<T: AsRef<[F::Elem]>, U: AsMut<[F::Elem]>>(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[T],
+        outputs: &mut [U],
+    ) {
+        let shard_len = inputs.first().map(|input| input.as_ref().len()).unwrap_or(0);
+        if shard_len == 0 {
+            return;
         }
+
+        let chunk_len = self.code_chunk_len(shard_len);
+        let mut start = 0;
+        while start < shard_len {
+            let end = core::cmp::min(start + chunk_len, shard_len);
+            for i_input in 0..self.data_shard_count {
+                self.code_single_slice_range(
+                    matrix_rows,
+                    i_input,
+                    inputs[i_input].as_ref(),
+                    outputs,
+                    start,
+                    end,
+                );
+            }
+            start = end;
+        }
+    }
+
+    pub(crate) fn code_chunk_len(&self, shard_len: usize) -> usize {
+        let chunk = if shard_len <= CODE_SLICE_MIN_CHUNK_BYTES {
+            shard_len
+        } else if shard_len <= CODE_SLICE_DEFAULT_CHUNK_BYTES {
+            CODE_SLICE_MIN_CHUNK_BYTES
+        } else if shard_len <= 4 * 1024 * 1024 {
+            CODE_SLICE_DEFAULT_CHUNK_BYTES
+        } else {
+            CODE_SLICE_LARGE_CHUNK_BYTES
+        };
+
+        core::cmp::min(chunk, shard_len)
+    }
+
+    #[cfg(feature = "std")]
+    /// Constructs parity shards using the std-only parallel fast path when the
+    /// input/output types satisfy the required thread-safety bounds.
+    pub fn encode_sep_par<T, U>(&self, data: &[T], parity: &mut [U]) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+        T: AsRef<[F::Elem]> + Sync,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send,
+    {
+        check_piece_count!(data => self, data);
+        check_piece_count!(parity => self, parity);
+        check_slices!(multi => data, multi => parity);
+
+        if self.fast_one_parity_enabled() {
+            self.encode_fast_one_parity(data, parity);
+            return Ok(());
+        }
+
+        let parity_rows = self.get_parity_rows();
+        let shard_len = data[0].as_ref().len();
+        let chunk_len = self.code_chunk_len(shard_len);
+        let data_shard_count = self.data_shard_count;
+
+        parity.par_iter_mut().enumerate().for_each(|(i_row, output)| {
+            let matrix_row = parity_rows[i_row];
+            let output = output.as_mut();
+
+            let mut start = 0;
+            while start < shard_len {
+                let end = core::cmp::min(start + chunk_len, shard_len);
+                let output_chunk = &mut output[start..end];
+
+                F::mul_slice(matrix_row[0], &data[0].as_ref()[start..end], output_chunk);
+                for i_input in 1..data_shard_count {
+                    F::mul_slice_add(
+                        matrix_row[i_input],
+                        &data[i_input].as_ref()[start..end],
+                        output_chunk,
+                    );
+                }
+
+                start = end;
+            }
+        });
+
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    /// Constructs parity shards using the std-only parallel fast path when the
+    /// shard container satisfies the required thread-safety bounds.
+    pub fn encode_par<T, U>(&self, mut shards: T) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+        T: AsRef<[U]> + AsMut<[U]>,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send + Sync,
+    {
+        let slices: &mut [U] = shards.as_mut();
+
+        check_piece_count!(all => self, slices);
+        check_slices!(multi => slices);
+
+        let (input, output) = slices.split_at_mut(self.data_shard_count);
+        self.encode_sep_par(&*input, output)
+    }
+
+    #[cfg(feature = "std")]
+    /// Checks parity shards using the std-only parallel fast path and caller-provided buffer.
+    pub fn verify_with_buffer_par<T, U>(
+        &self,
+        slices: &[T],
+        buffer: &mut [U],
+    ) -> Result<bool, Error>
+    where
+        F::Elem: Send + Sync,
+        T: AsRef<[F::Elem]> + Sync,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send,
+    {
+        check_piece_count!(all => self, slices);
+        check_piece_count!(parity_buf => self, buffer);
+        check_slices!(multi => slices, multi => buffer);
+
+        let data = &slices[0..self.data_shard_count];
+        let to_check = &slices[self.data_shard_count..];
+
+        if self.fast_one_parity_enabled() {
+            self.encode_fast_one_parity(data, buffer);
+            return Ok(buffer[0].as_ref() == to_check[0].as_ref());
+        }
+
+        self.encode_sep_par(data, buffer)?;
+
+        Ok(buffer
+            .iter()
+            .zip(to_check.iter())
+            .all(|(expected, actual)| expected.as_ref() == actual.as_ref()))
+    }
+
+    #[cfg(feature = "std")]
+    /// Checks parity shards using the std-only parallel fast path.
+    pub fn verify_par<T>(&self, slices: &[T]) -> Result<bool, Error>
+    where
+        F::Elem: Send + Sync,
+        T: AsRef<[F::Elem]> + Sync,
+    {
+        check_piece_count!(all => self, slices);
+        check_slices!(multi => slices);
+
+        let slice_len = slices[0].as_ref().len();
+        let mut buffer: SmallVec<[Vec<F::Elem>; 32]> =
+            SmallVec::with_capacity(self.parity_shard_count);
+
+        for _ in 0..self.parity_shard_count {
+            buffer.push(vec![F::zero(); slice_len]);
+        }
+
+        self.verify_with_buffer_par(slices, &mut buffer)
+    }
+
+    fn code_single_slice_range<U: AsMut<[F::Elem]>>(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        i_input: usize,
+        input: &[F::Elem],
+        outputs: &mut [U],
+        start: usize,
+        end: usize,
+    ) {
+        let input = &input[start..end];
+        outputs.iter_mut().enumerate().for_each(|(i_row, output)| {
+            let matrix_row_to_use = matrix_rows[i_row][i_input];
+            let output = &mut output.as_mut()[start..end];
+
+            if i_input == 0 {
+                F::mul_slice(matrix_row_to_use, input, output);
+            } else {
+                F::mul_slice_add(matrix_row_to_use, input, output);
+            }
+        })
     }
 
     fn code_single_slice<U: AsMut<[F::Elem]>>(
@@ -608,16 +795,7 @@ impl<F: Field> ReedSolomon<F> {
         input: &[F::Elem],
         outputs: &mut [U],
     ) {
-        outputs.iter_mut().enumerate().for_each(|(i_row, output)| {
-            let matrix_row_to_use = matrix_rows[i_row][i_input];
-            let output = output.as_mut();
-
-            if i_input == 0 {
-                F::mul_slice(matrix_row_to_use, input, output);
-            } else {
-                F::mul_slice_add(matrix_row_to_use, input, output);
-            }
-        })
+        self.code_single_slice_range(matrix_rows, i_input, input, outputs, 0, input.len());
     }
 
     fn fast_one_parity_enabled(&self) -> bool {

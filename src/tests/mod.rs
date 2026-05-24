@@ -8,6 +8,13 @@ use alloc::vec::Vec;
 use super::{galois_8, CodecOptions, Error, MatrixMode, SBSError};
 use rand::{self, rng, RngExt};
 
+#[cfg(feature = "std")]
+use std::fs;
+#[cfg(feature = "std")]
+use std::path::PathBuf;
+#[cfg(feature = "std")]
+use std::time::Instant;
+
 mod galois_16;
 
 type ReedSolomon = crate::ReedSolomon<galois_8::Field>;
@@ -390,6 +397,299 @@ fn test_reconstruct_some_allows_required_flag_for_present_shard() {
 
     assert_eq!(shards[1].as_ref().unwrap(), &original[1]);
     assert!(shards[4].is_none());
+}
+
+#[test]
+fn test_code_chunk_len_small_shards_use_single_chunk() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+
+    assert_eq!(8 * 1024, r.code_chunk_len(8 * 1024));
+    assert_eq!(16 * 1024, r.code_chunk_len(16 * 1024));
+}
+
+#[test]
+fn test_code_chunk_len_medium_shards_use_min_chunk() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+
+    assert_eq!(16 * 1024, r.code_chunk_len(32 * 1024));
+    assert_eq!(16 * 1024, r.code_chunk_len(64 * 1024));
+}
+
+#[test]
+fn test_code_chunk_len_large_shards_use_default_chunk() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+
+    assert_eq!(64 * 1024, r.code_chunk_len(512 * 1024));
+    assert_eq!(64 * 1024, r.code_chunk_len(4 * 1024 * 1024));
+}
+
+#[test]
+fn test_code_chunk_len_very_large_shards_use_large_chunk() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+
+    assert_eq!(256 * 1024, r.code_chunk_len(8 * 1024 * 1024));
+}
+
+#[cfg(feature = "std")]
+struct ParallelHelperBenchResult {
+    operation: &'static str,
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+    serial_mb_s: f64,
+    parallel_mb_s: f64,
+    speedup: f64,
+}
+
+#[cfg(feature = "std")]
+fn bench_encode_sep_pair(data_shards: usize, parity_shards: usize, shard_size: usize) -> ParallelHelperBenchResult {
+    let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let iterations = 3usize;
+    let bytes = (data_shards * shard_size) as f64;
+
+    let mut serial_total = 0.0;
+    let mut parallel_total = 0.0;
+
+    for _ in 0..iterations {
+        let shards = make_random_shards!(shard_size, data_shards + parity_shards);
+
+        let mut serial = shards.clone();
+        let serial_start = Instant::now();
+        {
+            let (data, parity) = serial.split_at_mut(data_shards);
+            r.encode_sep(data, parity).unwrap();
+        }
+        serial_total += serial_start.elapsed().as_secs_f64();
+
+        let mut parallel = shards;
+        let parallel_start = Instant::now();
+        {
+            let (data, parity) = parallel.split_at_mut(data_shards);
+            r.encode_sep_par(data, parity).unwrap();
+        }
+        parallel_total += parallel_start.elapsed().as_secs_f64();
+
+        assert_eq!(serial, parallel);
+    }
+
+    let serial_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / serial_total;
+    let parallel_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / parallel_total;
+
+    ParallelHelperBenchResult {
+        operation: "encode_sep_vs_encode_sep_par",
+        data_shards,
+        parity_shards,
+        shard_size,
+        serial_mb_s,
+        parallel_mb_s,
+        speedup: parallel_mb_s / serial_mb_s,
+    }
+}
+
+#[cfg(feature = "std")]
+fn bench_verify_with_buffer_pair(
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+) -> ParallelHelperBenchResult {
+    let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let iterations = 3usize;
+    let bytes = (data_shards * shard_size) as f64;
+
+    let mut serial_total = 0.0;
+    let mut parallel_total = 0.0;
+
+    for _ in 0..iterations {
+        let mut shards = make_random_shards!(shard_size, data_shards + parity_shards);
+        r.encode(&mut shards).unwrap();
+
+        let mut serial_buffer = make_random_shards!(shard_size, parity_shards);
+        let serial_start = Instant::now();
+        let serial_ok = r.verify_with_buffer(&shards, &mut serial_buffer).unwrap();
+        serial_total += serial_start.elapsed().as_secs_f64();
+
+        let mut parallel_buffer = make_random_shards!(shard_size, parity_shards);
+        let parallel_start = Instant::now();
+        let parallel_ok = r.verify_with_buffer_par(&shards, &mut parallel_buffer).unwrap();
+        parallel_total += parallel_start.elapsed().as_secs_f64();
+
+        assert_eq!(serial_ok, parallel_ok);
+        assert_eq!(serial_buffer, parallel_buffer);
+    }
+
+    let serial_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / serial_total;
+    let parallel_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / parallel_total;
+
+    ParallelHelperBenchResult {
+        operation: "verify_with_buffer_vs_verify_with_buffer_par",
+        data_shards,
+        parity_shards,
+        shard_size,
+        serial_mb_s,
+        parallel_mb_s,
+        speedup: parallel_mb_s / serial_mb_s,
+    }
+}
+
+#[cfg(feature = "std")]
+fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
+    fs::create_dir_all(&dir).unwrap();
+
+    let json_path = dir.join("parallel-helper-results.json");
+    let csv_path = dir.join("parallel-helper-results.csv");
+
+    let mut json = String::from("[\n");
+    for (i, result) in results.iter().enumerate() {
+        let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
+        json.push_str(&format!(
+            "  {{\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"serial_mb_s\":{:.4},\"parallel_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
+            result.operation,
+            result.data_shards,
+            result.parity_shards,
+            result.shard_size,
+            result.serial_mb_s,
+            result.parallel_mb_s,
+            result.speedup,
+            suffix
+        ));
+    }
+    json.push(']');
+    fs::write(&json_path, json).unwrap();
+
+    let mut csv = String::from(
+        "operation,data_shards,parity_shards,shard_size,serial_mb_s,parallel_mb_s,speedup\n",
+    );
+    for result in results {
+        csv.push_str(&format!(
+            "{},{},{},{},{:.4},{:.4},{:.4}\n",
+            result.operation,
+            result.data_shards,
+            result.parity_shards,
+            result.shard_size,
+            result.serial_mb_s,
+            result.parallel_mb_s,
+            result.speedup
+        ));
+    }
+    fs::write(&csv_path, csv).unwrap();
+
+    assert!(json_path.exists());
+    assert!(csv_path.exists());
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn benchmark_parallel_helpers_quantify_gain() {
+    let results = vec![
+        bench_encode_sep_pair(10, 4, 1024 * 1024),
+        bench_encode_sep_pair(32, 16, 1024 * 1024),
+        bench_verify_with_buffer_pair(10, 4, 1024 * 1024),
+        bench_verify_with_buffer_pair(32, 16, 1024 * 1024),
+    ];
+
+    assert!(results.iter().all(|result| result.serial_mb_s.is_finite()));
+    assert!(results.iter().all(|result| result.parallel_mb_s.is_finite()));
+    assert!(results.iter().all(|result| result.speedup.is_finite()));
+
+    write_parallel_helper_bench_results(&results);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_encode_sep_par_matches_encode_sep() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let shards = make_random_shards!(256 * 1024, 14);
+    let mut expected = shards.clone();
+    let mut actual = shards.clone();
+
+    let (expected_data, expected_parity) = expected.split_at_mut(10);
+    r.encode_sep(expected_data, expected_parity).unwrap();
+
+    let (actual_data, actual_parity) = actual.split_at_mut(10);
+    r.encode_sep_par(actual_data, actual_parity).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_encode_par_matches_encode() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut expected = make_random_shards!(256 * 1024, 14);
+    let mut actual = expected.clone();
+
+    r.encode(&mut expected).unwrap();
+    r.encode_par(&mut actual).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_verify_with_buffer_par_matches_verify_with_buffer() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected_buffer = make_random_shards!(256 * 1024, 4);
+    let mut actual_buffer = expected_buffer.clone();
+
+    let expected = r.verify_with_buffer(&shards, &mut expected_buffer).unwrap();
+    let actual = r.verify_with_buffer_par(&shards, &mut actual_buffer).unwrap();
+
+    assert_eq!(expected, actual);
+    assert_eq!(expected_buffer, actual_buffer);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_verify_par_matches_verify() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let expected = r.verify(&shards).unwrap();
+    let actual = r.verify_par(&shards).unwrap();
+
+    assert_eq!(expected, actual);
+
+    shards[13][15] ^= 0xff;
+
+    let expected = r.verify(&shards).unwrap();
+    let actual = r.verify_par(&shards).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_encode_opt_matches_encode() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut expected = make_random_shards!(256 * 1024, 14);
+    let mut actual = expected.clone();
+
+    r.encode(&mut expected).unwrap();
+    r.encode_opt(&mut actual).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_verify_opt_matches_verify() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let expected = r.verify(&shards).unwrap();
+    let actual = r.verify_opt(&shards).unwrap();
+    assert_eq!(expected, actual);
+
+    shards[13][31] ^= 0xff;
+    let expected = r.verify(&shards).unwrap();
+    let actual = r.verify_opt(&shards).unwrap();
+    assert_eq!(expected, actual);
 }
 
 #[test]

@@ -53,6 +53,47 @@ pub type ReedSolomon = crate::ReedSolomon<Field>;
 /// Type alias of ShardByShard over GF(2^8).
 pub type ShardByShard<'a> = crate::ShardByShard<'a, Field>;
 
+impl crate::ReedSolomon<Field> {
+    #[cfg(feature = "std")]
+    pub fn encode_opt<T, U>(&self, shards: T) -> Result<(), crate::Error>
+    where
+        T: AsRef<[U]> + AsMut<[U]>,
+        U: AsRef<[u8]> + AsMut<[u8]> + Send + Sync,
+    {
+        self.encode_par(shards)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn encode_sep_opt<T, U>(&self, data: &[T], parity: &mut [U]) -> Result<(), crate::Error>
+    where
+        T: AsRef<[u8]> + Sync,
+        U: AsRef<[u8]> + AsMut<[u8]> + Send,
+    {
+        self.encode_sep_par(data, parity)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn verify_opt<T>(&self, slices: &[T]) -> Result<bool, crate::Error>
+    where
+        T: AsRef<[u8]> + Sync,
+    {
+        self.verify_par(slices)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn verify_with_buffer_opt<T, U>(
+        &self,
+        slices: &[T],
+        buffer: &mut [U],
+    ) -> Result<bool, crate::Error>
+    where
+        T: AsRef<[u8]> + Sync,
+        U: AsRef<[u8]> + AsMut<[u8]> + Send,
+    {
+        self.verify_with_buffer_par(slices, buffer)
+    }
+}
+
 /// Add two elements.
 pub fn add(a: u8, b: u8) -> u8 {
     a ^ b
