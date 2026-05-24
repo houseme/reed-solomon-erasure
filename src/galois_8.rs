@@ -105,6 +105,94 @@ impl crate::ReedSolomon<Field> {
     ) -> Result<(), crate::Error> {
         self.reconstruct_internal_option_vec_par(shards, true)
     }
+
+    #[cfg(feature = "std")]
+    pub fn reconstruct_some_opt(
+        &self,
+        shards: &mut [Option<Vec<u8>>],
+        required: &[bool],
+    ) -> Result<(), crate::Error> {
+        if required.len() != self.total_shard_count() {
+            return Err(crate::Error::InvalidShardFlags);
+        }
+
+        let data_only = required
+            .iter()
+            .enumerate()
+            .all(|(idx, required)| !*required || idx < self.data_shard_count());
+
+        if data_only {
+            let mut number_present = 0;
+            let mut shard_len = None;
+            for shard in shards.iter() {
+                if let Some(shard) = shard.as_ref() {
+                    if shard.is_empty() {
+                        return Err(crate::Error::EmptyShard);
+                    }
+                    number_present += 1;
+                    if let Some(old_len) = shard_len {
+                        if shard.len() != old_len {
+                            return Err(crate::Error::IncorrectShardSize);
+                        }
+                    }
+                    shard_len = Some(shard.len());
+                }
+            }
+
+            if number_present == self.total_shard_count() {
+                return Ok(());
+            }
+            if number_present < self.data_shard_count() {
+                return Err(crate::Error::TooFewShardsPresent);
+            }
+
+            let shard_len = shard_len.expect("at least one shard present; qed");
+            let mut valid_indices = smallvec::SmallVec::<[usize; 32]>::with_capacity(self.data_shard_count());
+            let mut invalid_indices = smallvec::SmallVec::<[usize; 32]>::with_capacity(self.total_shard_count());
+
+            for (idx, shard) in shards.iter().enumerate() {
+                if shard.is_some() {
+                    if valid_indices.len() < self.data_shard_count() {
+                        valid_indices.push(idx);
+                    }
+                } else {
+                    invalid_indices.push(idx);
+                }
+            }
+
+            let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+            let sub_shards_snapshot: Vec<Vec<u8>> = valid_indices
+                .iter()
+                .map(|&idx| {
+                    shards[idx]
+                        .as_ref()
+                        .expect("valid shard index must be present")
+                        .clone()
+                })
+                .collect();
+            let sub_shards: smallvec::SmallVec<[&[u8]; 32]> = sub_shards_snapshot
+                .iter()
+                .map(|shard| shard.as_slice())
+                .collect();
+
+            for i in 0..self.data_shard_count() {
+                if !required[i] || shards[i].is_some() {
+                    continue;
+                }
+
+                let mut recovered = vec![0u8; shard_len];
+                let matrix_rows = [data_decode_matrix.get_row(i)];
+                let mut outputs = [&mut recovered[..]];
+                self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
+                shards[i] = Some(recovered);
+            }
+
+            return Ok(());
+        }
+
+        self.reconstruct_opt(shards)?;
+        Ok(())
+    }
 }
 
 /// Add two elements.

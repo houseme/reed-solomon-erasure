@@ -17,6 +17,8 @@ use hashlink::LruCache;
 use parking_lot::Mutex;
 #[cfg(feature = "std")]
 use rayon::prelude::*;
+#[cfg(feature = "std")]
+use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(not(feature = "std"))]
 use spin::Mutex;
 
@@ -51,6 +53,36 @@ impl Default for CodecOptions {
             inversion_cache: true,
             inversion_cache_capacity: DATA_DECODE_MATRIX_CACHE_CAPACITY,
             matrix_mode: MatrixMode::Vandermonde,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Default)]
+struct ReconstructionCacheMetrics {
+    requests: AtomicUsize,
+    hits: AtomicUsize,
+    misses: AtomicUsize,
+    inserts: AtomicUsize,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReconstructionCacheStats {
+    pub requests: usize,
+    pub hits: usize,
+    pub misses: usize,
+    pub inserts: usize,
+}
+
+#[cfg(feature = "std")]
+impl ReconstructionCacheMetrics {
+    fn snapshot(&self) -> ReconstructionCacheStats {
+        ReconstructionCacheStats {
+            requests: self.requests.load(Ordering::Relaxed),
+            hits: self.hits.load(Ordering::Relaxed),
+            misses: self.misses.load(Ordering::Relaxed),
+            inserts: self.inserts.load(Ordering::Relaxed),
         }
     }
 }
@@ -382,6 +414,8 @@ pub struct ReedSolomon<F: Field> {
     matrix: Matrix<F>,
     options: CodecOptions,
     data_decode_matrix_cache: Mutex<LruCache<Vec<usize>, Arc<Matrix<F>>>>,
+    #[cfg(feature = "std")]
+    reconstruction_cache_metrics: ReconstructionCacheMetrics,
 }
 
 impl<F: Field> Clone for ReedSolomon<F> {
@@ -535,6 +569,8 @@ impl<F: Field> ReedSolomon<F> {
             matrix,
             options,
             data_decode_matrix_cache: Mutex::new(LruCache::new(options.inversion_cache_capacity)),
+            #[cfg(feature = "std")]
+            reconstruction_cache_metrics: ReconstructionCacheMetrics::default(),
         })
     }
 
@@ -548,6 +584,11 @@ impl<F: Field> ReedSolomon<F> {
 
     pub fn total_shard_count(&self) -> usize {
         self.total_shard_count
+    }
+
+    #[cfg(feature = "std")]
+    pub fn reconstruction_cache_stats(&self) -> ReconstructionCacheStats {
+        self.reconstruction_cache_metrics.snapshot()
     }
 
     pub fn split(&self, data: &[F::Elem]) -> Result<Vec<Vec<F::Elem>>, Error> {
@@ -767,7 +808,7 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     #[cfg(feature = "std")]
-    fn code_some_slices_par_raw(
+    pub(crate) fn code_some_slices_par_raw(
         &self,
         matrix_rows: &[&[F::Elem]],
         inputs: &[&[F::Elem]],
@@ -867,24 +908,24 @@ impl<F: Field> ReedSolomon<F> {
             .filter(|i| *i < data_shard_count)
             .collect();
 
-        let sub_shards_snapshot: Vec<Vec<F::Elem>> = valid_indices
-            .iter()
-            .map(|&idx| {
-                shards[idx]
-                    .as_ref()
-                    .expect("valid shard index must be present")
-                    .clone()
-            })
-            .collect();
-        let sub_shards: SmallVec<[&[F::Elem]; 32]> = sub_shards_snapshot
-            .iter()
-            .map(|shard| shard.as_slice())
-            .collect();
-
         if !missing_data_indices.is_empty() {
             let matrix_rows: SmallVec<[&[F::Elem]; 32]> = missing_data_indices
                 .iter()
                 .map(|&idx| data_decode_matrix.get_row(idx))
+                .collect();
+
+            let sub_shards_snapshot: Vec<Vec<F::Elem>> = valid_indices
+                .iter()
+                .map(|&idx| {
+                    shards[idx]
+                        .as_ref()
+                        .expect("valid shard index must be present")
+                        .clone()
+                })
+                .collect();
+            let sub_shards: SmallVec<[&[F::Elem]; 32]> = sub_shards_snapshot
+                .iter()
+                .map(|shard| shard.as_slice())
                 .collect();
 
             let mut recovered_data: Vec<Vec<F::Elem>> =
@@ -922,6 +963,13 @@ impl<F: Field> ReedSolomon<F> {
             .map(|&idx| parity_rows[idx - data_shard_count])
             .collect();
 
+        let mut recovered_parity: Vec<Vec<F::Elem>> =
+            missing_parity_indices.iter().map(|_| vec![F::zero(); shard_len]).collect();
+        let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_parity
+            .iter_mut()
+            .map(|shard| shard.as_mut_slice())
+            .collect();
+
         let all_data_snapshot: Vec<Vec<F::Elem>> = (0..data_shard_count)
             .map(|idx| {
                 shards[idx]
@@ -933,13 +981,6 @@ impl<F: Field> ReedSolomon<F> {
         let all_data: SmallVec<[&[F::Elem]; 32]> = all_data_snapshot
             .iter()
             .map(|shard| shard.as_slice())
-            .collect();
-
-        let mut recovered_parity: Vec<Vec<F::Elem>> =
-            missing_parity_indices.iter().map(|_| vec![F::zero(); shard_len]).collect();
-        let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_parity
-            .iter_mut()
-            .map(|shard| shard.as_mut_slice())
             .collect();
 
         self.code_some_slices_par_raw(&matrix_rows, &all_data, &mut outputs);
@@ -1241,42 +1282,97 @@ impl<F: Field> ReedSolomon<F> {
             .all(|(i, required)| !*required || i < self.data_shard_count);
 
         let originally_missing: Vec<bool> = shards.iter_mut().map(|shard| shard.get().is_none()).collect();
-        let mut working: Vec<Option<Vec<F::Elem>>> = shards
-            .iter_mut()
-            .map(|shard| shard.get().map(|data| data.to_vec()))
-            .collect();
 
         if required_data_only {
-            self.reconstruct_data(&mut working)?;
-        } else {
-            self.reconstruct(&mut working)?;
-        }
-
-        for (i, shard) in shards.iter_mut().enumerate() {
-            if !required[i] || !originally_missing[i] {
-                continue;
+            let mut valid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(self.data_shard_count);
+            let mut invalid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(self.total_shard_count);
+            for (index, shard) in shards.iter_mut().enumerate() {
+                if shard.get().is_some() {
+                    if valid_indices.len() < self.data_shard_count {
+                        valid_indices.push(index);
+                    }
+                } else {
+                    invalid_indices.push(index);
+                }
             }
 
-            let recovered = working[i].as_ref().expect("recovered shard must be present");
-            match shard.get_or_initialize(shard_len) {
-                Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(recovered),
-                Err(Err(err)) => return Err(err),
+            let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+            let sub_shards_snapshot: Vec<Vec<F::Elem>> = valid_indices
+                .iter()
+                .map(|&idx| {
+                    shards[idx]
+                        .get()
+                        .expect("valid shard index must be present")
+                        .to_vec()
+                })
+                .collect();
+            let sub_shards: SmallVec<[&[F::Elem]; 32]> = sub_shards_snapshot
+                .iter()
+                .map(|shard| shard.as_slice())
+                .collect();
+
+            for i in 0..self.data_shard_count {
+                if !required[i] || !originally_missing[i] {
+                    continue;
+                }
+
+                let mut recovered = vec![F::zero(); shard_len];
+                let matrix_rows = [data_decode_matrix.get_row(i)];
+                let mut outputs = [&mut recovered[..]];
+                self.code_some_slices(&matrix_rows, &sub_shards, &mut outputs);
+
+                match shards[i].get_or_initialize(shard_len) {
+                    Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(&recovered),
+                    Err(Err(err)) => return Err(err),
+                }
+            }
+        } else {
+            let mut working: Vec<Option<Vec<F::Elem>>> = shards
+                .iter_mut()
+                .map(|shard| shard.get().map(|data| data.to_vec()))
+                .collect();
+            self.reconstruct(&mut working)?;
+
+            for (i, shard) in shards.iter_mut().enumerate() {
+                if !required[i] || !originally_missing[i] {
+                    continue;
+                }
+
+                let recovered = working[i].as_ref().expect("recovered shard must be present");
+                match shard.get_or_initialize(shard_len) {
+                    Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(recovered),
+                    Err(Err(err)) => return Err(err),
+                }
             }
         }
 
         Ok(())
     }
 
-    fn get_data_decode_matrix(
+    pub(crate) fn get_data_decode_matrix(
         &self,
         valid_indices: &[usize],
         invalid_indices: &[usize],
     ) -> Arc<Matrix<F>> {
         if self.options.inversion_cache {
+            #[cfg(feature = "std")]
+            self.reconstruction_cache_metrics
+                .requests
+                .fetch_add(1, Ordering::Relaxed);
+
             let mut cache = self.data_decode_matrix_cache.lock();
             if let Some(entry) = cache.get(invalid_indices) {
+                #[cfg(feature = "std")]
+                self.reconstruction_cache_metrics
+                    .hits
+                    .fetch_add(1, Ordering::Relaxed);
                 return entry.clone();
             }
+
+            #[cfg(feature = "std")]
+            self.reconstruction_cache_metrics
+                .misses
+                .fetch_add(1, Ordering::Relaxed);
         }
         // Pull out the rows of the matrix that correspond to the shards that
         // we have and build a square matrix. This matrix could be used to
@@ -1302,6 +1398,10 @@ impl<F: Field> ReedSolomon<F> {
             let data_decode_matrix = data_decode_matrix.clone();
             let mut cache = self.data_decode_matrix_cache.lock();
             cache.insert(Vec::from(invalid_indices), data_decode_matrix);
+            #[cfg(feature = "std")]
+            self.reconstruction_cache_metrics
+                .inserts
+                .fetch_add(1, Ordering::Relaxed);
         }
         data_decode_matrix
     }

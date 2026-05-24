@@ -595,6 +595,59 @@ fn bench_reconstruct_pair(
 }
 
 #[cfg(feature = "std")]
+fn bench_reconstruct_some_required_data_pair(
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+) -> ParallelHelperBenchResult {
+    let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let iterations = 3usize;
+    let bytes = shard_size as f64;
+
+    let mut serial_total = 0.0;
+    let mut optimized_total = 0.0;
+
+    for _ in 0..iterations {
+        let mut shards = make_random_shards!(shard_size, data_shards + parity_shards);
+        r.encode(&mut shards).unwrap();
+
+        let mut serial = shards_to_option_shards(&shards);
+        serial[0] = None;
+        serial[2] = None;
+
+        let serial_start = Instant::now();
+        r.reconstruct_data(&mut serial).unwrap();
+        serial_total += serial_start.elapsed().as_secs_f64();
+
+        let mut optimized = shards_to_option_shards(&shards);
+        optimized[0] = None;
+        optimized[2] = None;
+        let mut required = vec![false; data_shards + parity_shards];
+        required[2] = true;
+
+        let optimized_start = Instant::now();
+        r.reconstruct_some(&mut optimized, &required).unwrap();
+        optimized_total += optimized_start.elapsed().as_secs_f64();
+
+        assert!(optimized[0].is_none());
+        assert_eq!(serial[2], optimized[2]);
+    }
+
+    let serial_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / serial_total;
+    let parallel_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / optimized_total;
+
+    ParallelHelperBenchResult {
+        operation: "reconstruct_some_required_data_vs_reconstruct_data",
+        data_shards,
+        parity_shards,
+        shard_size,
+        serial_mb_s,
+        parallel_mb_s,
+        speedup: parallel_mb_s / serial_mb_s,
+    }
+}
+
+#[cfg(feature = "std")]
 fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
     fs::create_dir_all(&dir).unwrap();
@@ -653,6 +706,8 @@ fn benchmark_parallel_helpers_quantify_gain() {
         bench_reconstruct_pair(10, 4, 1024 * 1024, true),
         bench_reconstruct_pair(32, 16, 1024 * 1024, false),
         bench_reconstruct_pair(32, 16, 1024 * 1024, true),
+        bench_reconstruct_some_required_data_pair(10, 4, 1024 * 1024),
+        bench_reconstruct_some_required_data_pair(32, 16, 1024 * 1024),
     ];
 
     assert!(results.iter().all(|result| result.serial_mb_s.is_finite()));
@@ -660,6 +715,181 @@ fn benchmark_parallel_helpers_quantify_gain() {
     assert!(results.iter().all(|result| result.speedup.is_finite()));
 
     write_parallel_helper_bench_results(&results);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_reconstruction_cache_stats_track_hits_and_misses() {
+    let r = ReedSolomon::with_options(
+        8,
+        5,
+        CodecOptions {
+            inversion_cache: true,
+            inversion_cache_capacity: 16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut shards = make_random_shards!(4096, 13);
+    r.encode(&mut shards).unwrap();
+
+    let mut first = shards_to_option_shards(&shards);
+    first[0] = None;
+    first[2] = None;
+    r.reconstruct(&mut first).unwrap();
+
+    let stats_after_first = r.reconstruction_cache_stats();
+    assert_eq!(1, stats_after_first.requests);
+    assert_eq!(0, stats_after_first.hits);
+    assert_eq!(1, stats_after_first.misses);
+    assert_eq!(1, stats_after_first.inserts);
+
+    let mut second = shards_to_option_shards(&shards);
+    second[0] = None;
+    second[2] = None;
+    r.reconstruct(&mut second).unwrap();
+
+    let stats_after_second = r.reconstruction_cache_stats();
+    assert_eq!(2, stats_after_second.requests);
+    assert_eq!(1, stats_after_second.hits);
+    assert_eq!(1, stats_after_second.misses);
+    assert_eq!(1, stats_after_second.inserts);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn benchmark_reconstruction_cache_patterns() {
+    let r = ReedSolomon::with_options(
+        10,
+        4,
+        CodecOptions {
+            inversion_cache: true,
+            inversion_cache_capacity: 64,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    for _ in 0..5 {
+        let mut repeated = shards_to_option_shards(&shards);
+        repeated[0] = None;
+        repeated[3] = None;
+        r.reconstruct_data(&mut repeated).unwrap();
+    }
+
+    for offset in 0..5 {
+        let mut varying = shards_to_option_shards(&shards);
+        varying[offset] = None;
+        varying[offset + 1] = None;
+        r.reconstruct_data(&mut varying).unwrap();
+    }
+
+    let stats = r.reconstruction_cache_stats();
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("reconstruction-cache-stats.json");
+
+    let body = format!(
+        "{{\"requests\":{},\"hits\":{},\"misses\":{},\"inserts\":{}}}",
+        stats.requests, stats.hits, stats.misses, stats.inserts
+    );
+    fs::write(&path, body).unwrap();
+    assert!(path.exists());
+    assert!(stats.requests >= 10);
+}
+
+#[cfg(feature = "std")]
+fn run_reconstruction_pattern(
+    r: &ReedSolomon,
+    shards: &[Vec<u8>],
+    data_only: bool,
+    missing_pairs: &[(usize, usize)],
+) -> f64 {
+    let start = Instant::now();
+    for &(a, b) in missing_pairs {
+        let mut working = shards_to_option_shards(shards);
+        working[a] = None;
+        working[b] = None;
+        if data_only {
+            r.reconstruct_data(&mut working).unwrap();
+        } else {
+            r.reconstruct(&mut working).unwrap();
+        }
+    }
+    start.elapsed().as_secs_f64()
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn benchmark_reconstruction_cache_layers() {
+    let data_shards = 10usize;
+    let parity_shards = 4usize;
+    let shard_size = 1024 * 1024usize;
+
+    let with_cache = ReedSolomon::with_options(
+        data_shards,
+        parity_shards,
+        CodecOptions {
+            inversion_cache: true,
+            inversion_cache_capacity: 64,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let without_cache = ReedSolomon::with_options(
+        data_shards,
+        parity_shards,
+        CodecOptions {
+            inversion_cache: false,
+            inversion_cache_capacity: 64,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut shards = make_random_shards!(shard_size, data_shards + parity_shards);
+    with_cache.encode(&mut shards).unwrap();
+
+    let repeated_pairs = vec![(0usize, 3usize); 6];
+    let varying_pairs = vec![(0usize, 1usize), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6)];
+
+    let repeated_data_cached = run_reconstruction_pattern(&with_cache, &shards, true, &repeated_pairs);
+    let repeated_data_uncached =
+        run_reconstruction_pattern(&without_cache, &shards, true, &repeated_pairs);
+    let varying_data_cached = run_reconstruction_pattern(&with_cache, &shards, true, &varying_pairs);
+    let varying_data_uncached =
+        run_reconstruction_pattern(&without_cache, &shards, true, &varying_pairs);
+
+    let repeated_all_cached = run_reconstruction_pattern(&with_cache, &shards, false, &repeated_pairs);
+    let repeated_all_uncached =
+        run_reconstruction_pattern(&without_cache, &shards, false, &repeated_pairs);
+    let varying_all_cached = run_reconstruction_pattern(&with_cache, &shards, false, &varying_pairs);
+    let varying_all_uncached =
+        run_reconstruction_pattern(&without_cache, &shards, false, &varying_pairs);
+
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("reconstruction-cache-patterns.csv");
+
+    let body = format!(
+        "scenario,seconds\nrepeated_data_cached,{:.6}\nrepeated_data_uncached,{:.6}\nvarying_data_cached,{:.6}\nvarying_data_uncached,{:.6}\nrepeated_all_cached,{:.6}\nrepeated_all_uncached,{:.6}\nvarying_all_cached,{:.6}\nvarying_all_uncached,{:.6}\n",
+        repeated_data_cached,
+        repeated_data_uncached,
+        varying_data_cached,
+        varying_data_uncached,
+        repeated_all_cached,
+        repeated_all_uncached,
+        varying_all_cached,
+        varying_all_uncached,
+    );
+    fs::write(&path, body).unwrap();
+
+    assert!(path.exists());
 }
 
 #[cfg(feature = "std")]
@@ -795,6 +1025,42 @@ fn test_galois_8_reconstruct_opt_matches_reconstruct() {
     r.reconstruct_opt(&mut actual).unwrap();
 
     assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_reconstruct_some_opt_matches_reconstruct_some_for_data_only() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected = shards_to_option_shards(&shards);
+    expected[0] = None;
+    expected[2] = None;
+
+    let mut actual = expected.clone();
+    let mut required = vec![false; 14];
+    required[2] = true;
+
+    r.reconstruct_some(&mut expected, &required).unwrap();
+    r.reconstruct_some_opt(&mut actual, &required).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_reconstruct_some_opt_rejects_invalid_flags_length() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14)
+        .into_iter()
+        .map(Some)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        Error::InvalidShardFlags,
+        r.reconstruct_some_opt(&mut shards, &[true, false]).unwrap_err()
+    );
 }
 
 #[test]
