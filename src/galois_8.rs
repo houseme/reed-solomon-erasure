@@ -2,6 +2,10 @@
 
 include!(concat!(env!("OUT_DIR"), "/table.rs"));
 
+mod backend;
+
+pub use backend::BackendKind;
+
 /// The field GF(2^8).
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct Field;
@@ -53,19 +57,102 @@ pub type ReedSolomon = crate::ReedSolomon<Field>;
 /// Type alias of ShardByShard over GF(2^8).
 pub type ShardByShard<'a> = crate::ShardByShard<'a, Field>;
 
+#[cfg(feature = "std")]
+const RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES: usize = 512 * 1024;
+#[cfg(feature = "std")]
+const RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES: usize = 256 * 1024;
+
 impl crate::ReedSolomon<Field> {
+    #[cfg(feature = "std")]
+    fn first_shard_len<T: AsRef<[u8]>>(slices: &[T]) -> usize {
+        slices
+            .first()
+            .map(|shard| shard.as_ref().len())
+            .unwrap_or(0)
+    }
+
+    #[cfg(feature = "std")]
+    fn first_present_shard_len(shards: &[Option<Vec<u8>>]) -> usize {
+        shards
+            .iter()
+            .find_map(|shard| shard.as_ref().map(|shard| shard.len()))
+            .unwrap_or(0)
+    }
+
+    #[cfg(feature = "std")]
+    fn should_parallel_data_path(&self, shard_len: usize, output_shards: usize) -> bool {
+        self.parallel_policy(shard_len, output_shards).use_parallel
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn reconstruct_parallel_decision_with(
+        &self,
+        shard_len: usize,
+        missing_data: usize,
+        missing_total: usize,
+        data_only: bool,
+        available_parallelism: usize,
+    ) -> crate::ParallelDecision {
+        let base = crate::ParallelPolicy::default();
+        let tuned = if data_only {
+            crate::ParallelPolicy {
+                min_parallel_shard_bytes: core::cmp::max(
+                    base.min_parallel_shard_bytes,
+                    RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES,
+                ),
+                min_bytes_per_job: base.min_bytes_per_job,
+                max_jobs: base.max_jobs,
+            }
+        } else {
+            crate::ParallelPolicy {
+                min_parallel_shard_bytes: core::cmp::max(
+                    base.min_parallel_shard_bytes / 2,
+                    RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES,
+                ),
+                min_bytes_per_job: base.min_bytes_per_job,
+                max_jobs: base.max_jobs,
+            }
+        };
+        let output_shards = if data_only {
+            missing_data
+        } else {
+            missing_total
+        };
+        tuned.decide(
+            shard_len,
+            self.data_shard_count(),
+            output_shards,
+            available_parallelism,
+        )
+    }
+
+    #[cfg(feature = "std")]
+    fn reconstruct_parallel_decision(
+        &self,
+        shard_len: usize,
+        missing_data: usize,
+        missing_total: usize,
+        data_only: bool,
+    ) -> crate::ParallelDecision {
+        self.reconstruct_parallel_decision_with(
+            shard_len,
+            missing_data,
+            missing_total,
+            data_only,
+            std::thread::available_parallelism()
+                .map(|parallelism| parallelism.get())
+                .unwrap_or(1),
+        )
+    }
+
     #[cfg(feature = "std")]
     pub fn encode_opt<T, U>(&self, shards: T) -> Result<(), crate::Error>
     where
         T: AsRef<[U]> + AsMut<[U]>,
         U: AsRef<[u8]> + AsMut<[u8]> + Send + Sync,
     {
-        let shard_len = shards
-            .as_ref()
-            .first()
-            .map(|shard| shard.as_ref().len())
-            .unwrap_or(0);
-        if self.parallel_policy(shard_len, self.parity_shard_count()).use_parallel {
+        let shard_len = Self::first_shard_len(shards.as_ref());
+        if self.should_parallel_data_path(shard_len, self.parity_shard_count()) {
             self.encode_par(shards)
         } else {
             self.encode(shards)
@@ -78,8 +165,8 @@ impl crate::ReedSolomon<Field> {
         T: AsRef<[u8]> + Sync,
         U: AsRef<[u8]> + AsMut<[u8]> + Send,
     {
-        let shard_len = data.first().map(|shard| shard.as_ref().len()).unwrap_or(0);
-        if self.parallel_policy(shard_len, parity.len()).use_parallel {
+        let shard_len = Self::first_shard_len(data);
+        if self.should_parallel_data_path(shard_len, parity.len()) {
             self.encode_sep_par(data, parity)
         } else {
             self.encode_sep(data, parity)
@@ -91,8 +178,8 @@ impl crate::ReedSolomon<Field> {
     where
         T: AsRef<[u8]> + Sync,
     {
-        let shard_len = slices.first().map(|shard| shard.as_ref().len()).unwrap_or(0);
-        if self.parallel_policy(shard_len, self.parity_shard_count()).use_parallel {
+        let shard_len = Self::first_shard_len(slices);
+        if self.should_parallel_data_path(shard_len, self.parity_shard_count()) {
             self.verify_par(slices)
         } else {
             self.verify(slices)
@@ -109,8 +196,8 @@ impl crate::ReedSolomon<Field> {
         T: AsRef<[u8]> + Sync,
         U: AsRef<[u8]> + AsMut<[u8]> + Send,
     {
-        let shard_len = slices.first().map(|shard| shard.as_ref().len()).unwrap_or(0);
-        if self.parallel_policy(shard_len, buffer.len()).use_parallel {
+        let shard_len = Self::first_shard_len(slices);
+        if self.should_parallel_data_path(shard_len, buffer.len()) {
             self.verify_with_buffer_par(slices, buffer)
         } else {
             self.verify_with_buffer(slices, buffer)
@@ -119,12 +206,17 @@ impl crate::ReedSolomon<Field> {
 
     #[cfg(feature = "std")]
     pub fn reconstruct_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
-        let shard_len = shards
+        let shard_len = Self::first_present_shard_len(shards);
+        let missing_data = shards
             .iter()
-            .find_map(|shard| shard.as_ref().map(|shard| shard.len()))
-            .unwrap_or(0);
+            .take(self.data_shard_count())
+            .filter(|shard| shard.is_none())
+            .count();
         let missing = shards.iter().filter(|shard| shard.is_none()).count();
-        if self.parallel_policy(shard_len, missing).use_parallel {
+        if self
+            .reconstruct_parallel_decision(shard_len, missing_data, missing, false)
+            .use_parallel
+        {
             self.reconstruct_internal_option_vec_par(shards, false)
         } else {
             self.reconstruct(shards)
@@ -136,16 +228,17 @@ impl crate::ReedSolomon<Field> {
         &self,
         shards: &mut [Option<Vec<u8>>],
     ) -> Result<(), crate::Error> {
-        let shard_len = shards
-            .iter()
-            .find_map(|shard| shard.as_ref().map(|shard| shard.len()))
-            .unwrap_or(0);
+        let shard_len = Self::first_present_shard_len(shards);
         let missing_data = shards
             .iter()
             .take(self.data_shard_count())
             .filter(|shard| shard.is_none())
             .count();
-        if self.parallel_policy(shard_len, missing_data).use_parallel {
+        let missing = shards.iter().filter(|shard| shard.is_none()).count();
+        if self
+            .reconstruct_parallel_decision(shard_len, missing_data, missing, true)
+            .use_parallel
+        {
             self.reconstruct_internal_option_vec_par(shards, true)
         } else {
             self.reconstruct_data(shards)
@@ -306,24 +399,20 @@ macro_rules! return_if_empty {
     };
 }
 
-#[cfg(not(all(
-    feature = "simd-accel",
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-)))]
 pub fn mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
-    mul_slice_pure_rust(c, input, out);
+    (backend::active_backend().mul_slice)(c, input, out);
 }
 
-#[cfg(not(all(
-    feature = "simd-accel",
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-)))]
 pub fn mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
-    mul_slice_xor_pure_rust(c, input, out);
+    (backend::active_backend().mul_slice_xor)(c, input, out);
+}
+
+pub fn active_backend_name() -> &'static str {
+    backend::active_backend().name
+}
+
+pub fn active_backend_kind() -> BackendKind {
+    backend::active_backend().kind
 }
 
 fn mul_slice_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
@@ -480,11 +569,14 @@ extern "C" {
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
-pub fn mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
+fn simd_c_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     let low: *const u8 = &MUL_TABLE_LOW[c as usize][0];
     let high: *const u8 = &MUL_TABLE_HIGH[c as usize][0];
 
     assert_eq!(input.len(), out.len());
+    if input.is_empty() {
+        return;
+    }
 
     let input_ptr: *const u8 = &input[0];
     let out_ptr: *mut u8 = &mut out[0];
@@ -502,11 +594,14 @@ pub fn mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
-pub fn mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
+fn simd_c_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     let low: *const u8 = &MUL_TABLE_LOW[c as usize][0];
     let high: *const u8 = &MUL_TABLE_HIGH[c as usize][0];
 
     assert_eq!(input.len(), out.len());
+    if input.is_empty() {
+        return;
+    }
 
     let input_ptr: *const u8 = &input[0];
     let out_ptr: *mut u8 = &mut out[0];
@@ -808,6 +903,31 @@ mod tests {
 
                 assert_eq!(output, output_copy);
             }
+        }
+    }
+
+    #[test]
+    fn test_active_backend_metadata() {
+        #[cfg(all(
+            feature = "simd-accel",
+            any(target_arch = "x86_64", target_arch = "aarch64"),
+            not(target_env = "msvc"),
+            not(any(target_os = "android", target_os = "ios"))
+        ))]
+        {
+            assert_eq!(active_backend_name(), "simd-c");
+            assert_eq!(active_backend_kind(), BackendKind::SimdC);
+        }
+
+        #[cfg(not(all(
+            feature = "simd-accel",
+            any(target_arch = "x86_64", target_arch = "aarch64"),
+            not(target_env = "msvc"),
+            not(any(target_os = "android", target_os = "ios"))
+        )))]
+        {
+            assert_eq!(active_backend_name(), "scalar-rust");
+            assert_eq!(active_backend_kind(), BackendKind::Scalar);
         }
     }
 }

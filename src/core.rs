@@ -31,6 +31,8 @@ const CODE_SLICE_DEFAULT_CHUNK_BYTES: usize = 64 * 1024;
 const CODE_SLICE_LARGE_CHUNK_BYTES: usize = 256 * 1024;
 #[cfg(feature = "std")]
 const PARALLEL_MIN_SHARD_BYTES: usize = 256 * 1024;
+#[cfg(feature = "std")]
+pub const PARALLEL_POLICY_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatrixMode {
@@ -765,13 +767,28 @@ impl<F: Field> ReedSolomon<F> {
 
     #[cfg(feature = "std")]
     pub fn parallel_policy(&self, shard_len: usize, output_shards: usize) -> ParallelDecision {
-        self.parallel_policy_with(
+        let decision = self.parallel_policy_with(
             shard_len,
             output_shards,
             std::thread::available_parallelism()
                 .map(|parallelism| parallelism.get())
                 .unwrap_or(1),
-        )
+        );
+
+        #[cfg(debug_assertions)]
+        if std::env::var_os("RS_PARALLEL_POLICY_DEBUG").is_some() {
+            eprintln!(
+                "rs-parallel-policy v{} shard_len={} outputs={} -> use_parallel={} jobs={} chunk_len={}",
+                PARALLEL_POLICY_VERSION,
+                shard_len,
+                output_shards,
+                decision.use_parallel,
+                decision.jobs,
+                decision.chunk_len
+            );
+        }
+
+        decision
     }
 
     #[cfg(feature = "std")]
@@ -787,6 +804,11 @@ impl<F: Field> ReedSolomon<F> {
             output_shards,
             available_parallelism,
         )
+    }
+
+    #[cfg(feature = "std")]
+    pub fn parallel_policy_version(&self) -> u32 {
+        PARALLEL_POLICY_VERSION
     }
 
     #[cfg(feature = "std")]

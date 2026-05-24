@@ -47,6 +47,8 @@ pub use crate::core::MatrixMode;
 pub use crate::core::ParallelDecision;
 #[cfg(feature = "std")]
 pub use crate::core::ParallelPolicy;
+#[cfg(feature = "std")]
+pub use crate::core::PARALLEL_POLICY_VERSION;
 pub use crate::core::ReedSolomon;
 pub use crate::core::ShardByShard;
 

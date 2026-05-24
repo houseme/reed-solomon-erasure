@@ -432,6 +432,26 @@ fn test_code_chunk_len_very_large_shards_use_large_chunk() {
     assert_eq!(256 * 1024, r.code_chunk_len(8 * 1024 * 1024));
 }
 
+#[test]
+fn test_code_chunk_len_parameterized_boundaries() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let cases = [
+        (1usize, 1usize),
+        (16 * 1024, 16 * 1024),
+        (16 * 1024 + 1, 16 * 1024),
+        (64 * 1024, 16 * 1024),
+        (64 * 1024 + 1, 64 * 1024),
+        (4 * 1024 * 1024, 64 * 1024),
+        (4 * 1024 * 1024 + 1, 256 * 1024),
+        (8 * 1024 * 1024, 256 * 1024),
+        (64 * 1024 * 1024, 256 * 1024),
+    ];
+
+    for (shard_len, expected_chunk) in cases {
+        assert_eq!(expected_chunk, r.code_chunk_len(shard_len));
+    }
+}
+
 #[cfg(feature = "std")]
 #[test]
 fn test_parallel_policy_keeps_small_shards_serial() {
@@ -472,11 +492,26 @@ fn test_reed_solomon_parallel_policy_uses_available_parallelism() {
 }
 
 #[cfg(feature = "std")]
+#[test]
+fn test_reconstruct_parallel_policy_has_data_only_and_full_tiers() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let shard_len = 300 * 1024;
+    let data_only = r.reconstruct_parallel_decision_with(shard_len, 2, 2, true, 8);
+    let full = r.reconstruct_parallel_decision_with(shard_len, 2, 4, false, 8);
+
+    assert!(!data_only.use_parallel);
+    assert!(full.use_parallel);
+}
+
+#[cfg(feature = "std")]
 struct ParallelHelperBenchResult {
     operation: &'static str,
     data_shards: usize,
     parity_shards: usize,
     shard_size: usize,
+    policy_version: u32,
+    policy_min_parallel_shard_bytes: usize,
+    policy_min_bytes_per_job: usize,
     serial_mb_s: f64,
     parallel_mb_s: f64,
     speedup: f64,
@@ -521,6 +556,9 @@ fn bench_encode_sep_pair(data_shards: usize, parity_shards: usize, shard_size: u
         data_shards,
         parity_shards,
         shard_size,
+        policy_version: r.parallel_policy_version(),
+        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
+        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,
@@ -566,6 +604,9 @@ fn bench_verify_with_buffer_pair(
         data_shards,
         parity_shards,
         shard_size,
+        policy_version: r.parallel_policy_version(),
+        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
+        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,
@@ -629,6 +670,9 @@ fn bench_reconstruct_pair(
         data_shards,
         parity_shards,
         shard_size,
+        policy_version: r.parallel_policy_version(),
+        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
+        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,
@@ -693,6 +737,9 @@ fn bench_reconstruct_some_required_data_pair(
         data_shards,
         parity_shards,
         shard_size,
+        policy_version: r.parallel_policy_version(),
+        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
+        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,
@@ -711,11 +758,14 @@ fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
     for (i, result) in results.iter().enumerate() {
         let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
         json.push_str(&format!(
-            "  {{\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"serial_mb_s\":{:.4},\"parallel_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
+            "  {{\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"policy_version\":{},\"policy_min_parallel_shard_bytes\":{},\"policy_min_bytes_per_job\":{},\"serial_mb_s\":{:.4},\"parallel_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
             result.operation,
             result.data_shards,
             result.parity_shards,
             result.shard_size,
+            result.policy_version,
+            result.policy_min_parallel_shard_bytes,
+            result.policy_min_bytes_per_job,
             result.serial_mb_s,
             result.parallel_mb_s,
             result.speedup,
@@ -726,15 +776,18 @@ fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
     fs::write(&json_path, json).unwrap();
 
     let mut csv = String::from(
-        "operation,data_shards,parity_shards,shard_size,serial_mb_s,parallel_mb_s,speedup\n",
+        "operation,data_shards,parity_shards,shard_size,policy_version,policy_min_parallel_shard_bytes,policy_min_bytes_per_job,serial_mb_s,parallel_mb_s,speedup\n",
     );
     for result in results {
         csv.push_str(&format!(
-            "{},{},{},{},{:.4},{:.4},{:.4}\n",
+            "{},{},{},{},{},{},{},{:.4},{:.4},{:.4}\n",
             result.operation,
             result.data_shards,
             result.parity_shards,
             result.shard_size,
+            result.policy_version,
+            result.policy_min_parallel_shard_bytes,
+            result.policy_min_bytes_per_job,
             result.serial_mb_s,
             result.parallel_mb_s,
             result.speedup
