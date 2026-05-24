@@ -23,6 +23,33 @@ use super::ReconstructShard;
 
 const DATA_DECODE_MATRIX_CACHE_CAPACITY: usize = 254;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatrixMode {
+    Vandermonde,
+    Cauchy,
+    JerasureLike,
+    Custom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CodecOptions {
+    pub fast_one_parity: bool,
+    pub inversion_cache: bool,
+    pub inversion_cache_capacity: usize,
+    pub matrix_mode: MatrixMode,
+}
+
+impl Default for CodecOptions {
+    fn default() -> Self {
+        Self {
+            fast_one_parity: false,
+            inversion_cache: true,
+            inversion_cache_capacity: DATA_DECODE_MATRIX_CACHE_CAPACITY,
+            matrix_mode: MatrixMode::Vandermonde,
+        }
+    }
+}
+
 // /// Parameters for parallelism.
 // #[derive(PartialEq, Debug, Clone, Copy)]
 // pub struct ParallelParam {
@@ -348,12 +375,17 @@ pub struct ReedSolomon<F: Field> {
     parity_shard_count: usize,
     total_shard_count: usize,
     matrix: Matrix<F>,
+    options: CodecOptions,
     data_decode_matrix_cache: Mutex<LruCache<Vec<usize>, Arc<Matrix<F>>>>,
 }
 
 impl<F: Field> Clone for ReedSolomon<F> {
     fn clone(&self) -> ReedSolomon<F> {
-        match ReedSolomon::new(self.data_shard_count, self.parity_shard_count) {
+        match ReedSolomon::with_options(
+            self.data_shard_count,
+            self.parity_shard_count,
+            self.options,
+        ) {
             Ok(codec) => codec,
             Err(_) => panic!("existing codec invariants must produce a valid clone"),
         }
@@ -443,6 +475,19 @@ impl<F: Field> ReedSolomon<F> {
         vandermonde.multiply(&top_inverted)
     }
 
+    fn build_matrix_with_options(
+        data_shards: usize,
+        total_shards: usize,
+        options: CodecOptions,
+    ) -> Matrix<F> {
+        match options.matrix_mode {
+            MatrixMode::Vandermonde
+            | MatrixMode::Cauchy
+            | MatrixMode::JerasureLike
+            | MatrixMode::Custom => Self::build_matrix(data_shards, total_shards),
+        }
+    }
+
     /// Creates a new instance of Reed-Solomon erasure code encoder/decoder.
     ///
     /// Returns `Error::TooFewDataShards` if `data_shards == 0`.
@@ -451,6 +496,15 @@ impl<F: Field> ReedSolomon<F> {
     ///
     /// Returns `Error::TooManyShards` if `data_shards + parity_shards > F::ORDER`.
     pub fn new(data_shards: usize, parity_shards: usize) -> Result<ReedSolomon<F>, Error> {
+        Self::with_options(data_shards, parity_shards, CodecOptions::default())
+    }
+
+    /// Creates a new instance of Reed-Solomon erasure code encoder/decoder with explicit options.
+    pub fn with_options(
+        data_shards: usize,
+        parity_shards: usize,
+        mut options: CodecOptions,
+    ) -> Result<ReedSolomon<F>, Error> {
         if data_shards == 0 {
             return Err(Error::TooFewDataShards);
         }
@@ -463,17 +517,19 @@ impl<F: Field> ReedSolomon<F> {
 
         let total_shards = data_shards + parity_shards;
 
-        let matrix = Self::build_matrix(data_shards, total_shards);
-        if DATA_DECODE_MATRIX_CACHE_CAPACITY == 0 {
-            panic!("data decode matrix cache capacity must be non-zero");
+        if options.inversion_cache_capacity == 0 {
+            options.inversion_cache_capacity = DATA_DECODE_MATRIX_CACHE_CAPACITY;
         }
+
+        let matrix = Self::build_matrix_with_options(data_shards, total_shards, options);
 
         Ok(ReedSolomon {
             data_shard_count: data_shards,
             parity_shard_count: parity_shards,
             total_shard_count: total_shards,
             matrix,
-            data_decode_matrix_cache: Mutex::new(LruCache::new(DATA_DECODE_MATRIX_CACHE_CAPACITY)),
+            options,
+            data_decode_matrix_cache: Mutex::new(LruCache::new(options.inversion_cache_capacity)),
         })
     }
 
@@ -487,6 +543,51 @@ impl<F: Field> ReedSolomon<F> {
 
     pub fn total_shard_count(&self) -> usize {
         self.total_shard_count
+    }
+
+    pub fn split(&self, data: &[F::Elem]) -> Result<Vec<Vec<F::Elem>>, Error> {
+        let data_shards = self.data_shard_count;
+        let shard_len = if data.is_empty() {
+            0
+        } else {
+            data.len().div_ceil(data_shards)
+        };
+
+        let mut shards = Vec::with_capacity(data_shards);
+        for i in 0..data_shards {
+            let start = i * shard_len;
+            let end = core::cmp::min(start + shard_len, data.len());
+            let mut shard = vec![F::zero(); shard_len];
+            if start < data.len() {
+                shard[..end - start].copy_from_slice(&data[start..end]);
+            }
+            shards.push(shard);
+        }
+
+        Ok(shards)
+    }
+
+    pub fn join<T: AsRef<[F::Elem]>>(&self, shards: &[T], out_len: usize) -> Result<Vec<F::Elem>, Error> {
+        check_piece_count!(data => self, shards);
+        check_slices!(multi => shards);
+
+        let available = shards.iter().map(|shard| shard.as_ref().len()).sum::<usize>();
+        let target_len = core::cmp::min(out_len, available);
+        let mut result = Vec::with_capacity(target_len);
+
+        for shard in shards {
+            let remaining = target_len.saturating_sub(result.len());
+            if remaining == 0 {
+                break;
+            }
+
+            let data = shard.as_ref();
+            let to_take = core::cmp::min(remaining, data.len());
+            result.extend_from_slice(&data[..to_take]);
+        }
+
+        result.truncate(target_len);
+        Ok(result)
     }
 
     fn code_some_slices<T: AsRef<[F::Elem]>, U: AsMut<[F::Elem]>>(
@@ -517,6 +618,24 @@ impl<F: Field> ReedSolomon<F> {
                 F::mul_slice_add(matrix_row_to_use, input, output);
             }
         })
+    }
+
+    fn fast_one_parity_enabled(&self) -> bool {
+        self.options.fast_one_parity && self.parity_shard_count == 1
+    }
+
+    fn encode_fast_one_parity<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+        &self,
+        data: &[T],
+        parity: &mut [U],
+    ) {
+        let output = parity[0].as_mut();
+        output.copy_from_slice(data[0].as_ref());
+        for input in &data[1..] {
+            for (out, value) in output.iter_mut().zip(input.as_ref().iter()) {
+                *out = F::add(*out, *value);
+            }
+        }
     }
 
     fn check_some_slices_with_buffer<T, U>(
@@ -634,6 +753,11 @@ impl<F: Field> ReedSolomon<F> {
         check_piece_count!(parity => self, parity);
         check_slices!(multi => data, multi => parity);
 
+        if self.fast_one_parity_enabled() {
+            self.encode_fast_one_parity(data, parity);
+            return Ok(());
+        }
+
         let parity_rows = self.get_parity_rows();
 
         // Do the coding.
@@ -674,6 +798,11 @@ impl<F: Field> ReedSolomon<F> {
         let data = &slices[0..self.data_shard_count];
         let to_check = &slices[self.data_shard_count..];
 
+        if self.fast_one_parity_enabled() {
+            self.encode_fast_one_parity(data, buffer);
+            return Ok(buffer[0].as_ref() == to_check[0].as_ref());
+        }
+
         let parity_rows = self.get_parity_rows();
 
         Ok(self.check_some_slices_with_buffer(&parity_rows, data, to_check, buffer))
@@ -705,12 +834,82 @@ impl<F: Field> ReedSolomon<F> {
         self.reconstruct_internal(slices, true)
     }
 
+    pub fn reconstruct_some<T: ReconstructShard<F>>(
+        &self,
+        shards: &mut [T],
+        required: &[bool],
+    ) -> Result<(), Error> {
+        if required.len() != self.total_shard_count {
+            return Err(Error::InvalidShardFlags);
+        }
+
+        check_piece_count!(all => self, shards);
+
+        let mut number_present = 0;
+        let mut shard_len = None;
+
+        for shard in shards.iter_mut() {
+            if let Some(len) = shard.len() {
+                if len == 0 {
+                    return Err(Error::EmptyShard);
+                }
+                number_present += 1;
+                if let Some(old_len) = shard_len {
+                    if len != old_len {
+                        return Err(Error::IncorrectShardSize);
+                    }
+                }
+                shard_len = Some(len);
+            }
+        }
+
+        if number_present == self.total_shard_count {
+            return Ok(());
+        }
+
+        if number_present < self.data_shard_count {
+            return Err(Error::TooFewShardsPresent);
+        }
+
+        let shard_len = shard_len.expect("at least one shard present; qed");
+        let required_data_only = required
+            .iter()
+            .enumerate()
+            .all(|(i, required)| !*required || i < self.data_shard_count);
+
+        let originally_missing: Vec<bool> = shards.iter_mut().map(|shard| shard.get().is_none()).collect();
+        let mut working: Vec<Option<Vec<F::Elem>>> = shards
+            .iter_mut()
+            .map(|shard| shard.get().map(|data| data.to_vec()))
+            .collect();
+
+        if required_data_only {
+            self.reconstruct_data(&mut working)?;
+        } else {
+            self.reconstruct(&mut working)?;
+        }
+
+        for (i, shard) in shards.iter_mut().enumerate() {
+            if !required[i] || !originally_missing[i] {
+                continue;
+            }
+
+            let recovered = working[i].as_ref().expect("recovered shard must be present");
+            match shard.get_or_initialize(shard_len) {
+                Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(recovered),
+                Err(Err(err)) => return Err(err),
+            }
+        }
+
+        Ok(())
+    }
+
     fn get_data_decode_matrix(
         &self,
         valid_indices: &[usize],
         invalid_indices: &[usize],
     ) -> Arc<Matrix<F>> {
-        {
+        if self.options.inversion_cache {
             let mut cache = self.data_decode_matrix_cache.lock();
             if let Some(entry) = cache.get(invalid_indices) {
                 return entry.clone();
@@ -736,7 +935,7 @@ impl<F: Field> ReedSolomon<F> {
         };
         // Cache the inverted matrix for future use keyed on the indices of the
         // invalid rows.
-        {
+        if self.options.inversion_cache {
             let data_decode_matrix = data_decode_matrix.clone();
             let mut cache = self.data_decode_matrix_cache.lock();
             cache.insert(Vec::from(invalid_indices), data_decode_matrix);
