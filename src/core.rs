@@ -11,7 +11,7 @@ use crate::errors::SBSError;
 
 use crate::matrix::Matrix;
 
-use lru::LruCache;
+use hashlink::LruCache;
 
 #[cfg(feature = "std")]
 use parking_lot::Mutex;
@@ -739,7 +739,7 @@ impl<F: Field> ReedSolomon<F> {
         {
             let data_decode_matrix = data_decode_matrix.clone();
             let mut cache = self.data_decode_matrix_cache.lock();
-            cache.put(Vec::from(invalid_indices), data_decode_matrix);
+            cache.insert(Vec::from(invalid_indices), data_decode_matrix);
         }
         data_decode_matrix
     }
