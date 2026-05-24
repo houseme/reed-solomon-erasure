@@ -1296,14 +1296,29 @@ impl<F: Field> ReedSolomon<F> {
     {
         self.code_some_slices(matrix_rows, inputs, buffer);
 
-        let at_least_one_mismatch_present = buffer
-            .iter_mut()
-            .enumerate()
-            .map(|(i, expected_parity_shard)| {
-                expected_parity_shard.as_ref() == to_check[i].as_ref()
-            })
-            .any(|x| !x); // find the first false (some slice is different from the expected one)
-        !at_least_one_mismatch_present
+        for (expected_parity_shard, actual_parity_shard) in buffer.iter().zip(to_check.iter()) {
+            if expected_parity_shard.as_ref() != actual_parity_shard.as_ref() {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn check_some_slices_with_buffer_raw<T: AsRef<[F::Elem]>>(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[T],
+        to_check: &[T],
+        buffer: &mut [&mut [F::Elem]],
+    ) -> bool {
+        self.code_some_slices(matrix_rows, inputs, buffer);
+
+        for (expected_parity_shard, actual_parity_shard) in buffer.iter().zip(to_check.iter()) {
+            if *expected_parity_shard != actual_parity_shard.as_ref() {
+                return false;
+            }
+        }
+        true
     }
 
     /// Constructs the parity shards partially using only the data shard
@@ -1419,15 +1434,26 @@ impl<F: Field> ReedSolomon<F> {
         check_slices!(multi => slices);
 
         let slice_len = slices[0].as_ref().len();
+        let data = &slices[0..self.data_shard_count];
+        let to_check = &slices[self.data_shard_count..];
 
-        let mut buffer: SmallVec<[Vec<F::Elem>; 32]> =
-            SmallVec::with_capacity(self.parity_shard_count);
-
-        for _ in 0..self.parity_shard_count {
-            buffer.push(vec![F::zero(); slice_len]);
+        if self.fast_one_parity_enabled() {
+            let mut buffer = vec![F::zero(); slice_len];
+            self.encode_fast_one_parity(data, core::slice::from_mut(&mut buffer));
+            return Ok(buffer.as_slice() == to_check[0].as_ref());
         }
 
-        self.verify_with_buffer(slices, &mut buffer)
+        let parity_rows = self.get_parity_rows();
+        let mut scratch = vec![F::zero(); self.parity_shard_count * slice_len];
+        let mut buffer_views: SmallVec<[&mut [F::Elem]; 32]> =
+            scratch.chunks_mut(slice_len).collect();
+
+        Ok(self.check_some_slices_with_buffer_raw(
+            &parity_rows,
+            data,
+            to_check,
+            &mut buffer_views,
+        ))
     }
 
     /// Checks if the parity shards are correct.
