@@ -59,3 +59,7 @@ cc = { version = "1.2", optional = true }
 [[bench]]
 name = "bandwidth"
 harness = false
+
+[[bench]]
+name = "throughput_matrix"
+harness = false
