@@ -532,6 +532,69 @@ fn bench_verify_with_buffer_pair(
 }
 
 #[cfg(feature = "std")]
+fn bench_reconstruct_pair(
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+    data_only: bool,
+) -> ParallelHelperBenchResult {
+    let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let iterations = 3usize;
+    let bytes = (data_shards * shard_size) as f64;
+
+    let mut serial_total = 0.0;
+    let mut parallel_total = 0.0;
+
+    for _ in 0..iterations {
+        let mut shards = make_random_shards!(shard_size, data_shards + parity_shards);
+        r.encode(&mut shards).unwrap();
+
+        let mut serial = shards_to_option_shards(&shards);
+        serial[0] = None;
+        serial[data_shards] = None;
+
+        let serial_start = Instant::now();
+        if data_only {
+            r.reconstruct_data(&mut serial).unwrap();
+        } else {
+            r.reconstruct(&mut serial).unwrap();
+        }
+        serial_total += serial_start.elapsed().as_secs_f64();
+
+        let mut parallel = shards_to_option_shards(&shards);
+        parallel[0] = None;
+        parallel[data_shards] = None;
+
+        let parallel_start = Instant::now();
+        if data_only {
+            r.reconstruct_data_opt(&mut parallel).unwrap();
+        } else {
+            r.reconstruct_opt(&mut parallel).unwrap();
+        }
+        parallel_total += parallel_start.elapsed().as_secs_f64();
+
+        assert_eq!(serial, parallel);
+    }
+
+    let serial_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / serial_total;
+    let parallel_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / parallel_total;
+
+    ParallelHelperBenchResult {
+        operation: if data_only {
+            "reconstruct_data_vs_reconstruct_data_opt"
+        } else {
+            "reconstruct_vs_reconstruct_opt"
+        },
+        data_shards,
+        parity_shards,
+        shard_size,
+        serial_mb_s,
+        parallel_mb_s,
+        speedup: parallel_mb_s / serial_mb_s,
+    }
+}
+
+#[cfg(feature = "std")]
 fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
     fs::create_dir_all(&dir).unwrap();
@@ -586,6 +649,10 @@ fn benchmark_parallel_helpers_quantify_gain() {
         bench_encode_sep_pair(32, 16, 1024 * 1024),
         bench_verify_with_buffer_pair(10, 4, 1024 * 1024),
         bench_verify_with_buffer_pair(32, 16, 1024 * 1024),
+        bench_reconstruct_pair(10, 4, 1024 * 1024, false),
+        bench_reconstruct_pair(10, 4, 1024 * 1024, true),
+        bench_reconstruct_pair(32, 16, 1024 * 1024, false),
+        bench_reconstruct_pair(32, 16, 1024 * 1024, true),
     ];
 
     assert!(results.iter().all(|result| result.serial_mb_s.is_finite()));
@@ -689,6 +756,44 @@ fn test_galois_8_verify_opt_matches_verify() {
     shards[13][31] ^= 0xff;
     let expected = r.verify(&shards).unwrap();
     let actual = r.verify_opt(&shards).unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_reconstruct_data_opt_matches_reconstruct_data() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected = shards_to_option_shards(&shards);
+    expected[0] = None;
+    expected[1] = None;
+
+    let mut actual = expected.clone();
+
+    r.reconstruct_data(&mut expected).unwrap();
+    r.reconstruct_data_opt(&mut actual).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_reconstruct_opt_matches_reconstruct() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected = shards_to_option_shards(&shards);
+    expected[0] = None;
+    expected[12] = None;
+
+    let mut actual = expected.clone();
+
+    r.reconstruct(&mut expected).unwrap();
+    r.reconstruct_opt(&mut actual).unwrap();
+
     assert_eq!(expected, actual);
 }
 

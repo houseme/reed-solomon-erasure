@@ -92,6 +92,19 @@ impl crate::ReedSolomon<Field> {
     {
         self.verify_with_buffer_par(slices, buffer)
     }
+
+    #[cfg(feature = "std")]
+    pub fn reconstruct_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
+        self.reconstruct_internal_option_vec_par(shards, false)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn reconstruct_data_opt(
+        &self,
+        shards: &mut [Option<Vec<u8>>],
+    ) -> Result<(), crate::Error> {
+        self.reconstruct_internal_option_vec_par(shards, true)
+    }
 }
 
 /// Add two elements.
