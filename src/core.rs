@@ -206,7 +206,9 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
         let shards = shards.as_mut();
         self.sbs_encode_checks(shards)?;
 
-        self.codec.encode_single(self.cur_input, shards).unwrap();
+        self.codec
+            .encode_single(self.cur_input, shards)
+            .map_err(SBSError::RSError)?;
 
         self.return_ok_and_incre_cur_input()
     }
@@ -224,7 +226,7 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
 
         self.codec
             .encode_single_sep(self.cur_input, data[self.cur_input].as_ref(), parity)
-            .unwrap();
+            .map_err(SBSError::RSError)?;
 
         self.return_ok_and_incre_cur_input()
     }
@@ -351,8 +353,10 @@ pub struct ReedSolomon<F: Field> {
 
 impl<F: Field> Clone for ReedSolomon<F> {
     fn clone(&self) -> ReedSolomon<F> {
-        ReedSolomon::new(self.data_shard_count, self.parity_shard_count)
-            .expect("basic checks already passed as precondition of existence of self")
+        match ReedSolomon::new(self.data_shard_count, self.parity_shard_count) {
+            Ok(codec) => codec,
+            Err(_) => panic!("existing codec invariants must produce a valid clone"),
+        }
     }
 }
 
@@ -431,8 +435,12 @@ impl<F: Field> ReedSolomon<F> {
         let vandermonde = Matrix::vandermonde(total_shards, data_shards);
 
         let top = vandermonde.sub_matrix(0, 0, data_shards, data_shards);
+        let top_inverted = match top.invert() {
+            Ok(inverted) => inverted,
+            Err(_) => panic!("vandermonde top matrix must be invertible for valid shard counts"),
+        };
 
-        vandermonde.multiply(&top.invert().unwrap())
+        vandermonde.multiply(&top_inverted)
     }
 
     /// Creates a new instance of Reed-Solomon erasure code encoder/decoder.
@@ -456,6 +464,9 @@ impl<F: Field> ReedSolomon<F> {
         let total_shards = data_shards + parity_shards;
 
         let matrix = Self::build_matrix(data_shards, total_shards);
+        if DATA_DECODE_MATRIX_CACHE_CAPACITY == 0 {
+            panic!("data decode matrix cache capacity must be non-zero");
+        }
 
         Ok(ReedSolomon {
             data_shard_count: data_shards,
@@ -719,7 +730,10 @@ impl<F: Field> ReedSolomon<F> {
         // we want to decode. Note that since this matrix maps back to the
         // original data, it can be used to create a data shard, but not a
         // parity shard.
-        let data_decode_matrix = Arc::new(sub_matrix.invert().unwrap());
+        let data_decode_matrix = match sub_matrix.invert() {
+            Ok(inverted) => Arc::new(inverted),
+            Err(_) => panic!("selected shard submatrix must remain invertible when enough shards are present"),
+        };
         // Cache the inverted matrix for future use keyed on the indices of the
         // invalid rows.
         {
