@@ -37,9 +37,9 @@ pub(crate) fn rust_avx2_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "avx2")]
 unsafe fn rust_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m256i, _mm_loadu_si128, _mm256_and_si256, _mm256_broadcastsi128_si256,
-        _mm256_loadu_si256, _mm256_set1_epi8, _mm256_shuffle_epi8, _mm256_srli_epi64,
-        _mm256_storeu_si256, _mm256_xor_si256,
+        __m128i, __m256i, _mm256_and_si256, _mm256_broadcastsi128_si256, _mm256_loadu_si256,
+        _mm256_set1_epi8, _mm256_shuffle_epi8, _mm256_srli_epi64, _mm256_storeu_si256,
+        _mm256_xor_si256, _mm_loadu_si128,
     };
 
     let low128: __m128i =
@@ -64,7 +64,7 @@ unsafe fn rust_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         offset += 32;
     }
 
-    super::super::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }
 
 #[cfg(all(
@@ -76,9 +76,9 @@ unsafe fn rust_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "avx2")]
 unsafe fn rust_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m256i, _mm_loadu_si128, _mm256_and_si256, _mm256_broadcastsi128_si256,
-        _mm256_loadu_si256, _mm256_set1_epi8, _mm256_shuffle_epi8, _mm256_srli_epi64,
-        _mm256_storeu_si256, _mm256_xor_si256,
+        __m128i, __m256i, _mm256_and_si256, _mm256_broadcastsi128_si256, _mm256_loadu_si256,
+        _mm256_set1_epi8, _mm256_shuffle_epi8, _mm256_srli_epi64, _mm256_storeu_si256,
+        _mm256_xor_si256, _mm_loadu_si128,
     };
 
     let low128: __m128i =
@@ -109,5 +109,5 @@ unsafe fn rust_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         offset += 32;
     }
 
-    super::super::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }

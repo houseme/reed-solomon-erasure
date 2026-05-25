@@ -7,6 +7,7 @@ mod backend;
 mod legacy;
 mod policy;
 mod profile;
+mod scalar;
 mod x86;
 
 pub use backend::BackendKind;
@@ -115,18 +116,6 @@ pub fn exp(a: u8, n: usize) -> u8 {
     }
 }
 
-const PURE_RUST_UNROLL: isize = 4;
-
-macro_rules! return_if_empty {
-    (
-        $len:expr
-    ) => {
-        if $len == 0 {
-            return;
-        }
-    };
-}
-
 pub fn mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     (backend::active_backend().mul_slice)(c, input, out);
 }
@@ -145,136 +134,12 @@ pub fn active_backend_kind() -> BackendKind {
 
 #[cfg(test)]
 fn mul_slice_scalar_for_test(c: u8, input: &[u8], out: &mut [u8]) {
-    mul_slice_pure_rust(c, input, out);
+    scalar::mul_slice_pure_rust(c, input, out);
 }
 
 #[cfg(test)]
 fn mul_slice_xor_scalar_for_test(c: u8, input: &[u8], out: &mut [u8]) {
-    mul_slice_xor_pure_rust(c, input, out);
-}
-
-fn mul_slice_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
-    let mt = &MUL_TABLE[c as usize];
-    let mt_ptr: *const u8 = &mt[0];
-
-    assert_eq!(input.len(), out.len());
-
-    let len: isize = input.len() as isize;
-    return_if_empty!(len);
-
-    let mut input_ptr: *const u8 = &input[0];
-    let mut out_ptr: *mut u8 = &mut out[0];
-
-    let mut n: isize = 0;
-    unsafe {
-        assert_eq!(4, PURE_RUST_UNROLL);
-        if len > PURE_RUST_UNROLL {
-            let len_minus_unroll = len - PURE_RUST_UNROLL;
-            while n < len_minus_unroll {
-                *out_ptr = *mt_ptr.offset(*input_ptr as isize);
-                *out_ptr.offset(1) = *mt_ptr.offset(*input_ptr.offset(1) as isize);
-                *out_ptr.offset(2) = *mt_ptr.offset(*input_ptr.offset(2) as isize);
-                *out_ptr.offset(3) = *mt_ptr.offset(*input_ptr.offset(3) as isize);
-
-                input_ptr = input_ptr.offset(PURE_RUST_UNROLL);
-                out_ptr = out_ptr.offset(PURE_RUST_UNROLL);
-                n += PURE_RUST_UNROLL;
-            }
-        }
-        while n < len {
-            *out_ptr = *mt_ptr.offset(*input_ptr as isize);
-
-            input_ptr = input_ptr.offset(1);
-            out_ptr = out_ptr.offset(1);
-            n += 1;
-        }
-    }
-    /* for n in 0..input.len() {
-     *   out[n] = mt[input[n] as usize]
-     * }
-     */
-}
-
-fn mul_slice_xor_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
-    let mt = &MUL_TABLE[c as usize];
-    let mt_ptr: *const u8 = &mt[0];
-
-    assert_eq!(input.len(), out.len());
-
-    let len: isize = input.len() as isize;
-    return_if_empty!(len);
-
-    let mut input_ptr: *const u8 = &input[0];
-    let mut out_ptr: *mut u8 = &mut out[0];
-
-    let mut n: isize = 0;
-    unsafe {
-        assert_eq!(4, PURE_RUST_UNROLL);
-        if len > PURE_RUST_UNROLL {
-            let len_minus_unroll = len - PURE_RUST_UNROLL;
-            while n < len_minus_unroll {
-                *out_ptr ^= *mt_ptr.offset(*input_ptr as isize);
-                *out_ptr.offset(1) ^= *mt_ptr.offset(*input_ptr.offset(1) as isize);
-                *out_ptr.offset(2) ^= *mt_ptr.offset(*input_ptr.offset(2) as isize);
-                *out_ptr.offset(3) ^= *mt_ptr.offset(*input_ptr.offset(3) as isize);
-
-                input_ptr = input_ptr.offset(PURE_RUST_UNROLL);
-                out_ptr = out_ptr.offset(PURE_RUST_UNROLL);
-                n += PURE_RUST_UNROLL;
-            }
-        }
-        while n < len {
-            *out_ptr ^= *mt_ptr.offset(*input_ptr as isize);
-
-            input_ptr = input_ptr.offset(1);
-            out_ptr = out_ptr.offset(1);
-            n += 1;
-        }
-    }
-    /* for n in 0..input.len() {
-     *   out[n] ^= mt[input[n] as usize];
-     * }
-     */
-}
-
-#[cfg(test)]
-fn slice_xor(input: &[u8], out: &mut [u8]) {
-    assert_eq!(input.len(), out.len());
-
-    let len: isize = input.len() as isize;
-    return_if_empty!(len);
-
-    let mut input_ptr: *const u8 = &input[0];
-    let mut out_ptr: *mut u8 = &mut out[0];
-
-    let mut n: isize = 0;
-    unsafe {
-        assert_eq!(4, PURE_RUST_UNROLL);
-        if len > PURE_RUST_UNROLL {
-            let len_minus_unroll = len - PURE_RUST_UNROLL;
-            while n < len_minus_unroll {
-                *out_ptr ^= *input_ptr;
-                *out_ptr.offset(1) ^= *input_ptr.offset(1);
-                *out_ptr.offset(2) ^= *input_ptr.offset(2);
-                *out_ptr.offset(3) ^= *input_ptr.offset(3);
-
-                input_ptr = input_ptr.offset(PURE_RUST_UNROLL);
-                out_ptr = out_ptr.offset(PURE_RUST_UNROLL);
-                n += PURE_RUST_UNROLL;
-            }
-        }
-        while n < len {
-            *out_ptr ^= *input_ptr;
-
-            input_ptr = input_ptr.offset(1);
-            out_ptr = out_ptr.offset(1);
-            n += 1;
-        }
-    }
-    /* for n in 0..input.len() {
-     *   out[n] ^= input[n]
-     * }
-     */
+    scalar::mul_slice_xor_pure_rust(c, input, out);
 }
 
 #[cfg(test)]
@@ -283,9 +148,9 @@ mod tests {
 
     use alloc::vec;
 
-    use super::*;
     #[cfg(feature = "std")]
     use super::profile::{parse_rust_neon_xor_unroll, RS_NEON_MUL_SLICE_XOR_SCHEDULE_ENV};
+    use super::*;
     use crate::tests::fill_random;
     use rand;
 
@@ -516,7 +381,7 @@ mod tests {
             for i in 0..expect.len() {
                 expect[i] = input[i] ^ output[i];
             }
-            slice_xor(&input, &mut output);
+            scalar::slice_xor(&input, &mut output);
             for i in 0..expect.len() {
                 assert_eq!(expect[i], output[i]);
             }
@@ -524,7 +389,7 @@ mod tests {
             for i in 0..expect.len() {
                 expect[i] = input[i] ^ output[i];
             }
-            slice_xor(&input, &mut output);
+            scalar::slice_xor(&input, &mut output);
             for i in 0..expect.len() {
                 assert_eq!(expect[i], output[i]);
             }
@@ -899,14 +764,20 @@ mod tests {
         #[cfg(target_arch = "aarch64")]
         {
             unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-neon") };
-            assert_eq!(super::backend::runtime_override_backend_name_for_test(), Some("rust-neon"));
+            assert_eq!(
+                super::backend::runtime_override_backend_name_for_test(),
+                Some("rust-neon")
+            );
             unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
         }
 
         #[cfg(target_arch = "x86_64")]
         {
             unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-avx2") };
-            assert_eq!(super::backend::runtime_override_backend_name_for_test(), Some("rust-avx2"));
+            assert_eq!(
+                super::backend::runtime_override_backend_name_for_test(),
+                Some("rust-avx2")
+            );
             unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
         }
     }

@@ -44,7 +44,7 @@ pub(crate) fn simd_c_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     let bytes_done: usize =
         unsafe { reedsolomon_gal_mul(low, high, input_ptr, out_ptr, size) as usize };
 
-    super::super::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }
 
 #[cfg(all(
@@ -69,5 +69,5 @@ pub(crate) fn simd_c_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     let bytes_done: usize =
         unsafe { reedsolomon_gal_mul_xor(low, high, input_ptr, out_ptr, size) as usize };
 
-    super::super::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }

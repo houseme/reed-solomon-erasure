@@ -1,9 +1,7 @@
 #[cfg(feature = "std")]
-use super::super::{
-    profile::{
-        rust_neon_mul_slice_xor_schedule_split, rust_neon_mul_slice_xor_unroll,
-        RUST_NEON_PROFILE_METRICS,
-    },
+use super::super::profile::{
+    rust_neon_mul_slice_xor_schedule_split, rust_neon_mul_slice_xor_unroll,
+    RUST_NEON_PROFILE_METRICS,
 };
 
 #[cfg(all(
@@ -45,7 +43,7 @@ pub(crate) fn rust_neon_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "neon")]
 unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::aarch64::{
-        uint8x16_t, uint8x16x4_t, vandq_u8, vdupq_n_u8, vld1q_u8, vld1q_u8_x4, veorq_u8,
+        uint8x16_t, uint8x16x4_t, vandq_u8, vdupq_n_u8, veorq_u8, vld1q_u8, vld1q_u8_x4,
         vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x4,
     };
 
@@ -86,14 +84,10 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         let high2 = vshrq_n_u8::<4>(input2);
         let high3 = vshrq_n_u8::<4>(input3);
 
-        let result0: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
-        let result1: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
-        let result2: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
-        let result3: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
+        let result0: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
+        let result1: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
+        let result2: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
+        let result3: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
 
         unsafe {
             vst1q_u8_x4(
@@ -113,7 +107,7 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         offset += 16;
     }
 
-    super::super::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }
 
 #[cfg(all(
@@ -125,8 +119,8 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "neon")]
 unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::aarch64::{
-        uint8x16_t, uint8x16x2_t, uint8x16x4_t, vandq_u8, vdupq_n_u8, vld1q_u8, vld1q_u8_x2,
-        vld1q_u8_x4, veorq_u8, vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x2, vst1q_u8_x4,
+        uint8x16_t, uint8x16x2_t, uint8x16x4_t, vandq_u8, vdupq_n_u8, veorq_u8, vld1q_u8,
+        vld1q_u8_x2, vld1q_u8_x4, vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x2, vst1q_u8_x4,
     };
 
     let low_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_LOW[c as usize].as_ptr()) };
@@ -280,10 +274,7 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
             unsafe {
                 vst1q_u8_x2(
                     out.as_mut_ptr().add(offset),
-                    uint8x16x2_t(
-                        veorq_u8(outs.0, product0),
-                        veorq_u8(outs.1, product1),
-                    ),
+                    uint8x16x2_t(veorq_u8(outs.0, product0), veorq_u8(outs.1, product1)),
                 )
             };
             offset += 32;
@@ -300,5 +291,5 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         offset += 16;
     }
 
-    super::super::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }
