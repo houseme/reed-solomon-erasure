@@ -256,9 +256,6 @@ fn supports_rust_ssse3(features: X86FeatureSet) -> bool {
     feature = "std"
 ))]
 fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
-    if cfg!(rse_simd_c_build_haswell) {
-        return features.avx2;
-    }
     if cfg!(rse_simd_c_build_baseline) {
         return features.sse2;
     }
