@@ -30,7 +30,6 @@ BACKENDS=(
   rust-avx2
   rust-avx512
   rust-gfni-avx2
-  rust-gfni-avx512
 )
 
 mkdir -p "${OUT_DIR}"

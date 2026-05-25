@@ -15,8 +15,24 @@ KNOWN_BACKENDS = {
     "rust-avx2",
     "rust-avx512",
     "rust-gfni-avx2",
-    "rust-gfni-avx512",
 }
+
+SUPPORTED_RELEASE_SMOKE_FILES = {
+    "smoke-results-release-auto.csv",
+    "smoke-results-release-scalar.csv",
+    "smoke-results-release-simd-c.csv",
+    "smoke-results-release-rust-avx2.csv",
+    "smoke-results-release-rust-avx512.csv",
+    "smoke-results-release-rust-gfni-avx2.csv",
+}
+
+CURRENT_RUNTIME_PRIORITY_X86 = [
+    "rust-avx2",
+    "rust-avx512",
+    "rust-ssse3",
+    "simd-c",
+    "scalar",
+]
 
 
 def load_json(path: pathlib.Path):
@@ -57,6 +73,8 @@ def collect_release_smoke(root: pathlib.Path) -> Dict[str, List[Dict]]:
     smoke_dir = root / "target" / "benchmark-smoke"
     out = {}
     for path in sorted(smoke_dir.glob("smoke-results-release-*.csv")):
+        if path.name not in SUPPORTED_RELEASE_SMOKE_FILES:
+            continue
         out[path.name] = load_csv(path)
     return out
 
@@ -81,6 +99,8 @@ def backend_rankings(machine_json: Dict) -> Dict[str, List[Dict]]:
         rows = []
         for file_name, records in smoke.items():
             for record in records:
+                if record["backend_override"] not in KNOWN_BACKENDS:
+                    continue
                 if (
                     record["operation"] == op
                     and record["data_shards"] == focus_case["data_shards"]
@@ -110,7 +130,7 @@ def criterion_rankings(machine_json: Dict) -> Dict[str, List[Dict]]:
     for op in ["galois_mul_slice", "galois_mul_slice_xor"]:
         rows = []
         for (benchmark, length), values in grouped.items():
-            if not benchmark.startswith(op):
+            if not benchmark.startswith(f"{op}_"):
                 continue
             rows.append(
                 {
@@ -186,7 +206,10 @@ def choose_recommended_priority(machine_json: Dict) -> Dict:
             "Release smoke results for 10x4_1m are weighted most heavily.",
             "Reconstruct and reconstruct_data are weighted above encode.",
             "Criterion mul_slice and mul_slice_xor at 1 MiB and 4 MiB break close ties.",
+            "The recommendation is benchmark-driven and may differ from the current runtime dispatch order.",
         ],
+        "current_runtime_priority_x86": CURRENT_RUNTIME_PRIORITY_X86,
+        "diverges_from_current_runtime_priority_x86": [row["backend_override"] for row in ordered] != CURRENT_RUNTIME_PRIORITY_X86[: len(ordered)],
     }
     return recommendation
 
