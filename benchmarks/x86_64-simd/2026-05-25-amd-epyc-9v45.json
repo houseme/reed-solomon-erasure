@@ -27,63 +27,63 @@
       "upper_ns": 1015.2261262617812
     },
     {
-      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-a",
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
       "length": "len_1048576",
       "mean_ns": 19073.300227518957,
       "lower_ns": 18672.375067172263,
       "upper_ns": 19541.011957385337
     },
     {
-      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-a",
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
       "length": "len_4194304",
       "mean_ns": 77625.0343470576,
       "lower_ns": 76001.25334788937,
       "upper_ns": 79494.48898939489
     },
     {
-      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-a",
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
       "length": "len_65536",
       "mean_ns": 706.8544872165567,
       "lower_ns": 688.3780666187298,
       "upper_ns": 728.0463741480295
     },
     {
-      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_r",
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
       "length": "len_1048576",
       "mean_ns": 18969.18191105809,
       "lower_ns": 18923.682930211748,
       "upper_ns": 19016.913543377406
     },
     {
-      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_r",
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
       "length": "len_4194304",
       "mean_ns": 85037.71449913734,
       "lower_ns": 84079.5034673913,
       "upper_ns": 86137.14036749481
     },
     {
-      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_r",
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
       "length": "len_65536",
       "mean_ns": 769.4626883030311,
       "lower_ns": 766.2429799033898,
       "upper_ns": 772.4548345990537
     },
     {
-      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_overri",
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
       "length": "len_1048576",
       "mean_ns": 18690.748374122722,
       "lower_ns": 18643.36958480913,
       "upper_ns": 18742.894664953103
     },
     {
-      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_overri",
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
       "length": "len_4194304",
       "mean_ns": 78056.22546263228,
       "lower_ns": 77747.81113791336,
       "upper_ns": 78325.5235495949
     },
     {
-      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_overri",
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
       "length": "len_65536",
       "mean_ns": 682.2372284628029,
       "lower_ns": 676.1521403663058,
@@ -132,105 +132,105 @@
       "upper_ns": 77419.81209713242
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-a",
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
       "length": "len_1048576",
       "mean_ns": 21149.42053837482,
       "lower_ns": 20650.20181723485,
       "upper_ns": 21596.568692487373
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-a",
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
       "length": "len_4194304",
       "mean_ns": 89819.85653151028,
       "lower_ns": 87534.25762887004,
       "upper_ns": 92238.8275461457
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-a",
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
       "length": "len_65536",
       "mean_ns": 1013.642376160364,
       "lower_ns": 992.7983179781829,
       "upper_ns": 1037.387570743088
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_ru",
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
       "length": "len_1048576",
       "mean_ns": 18319.85580880231,
       "lower_ns": 18203.579812890814,
       "upper_ns": 18445.409094462484
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_ru",
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
       "length": "len_4194304",
       "mean_ns": 68155.77877965043,
       "lower_ns": 67714.13165106117,
       "upper_ns": 68691.24708177279
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_ru",
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
       "length": "len_65536",
       "mean_ns": 873.7336522963448,
       "lower_ns": 856.1462848004096,
       "upper_ns": 894.0908724009108
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_overri",
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
       "length": "len_1048576",
       "mean_ns": 19591.7841110769,
       "lower_ns": 19444.580532892036,
       "upper_ns": 19747.66414451628
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_overri",
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
       "length": "len_4194304",
       "mean_ns": 87889.80645089285,
       "lower_ns": 87594.79985904592,
       "upper_ns": 88258.80209897266
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_overri",
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
       "length": "len_65536",
       "mean_ns": 753.0228072653547,
       "lower_ns": 751.576018023467,
       "upper_ns": 754.6755254066304
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_ov",
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
       "length": "len_1048576",
       "mean_ns": 19760.63910308833,
       "lower_ns": 19727.401636904764,
       "upper_ns": 19796.82813705357
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_ov",
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
       "length": "len_4194304",
       "mean_ns": 81810.88762308612,
       "lower_ns": 81666.80743731561,
       "upper_ns": 81955.7806417685
     },
     {
-      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_ov",
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
       "length": "len_65536",
       "mean_ns": 730.0184184611521,
       "lower_ns": 728.2012514716793,
       "upper_ns": 732.0203941541187
     },
     {
-      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scal",
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
       "length": "len_1048576",
       "mean_ns": 283115.98762506014,
       "lower_ns": 274264.4465623497,
       "upper_ns": 292242.81994802185
     },
     {
-      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scal",
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
       "length": "len_4194304",
       "mean_ns": 1136901.6236064427,
       "lower_ns": 1109200.0076470587,
       "upper_ns": 1163038.3404693624
     },
     {
-      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scal",
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
       "length": "len_65536",
       "mean_ns": 12976.273109306056,
       "lower_ns": 12646.253569594866,
@@ -1794,6 +1794,377 @@
         "throughput_mb_s": 120.8034,
         "source": "smoke-results-release-simd-c.csv"
       }
+    ]
+  },
+  "criterion_rankings": {
+    "galois_mul_slice": [
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 682.2372284628029
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 706.8544872165567
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 730.0184184611521
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 753.0228072653547
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 769.4626883030311
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 873.7336522963448
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 1013.3095313206799
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 1013.642376160364
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 12976.273109306056
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 16247.861363887825
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 18319.85580880231
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 18690.748374122722
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 18963.209430904695
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 18969.18191105809
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 19073.300227518957
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 19591.7841110769
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 19760.63910308833
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 21149.42053837482
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 68155.77877965043
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 75580.78219903326
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 77625.0343470576
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 78056.22546263228
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 79729.70210420087
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 81810.88762308612
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 85037.71449913734
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 86771.6844517492
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 87889.80645089285
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 89819.85653151028
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 215476.76881362888
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 283115.98762506014
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 893586.3454347042
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 1136901.6236064427
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1206077.5201661708
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1295926.1073148148
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 4786525.721240079
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 5195074.843214286
+      }
+    ],
+    "galois_mul_slice_xor": [
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 730.0184184611521
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 753.0228072653547
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 873.7336522963448
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 1013.642376160364
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 12976.273109306056
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 18319.85580880231
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 19591.7841110769
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 19760.63910308833
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 21149.42053837482
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 68155.77877965043
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 79729.70210420087
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 81810.88762308612
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 87889.80645089285
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 89819.85653151028
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 283115.98762506014
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 1136901.6236064427
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1295926.1073148148
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 5195074.843214286
+      }
+    ]
+  },
+  "recommended_default_priority": {
+    "priority_order": [
+      "rust-avx512",
+      "rust-gfni-avx512",
+      "rust-gfni-avx2",
+      "rust-avx2",
+      "scalar",
+      "simd-c"
+    ],
+    "scored_backends": [
+      {
+        "backend_override": "rust-avx512",
+        "score": 8.931
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "score": 8.9211
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "score": 8.5443
+      },
+      {
+        "backend_override": "rust-avx2",
+        "score": 8.4472
+      },
+      {
+        "backend_override": "scalar",
+        "score": 2.7768
+      },
+      {
+        "backend_override": "simd-c",
+        "score": 0.8825
+      }
+    ],
+    "rationale": [
+      "Release smoke results for 10x4_1m are weighted most heavily.",
+      "Reconstruct and reconstruct_data are weighted above encode.",
+      "Criterion mul_slice and mul_slice_xor at 1 MiB and 4 MiB break close ties."
     ]
   }
 }
