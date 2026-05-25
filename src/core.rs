@@ -1123,9 +1123,9 @@ impl<F: Field> ReedSolomon<F> {
         if outputs.len() <= 2 && chunk_count > 1 {
             self.runtime_profile_metrics
                 .record_code_some_small_output_chunk_parallel(outputs.len(), chunk_count);
-            outputs.par_iter_mut().enumerate().for_each(|(i_row, output)| {
-                let matrix_row = matrix_rows[i_row];
-                output
+            if outputs.len() == 1 {
+                let matrix_row = matrix_rows[0];
+                outputs[0]
                     .as_mut()
                     .par_chunks_mut(chunk_len)
                     .enumerate()
@@ -1142,7 +1142,31 @@ impl<F: Field> ReedSolomon<F> {
                             );
                         }
                     });
-            });
+            } else {
+                let matrix_row0 = matrix_rows[0];
+                let matrix_row1 = matrix_rows[1];
+                let (first, second) = outputs.split_at_mut(1);
+                let output0 = first[0].as_mut();
+                let output1 = second[0].as_mut();
+
+                output0
+                    .par_chunks_mut(chunk_len)
+                    .zip(output1.par_chunks_mut(chunk_len))
+                    .enumerate()
+                    .for_each(|(chunk_idx, (output0_chunk, output1_chunk))| {
+                        let start = chunk_idx * chunk_len;
+                        let end = start + output0_chunk.len();
+                        let input0 = &inputs[0].as_ref()[start..end];
+
+                        F::mul_slice(matrix_row0[0], input0, output0_chunk);
+                        F::mul_slice(matrix_row1[0], input0, output1_chunk);
+                        for i_input in 1..data_shard_count {
+                            let input_chunk = &inputs[i_input].as_ref()[start..end];
+                            F::mul_slice_add(matrix_row0[i_input], input_chunk, output0_chunk);
+                            F::mul_slice_add(matrix_row1[i_input], input_chunk, output1_chunk);
+                        }
+                    });
+            }
         } else {
             outputs.par_iter_mut().enumerate().for_each(|(i_row, output)| {
                 let matrix_row = matrix_rows[i_row];

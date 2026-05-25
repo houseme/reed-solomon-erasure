@@ -1582,3 +1582,28 @@ cargo bench --bench throughput_matrix --features "std simd-accel" -- --sample-si
 - “小输出 shard + chunk 内并行”不是一次性的偶然结果；
 - 它已经具备：实现修正、clean-build 收益、profile 命中率 三条证据；
 - 这批改动现在已经具备单独提交的价值。
+
+### 31.7 `1-output / 2-output` 专用 fast path
+
+在上一版“小输出 shard + chunk 内并行”基础上，又进一步做了一个更贴近 data-stage 的实现层优化：
+
+- 当 `outputs.len() == 1` 时，走专用单输出 fast path；
+- 当 `outputs.len() == 2` 时，走专用双输出 fast path；
+- 在 `2-output` 场景下，同一段输入 chunk 由同一个任务顺手服务两个输出，减少重复的输入切片访问，并更好利用输入局部性。
+
+相对上一版 `small-output-par`：
+
+- `reconstruct_10x4_1m`: `18.538 -> 19.029`
+- `reconstruct_data_10x4_1m`: `21.016 -> 25.144`
+- `reconstruct_32x16_1m`: `24.106 -> 24.936`
+- `reconstruct_data_32x16_1m`: `24.076 -> 26.911`
+
+产物：
+
+- `/tmp/throughput-small-output-fastpath.log`
+
+结论：
+
+- 这条 `1-output / 2-output` 专用 fast path 比泛化版“小输出并行”还要更强；
+- 尤其 `reconstruct_data` 的提升最明显，说明 data-stage 在“少输出 shard”场景下确实非常受益于这种更专用的执行形态；
+- 当前这批实现已经不仅是“可提交”，而是值得优先保留并继续在此基础上深挖的主方向。
