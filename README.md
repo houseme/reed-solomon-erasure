@@ -39,9 +39,10 @@ and the following to your crate root
 extern crate reed_solomon_erasure;
 ```
 
-NOTE: `simd-accel` is tuned for Haswell+ processors on x86-64 and not in any way for other architectures, set
-environment variable `RUST_REED_SOLOMON_ERASURE_ARCH` during build to force compilation of C code for specific architecture (`-march` flag in
-GCC/Clang). Even on x86-64 you can achieve better performance by setting it to `native`, but it will stop running on
+NOTE: `simd-accel` now prefers Rust runtime-dispatched SIMD backends on supported CPUs. The bundled `simd_c`
+implementation is retained as a legacy fallback. Set environment variable `RUST_REED_SOLOMON_ERASURE_ARCH` during
+build if you explicitly want to compile the legacy C backend for a specific architecture (`-march` flag in GCC/Clang).
+For example, setting it to `native` may improve the legacy C path on the local machine, but it will stop running on
 older CPUs, YMMV.
 
 ## Example

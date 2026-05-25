@@ -19,7 +19,7 @@ const GENERATING_POLYNOMIAL: usize = 29;
 #[derive(Copy, Clone)]
 enum SimdCBuildTarget {
     Baseline,
-    Haswell,
+    ExplicitArch,
 }
 
 fn gen_log_table(polynomial: usize) -> [u8; FIELD_SIZE] {
@@ -181,18 +181,9 @@ fn compile_simd_c() {
             build.flag(&format!("-march={}", arch));
             println!("cargo:rustc-env=RSE_SIMD_C_ARCH={arch}");
             println!("cargo:rustc-cfg=rse_simd_c_build_unknown");
+            build_target = SimdCBuildTarget::ExplicitArch;
         }
-        Err(_error) => {
-            // On x86-64 enabling Haswell architecture unlocks useful instructions and improves performance
-            // dramatically while allowing it to run ony modern CPU.
-            match env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str(){
-                "x86_64"  => {
-                    build.flag(&"-march=haswell");
-                    build_target = SimdCBuildTarget::Haswell;
-                },
-                _         => ()
-            }
-        }
+        Err(_error) => {}
     }
 
     match build_target {
@@ -200,10 +191,7 @@ fn compile_simd_c() {
             println!("cargo:rustc-cfg=rse_simd_c_build_baseline");
             println!("cargo:rustc-env=RSE_SIMD_C_ARCH=baseline");
         }
-        SimdCBuildTarget::Haswell => {
-            println!("cargo:rustc-cfg=rse_simd_c_build_haswell");
-            println!("cargo:rustc-env=RSE_SIMD_C_ARCH=haswell");
-        }
+        SimdCBuildTarget::ExplicitArch => {}
     }
 
     build
@@ -222,7 +210,6 @@ fn compile_simd_c() {}
 
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_baseline)");
-    println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_haswell)");
     println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_unknown)");
     compile_simd_c();
     write_tables();
