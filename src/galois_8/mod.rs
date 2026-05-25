@@ -153,7 +153,7 @@ mod tests {
     use alloc::vec;
 
     #[cfg(feature = "std")]
-    use super::profile::{parse_rust_neon_xor_unroll, RS_NEON_MUL_SLICE_XOR_SCHEDULE_ENV};
+    use super::profile::{RS_NEON_MUL_SLICE_XOR_SCHEDULE_ENV, parse_rust_neon_xor_unroll};
     use super::*;
     use crate::tests::fill_random;
     use rand;

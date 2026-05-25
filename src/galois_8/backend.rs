@@ -422,7 +422,7 @@ fn simd_c_override_backend() -> Option<GaloisBackend> {
 
     #[cfg(target_arch = "aarch64")]
     {
-        return supports_simd_c_aarch64(detect_aarch64_features()).then_some(SIMD_C_BACKEND);
+        supports_simd_c_aarch64(detect_aarch64_features()).then_some(SIMD_C_BACKEND)
     }
 }
 

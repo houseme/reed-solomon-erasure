@@ -50,7 +50,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 
@@ -125,7 +125,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 
@@ -174,7 +174,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 
@@ -237,7 +237,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 

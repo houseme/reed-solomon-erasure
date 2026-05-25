@@ -1,8 +1,5 @@
 #[cfg(feature = "std")]
-use super::super::profile::{
-    rust_neon_mul_slice_xor_schedule_split, rust_neon_mul_slice_xor_unroll,
-    RUST_NEON_PROFILE_METRICS,
-};
+use super::super::profile::{RUST_NEON_PROFILE_METRICS, rust_neon_mul_slice_xor_unroll};
 
 #[cfg(all(
     feature = "simd-accel",
@@ -19,7 +16,6 @@ pub(crate) fn rust_neon_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     unsafe { rust_neon_mul_slice_impl(c, input, out) }
 }
 
-
 #[cfg(all(
     feature = "simd-accel",
     target_arch = "aarch64",
@@ -34,8 +30,6 @@ pub(crate) fn rust_neon_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
 
     unsafe { rust_neon_mul_slice_xor_impl(c, input, out) }
 }
-
-
 
 #[cfg(all(
     feature = "simd-accel",
@@ -113,7 +107,6 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
     super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }
 
-
 #[cfg(all(
     feature = "simd-accel",
     target_arch = "aarch64",
@@ -166,96 +159,44 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
 
     let mut offset = 0usize;
     if unroll4 {
-        let schedule_split = {
-            #[cfg(feature = "std")]
-            {
-                rust_neon_mul_slice_xor_schedule_split()
-            }
-            #[cfg(not(feature = "std"))]
-            {
-                false
-            }
-        };
-        if schedule_split {
-            while offset < bytes_done_unrolled {
-                let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
-                let input0 = inputs.0;
-                let input1 = inputs.1;
-                let input2 = inputs.2;
-                let input3 = inputs.3;
+        while offset < bytes_done_unrolled {
+            let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
+            let input0 = inputs.0;
+            let input1 = inputs.1;
+            let input2 = inputs.2;
+            let input3 = inputs.3;
 
-                let low0 = vandq_u8(input0, nibble_mask);
-                let low1 = vandq_u8(input1, nibble_mask);
-                let low2 = vandq_u8(input2, nibble_mask);
-                let low3 = vandq_u8(input3, nibble_mask);
+            let low0 = vandq_u8(input0, nibble_mask);
+            let low1 = vandq_u8(input1, nibble_mask);
+            let low2 = vandq_u8(input2, nibble_mask);
+            let low3 = vandq_u8(input3, nibble_mask);
 
-                let high0 = vshrq_n_u8::<4>(input0);
-                let high1 = vshrq_n_u8::<4>(input1);
-                let high2 = vshrq_n_u8::<4>(input2);
-                let high3 = vshrq_n_u8::<4>(input3);
+            let high0 = vshrq_n_u8::<4>(input0);
+            let high1 = vshrq_n_u8::<4>(input1);
+            let high2 = vshrq_n_u8::<4>(input2);
+            let high3 = vshrq_n_u8::<4>(input3);
 
-                let product0: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
-                let product1: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
-                let product2: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
-                let product3: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
-                let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out.as_ptr().add(offset)) };
-                unsafe {
-                    vst1q_u8_x4(
-                        out.as_mut_ptr().add(offset),
-                        uint8x16x4_t(
-                            veorq_u8(outs.0, product0),
-                            veorq_u8(outs.1, product1),
-                            veorq_u8(outs.2, product2),
-                            veorq_u8(outs.3, product3),
-                        ),
-                    )
-                };
-                offset += 64;
-            }
-        } else {
-            while offset < bytes_done_unrolled {
-                let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
-                let input0 = inputs.0;
-                let input1 = inputs.1;
-                let input2 = inputs.2;
-                let input3 = inputs.3;
-
-                let low0 = vandq_u8(input0, nibble_mask);
-                let low1 = vandq_u8(input1, nibble_mask);
-                let low2 = vandq_u8(input2, nibble_mask);
-                let low3 = vandq_u8(input3, nibble_mask);
-
-                let high0 = vshrq_n_u8::<4>(input0);
-                let high1 = vshrq_n_u8::<4>(input1);
-                let high2 = vshrq_n_u8::<4>(input2);
-                let high3 = vshrq_n_u8::<4>(input3);
-
-                let product0: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
-                let product1: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
-                let product2: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
-                let product3: uint8x16_t =
-                    veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
-                let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out.as_ptr().add(offset)) };
-                unsafe {
-                    vst1q_u8_x4(
-                        out.as_mut_ptr().add(offset),
-                        uint8x16x4_t(
-                            veorq_u8(outs.0, product0),
-                            veorq_u8(outs.1, product1),
-                            veorq_u8(outs.2, product2),
-                            veorq_u8(outs.3, product3),
-                        ),
-                    )
-                };
-                offset += 64;
-            }
+            let product0: uint8x16_t =
+                veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
+            let product1: uint8x16_t =
+                veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
+            let product2: uint8x16_t =
+                veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
+            let product3: uint8x16_t =
+                veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
+            let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out.as_ptr().add(offset)) };
+            unsafe {
+                vst1q_u8_x4(
+                    out.as_mut_ptr().add(offset),
+                    uint8x16x4_t(
+                        veorq_u8(outs.0, product0),
+                        veorq_u8(outs.1, product1),
+                        veorq_u8(outs.2, product2),
+                        veorq_u8(outs.3, product3),
+                    ),
+                )
+            };
+            offset += 64;
         }
     } else {
         while offset < bytes_done_unrolled {

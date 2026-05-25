@@ -5,10 +5,10 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::{CodecOptions, Error, MatrixMode, SBSError, galois_8};
 #[cfg(feature = "std")]
 use super::{ParallelDecision, ParallelPolicy};
-use super::{galois_8, CodecOptions, Error, MatrixMode, SBSError};
-use rand::{self, rng, RngExt};
+use rand::{self, RngExt, rng};
 
 #[cfg(feature = "std")]
 use std::fs;
@@ -641,7 +641,11 @@ struct ParallelHelperBenchResult {
 }
 
 #[cfg(feature = "std")]
-fn bench_encode_sep_pair(data_shards: usize, parity_shards: usize, shard_size: usize) -> ParallelHelperBenchResult {
+fn bench_encode_sep_pair(
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
     let iterations = 3usize;
     let bytes = (data_shards * shard_size) as f64;
@@ -712,7 +716,9 @@ fn bench_verify_with_buffer_pair(
 
         let mut parallel_buffer = make_random_shards!(shard_size, parity_shards);
         let parallel_start = Instant::now();
-        let parallel_ok = r.verify_with_buffer_par(&shards, &mut parallel_buffer).unwrap();
+        let parallel_ok = r
+            .verify_with_buffer_par(&shards, &mut parallel_buffer)
+            .unwrap();
         parallel_total += parallel_start.elapsed().as_secs_f64();
 
         assert_eq!(serial_ok, parallel_ok);
@@ -943,7 +949,11 @@ fn benchmark_parallel_helpers_quantify_gain() {
     ];
 
     assert!(results.iter().all(|result| result.serial_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.parallel_mb_s.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.parallel_mb_s.is_finite())
+    );
     assert!(results.iter().all(|result| result.speedup.is_finite()));
 
     write_parallel_helper_bench_results(&results);
@@ -1090,17 +1100,21 @@ fn benchmark_reconstruction_cache_layers() {
     let repeated_pairs = vec![(0usize, 3usize); 6];
     let varying_pairs = vec![(0usize, 1usize), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6)];
 
-    let repeated_data_cached = run_reconstruction_pattern(&with_cache, &shards, true, &repeated_pairs);
+    let repeated_data_cached =
+        run_reconstruction_pattern(&with_cache, &shards, true, &repeated_pairs);
     let repeated_data_uncached =
         run_reconstruction_pattern(&without_cache, &shards, true, &repeated_pairs);
-    let varying_data_cached = run_reconstruction_pattern(&with_cache, &shards, true, &varying_pairs);
+    let varying_data_cached =
+        run_reconstruction_pattern(&with_cache, &shards, true, &varying_pairs);
     let varying_data_uncached =
         run_reconstruction_pattern(&without_cache, &shards, true, &varying_pairs);
 
-    let repeated_all_cached = run_reconstruction_pattern(&with_cache, &shards, false, &repeated_pairs);
+    let repeated_all_cached =
+        run_reconstruction_pattern(&with_cache, &shards, false, &repeated_pairs);
     let repeated_all_uncached =
         run_reconstruction_pattern(&without_cache, &shards, false, &repeated_pairs);
-    let varying_all_cached = run_reconstruction_pattern(&with_cache, &shards, false, &varying_pairs);
+    let varying_all_cached =
+        run_reconstruction_pattern(&with_cache, &shards, false, &varying_pairs);
     let varying_all_uncached =
         run_reconstruction_pattern(&without_cache, &shards, false, &varying_pairs);
 
@@ -1151,7 +1165,8 @@ fn test_encode_single_sep_par_matches_encode_single_sep() {
     let mut actual_parity = parity_src.to_vec();
 
     for i in 0..10 {
-        r.encode_single_sep(i, &data[i], &mut expected_parity).unwrap();
+        r.encode_single_sep(i, &data[i], &mut expected_parity)
+            .unwrap();
         r.encode_single_sep_par(i, &data[i], &mut actual_parity)
             .unwrap();
     }
@@ -1186,7 +1201,8 @@ fn test_encode_single_sep_opt_matches_encode_single_sep_for_small_shards() {
     assert!(!r.parallel_policy(8 * 1024, 4).use_parallel);
 
     for i in 0..10 {
-        r.encode_single_sep(i, &data[i], &mut expected_parity).unwrap();
+        r.encode_single_sep(i, &data[i], &mut expected_parity)
+            .unwrap();
         r.encode_single_sep_opt(i, &data[i], &mut actual_parity)
             .unwrap();
     }
@@ -1206,7 +1222,8 @@ fn test_encode_single_sep_opt_matches_encode_single_sep_for_large_shards() {
     assert!(r.parallel_policy(256 * 1024, 4).use_parallel);
 
     for i in 0..10 {
-        r.encode_single_sep(i, &data[i], &mut expected_parity).unwrap();
+        r.encode_single_sep(i, &data[i], &mut expected_parity)
+            .unwrap();
         r.encode_single_sep_opt(i, &data[i], &mut actual_parity)
             .unwrap();
     }
@@ -1272,7 +1289,9 @@ fn test_verify_with_buffer_par_matches_verify_with_buffer() {
     let mut actual_buffer = expected_buffer.clone();
 
     let expected = r.verify_with_buffer(&shards, &mut expected_buffer).unwrap();
-    let actual = r.verify_with_buffer_par(&shards, &mut actual_buffer).unwrap();
+    let actual = r
+        .verify_with_buffer_par(&shards, &mut actual_buffer)
+        .unwrap();
 
     assert_eq!(expected, actual);
     assert_eq!(expected_buffer, actual_buffer);
@@ -1453,7 +1472,8 @@ fn test_galois_8_reconstruct_some_opt_rejects_invalid_flags_length() {
 
     assert_eq!(
         Error::InvalidShardFlags,
-        r.reconstruct_some_opt(&mut shards, &[true, false]).unwrap_err()
+        r.reconstruct_some_opt(&mut shards, &[true, false])
+            .unwrap_err()
     );
 }
 
@@ -1694,7 +1714,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 
@@ -1769,7 +1789,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 
@@ -1818,7 +1838,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 
@@ -1881,7 +1901,7 @@ quickcheck! {
         for _ in 0..corrupt {
             let mut pos = rand::random_range(0..(data + parity));
 
-            while let Some(_) = corrupt_pos_s.iter().find(|&&x| x == pos) {
+            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
                 pos = rand::random_range(0..(data + parity));
             }
 
@@ -2260,7 +2280,7 @@ fn test_verify_shards_with_buffer_incorrect_buffer_sizes() {
 
         let mut buffer = vec![vec![0; 100]; 2];
 
-        assert_eq!(true, r.verify_with_buffer(&shards, &mut buffer).unwrap());
+        assert!(r.verify_with_buffer(&shards, &mut buffer).unwrap());
     }
     {
         // Test having first buffer being empty
@@ -2324,7 +2344,7 @@ fn test_verify_with_buffer_gives_correct_parity_shards() {
         for slice in slices.iter_mut() {
             fill_random(slice);
         }
-        let slices_copy = slices.clone();
+        let slices_copy = slices;
 
         {
             let mut slice_refs = convert_2D_slices!(slices=>to_mut_vec &mut [u8]);
@@ -2521,7 +2541,7 @@ fn shardbyshard_encode_correctly() {
         for slice in slices.iter_mut() {
             fill_random(slice);
         }
-        let mut slices_copy = slices.clone();
+        let mut slices_copy = slices;
 
         {
             let mut slice_refs = convert_2D_slices!(slices=>to_mut_vec &mut [u8]);
@@ -2678,7 +2698,7 @@ fn shardbyshard_encode_sep_correctly() {
         for slice in slices.iter_mut() {
             fill_random(slice);
         }
-        let mut slices_copy = slices.clone();
+        let mut slices_copy = slices;
 
         {
             let (data, parity) = slices.split_at_mut(10);
@@ -2878,9 +2898,9 @@ fn shardbyshard_encode_correctly_more_rigorous() {
             for i in 0..10 {
                 assert_eq!(i, sbs.cur_input_index());
 
-                slice_copy_refs[i].clone_from_slice(&slice_refs[i]);
+                slice_copy_refs[i].clone_from_slice(slice_refs[i]);
                 sbs.encode(&mut slice_copy_refs).unwrap();
-                fill_random(&mut slice_copy_refs[i]);
+                fill_random(slice_copy_refs[i]);
             }
         }
 
@@ -3554,7 +3574,7 @@ fn test_encode_single_sep() {
         for slice in slices.iter_mut() {
             fill_random(slice);
         }
-        let mut slices_copy = slices.clone();
+        let mut slices_copy = slices;
 
         {
             let mut slice_refs = convert_2D_slices!(slices=>to_mut_vec &mut [u8]);
@@ -3567,7 +3587,7 @@ fn test_encode_single_sep() {
             r.encode(&mut slice_refs).unwrap();
 
             for i in 0..10 {
-                r.encode_single_sep(i, &data_copy_refs[i], &mut parity_copy_refs)
+                r.encode_single_sep(i, data_copy_refs[i], &mut parity_copy_refs)
                     .unwrap();
             }
         }
@@ -3603,7 +3623,7 @@ fn test_encode_sep() {
         for slice in slices.iter_mut() {
             fill_random(slice);
         }
-        let mut slices_copy = slices.clone();
+        let mut slices_copy = slices;
 
         {
             let (data_copy, parity_copy) = slices_copy.split_at_mut(10);
@@ -3692,33 +3712,33 @@ fn test_encode_single_sep_error_handling() {
             let mut parity_refs = convert_2D_slices!(parity=>to_mut_vec &mut [u8]);
 
             for i in 0..10 {
-                r.encode_single_sep(i, &data_refs[i], &mut parity_refs)
+                r.encode_single_sep(i, data_refs[i], &mut parity_refs)
                     .unwrap();
             }
 
             assert_eq!(
                 Error::InvalidIndex,
-                r.encode_single_sep(10, &data_refs[0], &mut parity_refs)
+                r.encode_single_sep(10, data_refs[0], &mut parity_refs)
                     .unwrap_err()
             );
             assert_eq!(
                 Error::InvalidIndex,
-                r.encode_single_sep(11, &data_refs[0], &mut parity_refs)
+                r.encode_single_sep(11, data_refs[0], &mut parity_refs)
                     .unwrap_err()
             );
             assert_eq!(
                 Error::InvalidIndex,
-                r.encode_single_sep(12, &data_refs[0], &mut parity_refs)
+                r.encode_single_sep(12, data_refs[0], &mut parity_refs)
                     .unwrap_err()
             );
             assert_eq!(
                 Error::InvalidIndex,
-                r.encode_single_sep(13, &data_refs[0], &mut parity_refs)
+                r.encode_single_sep(13, data_refs[0], &mut parity_refs)
                     .unwrap_err()
             );
             assert_eq!(
                 Error::InvalidIndex,
-                r.encode_single_sep(14, &data_refs[0], &mut parity_refs)
+                r.encode_single_sep(14, data_refs[0], &mut parity_refs)
                     .unwrap_err()
             );
         }
@@ -3730,7 +3750,7 @@ fn test_encode_single_sep_error_handling() {
 
             assert_eq!(
                 Error::TooFewParityShards,
-                r.encode_single_sep(0, &data_refs[0], &mut parity_refs)
+                r.encode_single_sep(0, data_refs[0], &mut parity_refs)
                     .unwrap_err()
             );
         }
@@ -3742,7 +3762,7 @@ fn test_encode_single_sep_error_handling() {
 
             assert_eq!(
                 Error::TooManyParityShards,
-                r.encode_single_sep(0, &data_refs[0], &mut parity_refs)
+                r.encode_single_sep(0, data_refs[0], &mut parity_refs)
                     .unwrap_err()
             );
         }

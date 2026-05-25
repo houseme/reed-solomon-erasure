@@ -73,8 +73,8 @@ pub(crate) fn rust_gfni_avx2_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) 
 #[target_feature(enable = "gfni,avx2")]
 unsafe fn rust_gfni_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m256i, _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8, _mm256_loadu_si256,
-        _mm256_storeu_si256, _mm_loadu_si128,
+        __m128i, __m256i, _mm_loadu_si128, _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8,
+        _mm256_loadu_si256, _mm256_storeu_si256,
     };
 
     let iso_bytes = gfni_isomorphism_bytes();
@@ -107,8 +107,8 @@ unsafe fn rust_gfni_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "gfni,avx2")]
 unsafe fn rust_gfni_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m256i, _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8, _mm256_loadu_si256,
-        _mm256_storeu_si256, _mm256_xor_si256, _mm_loadu_si128,
+        __m128i, __m256i, _mm_loadu_si128, _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8,
+        _mm256_loadu_si256, _mm256_storeu_si256, _mm256_xor_si256,
     };
 
     let iso_bytes = gfni_isomorphism_bytes();

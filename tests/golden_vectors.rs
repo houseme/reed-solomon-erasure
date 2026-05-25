@@ -1,6 +1,6 @@
-use reed_solomon_erasure::galois_8::ReedSolomon;
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
+use reed_solomon_erasure::galois_8::ReedSolomon;
 
 fn checksum_bytes(data: &[u8]) -> u64 {
     data.iter().fold(0xcbf29ce484222325u64, |acc, &b| {
@@ -51,11 +51,15 @@ fn golden_encode_4x2_incrementing_input() {
 
     assert_eq!(
         shards[4],
-        vec![64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79]
+        vec![
+            64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79
+        ]
     );
     assert_eq!(
         shards[5],
-        vec![80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95]
+        vec![
+            80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95
+        ]
     );
     assert_eq!(checksum_shards(&shards), 0x9118ae5245b6279b);
 }
@@ -72,7 +76,10 @@ fn golden_reconstruct_data_4x2_incrementing_input() {
 
     rs.reconstruct_data(&mut shards).unwrap();
 
-    let recovered: Vec<Vec<u8>> = shards.into_iter().map(|shard| shard.unwrap_or_default()).collect();
+    let recovered: Vec<Vec<u8>> = shards
+        .into_iter()
+        .map(|shard| shard.unwrap_or_default())
+        .collect();
     assert_eq!(recovered[1], (16u8..32).collect::<Vec<_>>());
     assert!(recovered[4].is_empty());
     assert_eq!(checksum_shards(&recovered), 0x961eb966d059c4cb);
@@ -90,7 +97,10 @@ fn golden_reconstruct_4x2_incrementing_input() {
 
     rs.reconstruct(&mut shards).unwrap();
 
-    let recovered: Vec<Vec<u8>> = shards.into_iter().map(|shard| shard.unwrap_or_default()).collect();
+    let recovered: Vec<Vec<u8>> = shards
+        .into_iter()
+        .map(|shard| shard.unwrap_or_default())
+        .collect();
     assert_eq!(recovered, encoded);
     assert_eq!(checksum_shards(&recovered), 0x9118ae5245b6279b);
 }

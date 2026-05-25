@@ -7,10 +7,10 @@ use std::process::Command;
 use std::time::Instant;
 
 use reed_solomon_erasure::galois_8::{
-    active_backend_id, active_backend_kind, active_backend_name, ReedSolomon,
+    ReedSolomon, active_backend_id, active_backend_kind, active_backend_name,
 };
 
-use self::bench_common::{derived_seed, make_full_shards, BenchCase, Operation, SMOKE_CASES};
+use self::bench_common::{BenchCase, Operation, SMOKE_CASES, derived_seed, make_full_shards};
 
 struct SmokeResult {
     operation: &'static str,
@@ -206,8 +206,10 @@ fn benchmark_smoke_matrix_runs_and_exports_results() {
     }
 
     assert!(!results.is_empty());
-    assert!(results
-        .iter()
-        .all(|result| result.throughput_mb_s.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
     write_results(&results);
 }

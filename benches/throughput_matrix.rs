@@ -7,13 +7,11 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use reed_solomon_erasure::galois_8::{rust_neon_profile_stats, ReedSolomon, RustNeonProfileStats};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use reed_solomon_erasure::galois_8::{ReedSolomon, RustNeonProfileStats, rust_neon_profile_stats};
 use reed_solomon_erasure::{ReconstructionCacheStats, RuntimeProfileStats};
 
-use self::common::{
-    case_name, derived_seed, make_full_shards, BenchCase, Operation, SMOKE_CASES,
-};
+use self::common::{BenchCase, Operation, SMOKE_CASES, case_name, derived_seed, make_full_shards};
 
 #[derive(Debug, Clone)]
 struct ProfileRecord {
@@ -52,7 +50,10 @@ fn push_profile_record(
         cache: rs.reconstruction_cache_stats(),
         neon,
     };
-    PROFILE_RECORDS.lock().expect("profile mutex poisoned").push(record);
+    PROFILE_RECORDS
+        .lock()
+        .expect("profile mutex poisoned")
+        .push(record);
 }
 
 fn write_profile_report() {
@@ -153,7 +154,8 @@ fn bench_encode(c: &mut Criterion, case: BenchCase) {
     rs.reset_runtime_profile_stats();
     let neon_before = rust_neon_profile_stats();
     group.bench_function(name, |b| {
-        let mut shards = make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+        let mut shards =
+            make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
         b.iter(|| {
             rs.encode_opt(black_box(&mut shards)).unwrap();
         });
@@ -190,7 +192,8 @@ fn bench_reconstruct(c: &mut Criterion, case: BenchCase) {
     let throughput = case.shard_size * case.data_shards;
     let seed = derived_seed(Operation::Reconstruct, case);
     let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
-    let mut original = make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+    let mut original =
+        make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
     rs.encode_opt(&mut original).unwrap();
 
     let mut group = c.benchmark_group("throughput_matrix_reconstruct");
@@ -220,7 +223,8 @@ fn bench_reconstruct_data(c: &mut Criterion, case: BenchCase) {
     let throughput = case.shard_size * case.data_shards;
     let seed = derived_seed(Operation::ReconstructData, case);
     let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
-    let mut original = make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+    let mut original =
+        make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
     rs.encode_opt(&mut original).unwrap();
 
     let mut group = c.benchmark_group("throughput_matrix_reconstruct_data");

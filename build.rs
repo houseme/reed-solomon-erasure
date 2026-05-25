@@ -29,7 +29,7 @@ fn gen_log_table(polynomial: usize) -> [u8; FIELD_SIZE] {
     for log in 0..FIELD_SIZE - 1 {
         result[b] = log as u8;
 
-        b = b << 1;
+        b <<= 1;
 
         if FIELD_SIZE <= b {
             b = (b - FIELD_SIZE) ^ polynomial;
@@ -178,7 +178,7 @@ fn compile_simd_c() {
     match env::var("RUST_REED_SOLOMON_ERASURE_ARCH") {
         Ok(arch) => {
             // Use explicitly specified environment variable as architecture.
-            build.flag(&format!("-march={}", arch));
+            build.flag(format!("-march={}", arch));
             println!("cargo:rustc-env=RSE_SIMD_C_ARCH={arch}");
             println!("cargo:rustc-cfg=rse_simd_c_build_unknown");
             build_target = SimdCBuildTarget::ExplicitArch;

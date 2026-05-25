@@ -107,11 +107,7 @@ impl Element {
     }
 
     fn degree(&self) -> usize {
-        if self.0[0] != 0 {
-            1
-        } else {
-            0
-        }
+        if self.0[0] != 0 { 1 } else { 0 }
     }
 }
 

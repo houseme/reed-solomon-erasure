@@ -2,7 +2,7 @@ mod common;
 
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use reed_solomon_erasure::galois_8;
 
 const COEFF: u8 = 173;

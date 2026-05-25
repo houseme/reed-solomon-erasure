@@ -22,7 +22,6 @@ extern crate smallvec;
 #[cfg(feature = "simd-accel")]
 extern crate libc;
 
-use ::core::iter;
 use ::core::iter::FromIterator;
 
 #[macro_use]
@@ -44,16 +43,16 @@ pub use crate::errors::SBSError;
 pub use crate::core::CodecOptions;
 pub use crate::core::MatrixMode;
 #[cfg(feature = "std")]
+pub use crate::core::PARALLEL_POLICY_VERSION;
+#[cfg(feature = "std")]
 pub use crate::core::ParallelDecision;
 #[cfg(feature = "std")]
 pub use crate::core::ParallelPolicy;
 #[cfg(feature = "std")]
-pub use crate::core::PARALLEL_POLICY_VERSION;
-#[cfg(feature = "std")]
 pub use crate::core::ReconstructionCacheStats;
+pub use crate::core::ReedSolomon;
 #[cfg(feature = "std")]
 pub use crate::core::RuntimeProfileStats;
-pub use crate::core::ReedSolomon;
 pub use crate::core::ShardByShard;
 
 // TODO: Can be simplified once https://github.com/rust-lang/rfcs/issues/2505 is resolved
@@ -112,7 +111,7 @@ pub trait Field: Sized {
         assert_eq!(input.len(), out.len());
 
         for (i, o) in input.iter().zip(out) {
-            *o = Self::mul(elem.clone(), i.clone())
+            *o = Self::mul(elem, *i)
         }
     }
 
@@ -125,7 +124,7 @@ pub trait Field: Sized {
         assert_eq!(input.len(), out.len());
 
         for (i, o) in input.iter().zip(out) {
-            *o = Self::add(o.clone(), Self::mul(elem.clone(), i.clone()))
+            *o = Self::add(*o, Self::mul(elem, *i))
         }
     }
 }
@@ -166,14 +165,10 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]> + FromIterator<F::Elem>> R
     ) -> Result<&mut [F::Elem], Result<&mut [F::Elem], Error>> {
         let is_some = self.is_some();
         let x = self
-            .get_or_insert_with(|| iter::repeat(F::zero()).take(len).collect())
+            .get_or_insert_with(|| std::iter::repeat_n(F::zero(), len).collect())
             .as_mut();
 
-        if is_some {
-            Ok(x)
-        } else {
-            Err(Ok(x))
-        }
+        if is_some { Ok(x) } else { Err(Ok(x)) }
     }
 }
 
@@ -187,11 +182,7 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]>> ReconstructShard<F> for (
     }
 
     fn get(&mut self) -> Option<&mut [F::Elem]> {
-        if !self.1 {
-            None
-        } else {
-            Some(self.0.as_mut())
-        }
+        if !self.1 { None } else { Some(self.0.as_mut()) }
     }
 
     fn get_or_initialize(
@@ -200,11 +191,7 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]>> ReconstructShard<F> for (
     ) -> Result<&mut [F::Elem], Result<&mut [F::Elem], Error>> {
         let x = self.0.as_mut();
         if x.len() == len {
-            if self.1 {
-                Ok(x)
-            } else {
-                Err(Ok(x))
-            }
+            if self.1 { Ok(x) } else { Err(Ok(x)) }
         } else {
             Err(Err(Error::IncorrectShardSize))
         }

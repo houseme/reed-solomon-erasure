@@ -1,8 +1,8 @@
 use criterion::measurement::WallTime;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use rand::distr::{Distribution, StandardUniform};
 use rand::rngs::SmallRng;
-use rand::{rng, SeedableRng};
+use rand::{SeedableRng, rng};
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use std::convert::TryInto;
 use std::hint::black_box;
@@ -25,8 +25,7 @@ fn create_shards(block_size: usize, data: usize, parity: usize) -> Shards {
 
     // Create empty parity shards
     shards.resize_with(data + parity, || {
-        let mut vec = Vec::with_capacity(block_size);
-        vec.resize(block_size, 0);
+        let vec = vec![0; block_size];
         vec
     });
 

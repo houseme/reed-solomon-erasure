@@ -1,5 +1,3 @@
-use super::{active_backend_id, BackendId};
-
 #[cfg(feature = "std")]
 const RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES: usize = 512 * 1024;
 #[cfg(feature = "std")]
@@ -101,36 +99,23 @@ impl crate::ReedSolomon<super::Field> {
     #[cfg(feature = "std")]
     fn reconstruct_parallel_policy(
         &self,
-        missing_data: usize,
-        missing_total: usize,
-        data_only: bool,
-    ) -> crate::ParallelPolicy {
-        #[cfg(target_arch = "aarch64")]
-        {
-            return self.reconstruct_parallel_policy_aarch64(
-                missing_data,
-                missing_total,
-                data_only,
-            );
-        }
-
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            return self.reconstruct_parallel_policy_default(
-                missing_data,
-                missing_total,
-                data_only,
-            );
-        }
-    }
-
-    #[cfg(feature = "std")]
-    fn reconstruct_parallel_policy_default(
-        &self,
         _missing_data: usize,
         _missing_total: usize,
         data_only: bool,
     ) -> crate::ParallelPolicy {
+        #[cfg(target_arch = "aarch64")]
+        {
+            self.reconstruct_parallel_policy_aarch64(data_only)
+        }
+
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            return self.reconstruct_parallel_policy_default(data_only);
+        }
+    }
+
+    #[cfg(feature = "std")]
+    fn reconstruct_parallel_policy_default(&self, data_only: bool) -> crate::ParallelPolicy {
         let base = self.effective_parallel_policy();
         let data_only_min = self.reconstruct_data_min_parallel_shard_bytes();
         let full_min = self.reconstruct_full_min_parallel_shard_bytes();
@@ -159,25 +144,18 @@ impl crate::ReedSolomon<super::Field> {
     }
 
     #[cfg(all(feature = "std", target_arch = "aarch64"))]
-    fn reconstruct_parallel_policy_aarch64(
-        &self,
-        missing_data: usize,
-        missing_total: usize,
-        data_only: bool,
-    ) -> crate::ParallelPolicy {
-        let mut policy =
-            self.reconstruct_parallel_policy_default(missing_data, missing_total, data_only);
+    fn reconstruct_parallel_policy_aarch64(&self, data_only: bool) -> crate::ParallelPolicy {
+        let mut policy = self.reconstruct_parallel_policy_default(data_only);
         if let Some(value) =
             Self::read_env_usize(RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES_ENV)
+            && value > 0
         {
-            if value > 0 {
-                policy.min_parallel_shard_bytes = value;
-            }
+            policy.min_parallel_shard_bytes = value;
         }
-        if let Some(value) = Self::read_env_usize(RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV) {
-            if value > 0 {
-                policy.min_bytes_per_job = value;
-            }
+        if let Some(value) = Self::read_env_usize(RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV)
+            && value > 0
+        {
+            policy.min_bytes_per_job = value;
         }
         if let Some(value) = Self::read_env_usize(RS_AARCH64_RECONSTRUCT_MAX_JOBS_ENV) {
             policy.max_jobs = value;
@@ -207,26 +185,18 @@ impl crate::ReedSolomon<super::Field> {
     #[cfg(feature = "std")]
     fn reconstruct_stage_policies(
         &self,
-        missing_data: usize,
-        missing_total: usize,
+        _missing_data: usize,
+        _missing_total: usize,
         data_only: bool,
     ) -> (crate::ParallelPolicy, crate::ParallelPolicy) {
         #[cfg(target_arch = "aarch64")]
         {
-            return self.reconstruct_stage_policies_aarch64(
-                missing_data,
-                missing_total,
-                data_only,
-            );
+            self.reconstruct_stage_policies_aarch64(_missing_data, _missing_total, data_only)
         }
 
         #[cfg(not(target_arch = "aarch64"))]
         {
-            let policy = self.reconstruct_parallel_policy_default(
-                missing_data,
-                missing_total,
-                data_only,
-            );
+            let policy = self.reconstruct_parallel_policy_default(data_only);
             return (policy, policy);
         }
     }
@@ -245,27 +215,22 @@ impl crate::ReedSolomon<super::Field> {
     #[cfg(all(feature = "std", target_arch = "aarch64"))]
     fn reconstruct_stage_policies_aarch64(
         &self,
-        missing_data: usize,
-        missing_total: usize,
+        _missing_data: usize,
+        _missing_total: usize,
         data_only: bool,
     ) -> (crate::ParallelPolicy, crate::ParallelPolicy) {
-        let mut data_policy =
-            self.reconstruct_parallel_policy_aarch64(missing_data, missing_total, data_only);
-        let mut parity_policy =
-            self.reconstruct_parallel_policy_default(missing_data, missing_total, data_only);
-        if let Some(value) =
-            Self::read_env_usize(RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB_ENV)
+        let mut data_policy = self.reconstruct_parallel_policy_aarch64(data_only);
+        let mut parity_policy = self.reconstruct_parallel_policy_default(data_only);
+        if let Some(value) = Self::read_env_usize(RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB_ENV)
+            && value > 0
         {
-            if value > 0 {
-                data_policy.min_bytes_per_job = value;
-            }
+            data_policy.min_bytes_per_job = value;
         }
         if let Some(value) =
             Self::read_env_usize(RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB_ENV)
+            && value > 0
         {
-            if value > 0 {
-                parity_policy.min_bytes_per_job = value;
-            }
+            parity_policy.min_bytes_per_job = value;
         }
         (data_policy, parity_policy)
     }
@@ -356,10 +321,7 @@ impl crate::ReedSolomon<super::Field> {
     }
 
     #[cfg(feature = "std")]
-    pub fn reconstruct_data_opt(
-        &self,
-        shards: &mut [Option<Vec<u8>>],
-    ) -> Result<(), crate::Error> {
+    pub fn reconstruct_data_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
         let shard_len = Self::first_present_shard_len(shards);
         let missing_data = shards
             .iter()
@@ -373,11 +335,7 @@ impl crate::ReedSolomon<super::Field> {
         {
             let (data_policy, _parity_policy) =
                 self.reconstruct_stage_policies(missing_data, missing, true);
-            self.reconstruct_internal_option_vec_par_with_policy(
-                shards,
-                true,
-                data_policy,
-            )
+            self.reconstruct_internal_option_vec_par_with_policy(shards, true, data_policy)
         } else {
             self.reconstruct_data(shards)
         }
@@ -407,10 +365,10 @@ impl crate::ReedSolomon<super::Field> {
                         return Err(crate::Error::EmptyShard);
                     }
                     number_present += 1;
-                    if let Some(old_len) = shard_len {
-                        if shard.len() != old_len {
-                            return Err(crate::Error::IncorrectShardSize);
-                        }
+                    if let Some(old_len) = shard_len
+                        && shard.len() != old_len
+                    {
+                        return Err(crate::Error::IncorrectShardSize);
                     }
                     shard_len = Some(shard.len());
                 }

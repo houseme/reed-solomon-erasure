@@ -191,7 +191,12 @@ pub fn make_empty_parity_shards(parity_shards: usize, shard_size: usize) -> Vec<
     (0..parity_shards).map(|_| vec![0u8; shard_size]).collect()
 }
 
-pub fn make_full_shards(seed: u64, data_shards: usize, parity_shards: usize, shard_size: usize) -> Vec<Vec<u8>> {
+pub fn make_full_shards(
+    seed: u64,
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+) -> Vec<Vec<u8>> {
     let mut shards = make_data_shards(seed, data_shards, shard_size);
     shards.extend(make_empty_parity_shards(parity_shards, shard_size));
     shards

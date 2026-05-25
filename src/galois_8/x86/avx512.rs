@@ -9,7 +9,7 @@ extern crate alloc;
 ))]
 #[inline]
 fn load_tables(c: u8) -> (core::arch::x86_64::__m512i, core::arch::x86_64::__m512i) {
-    use core::arch::x86_64::{__m128i, __m512i, _mm512_broadcast_i32x4, _mm_loadu_si128};
+    use core::arch::x86_64::{__m128i, __m512i, _mm_loadu_si128, _mm512_broadcast_i32x4};
 
     let low128: __m128i =
         unsafe { _mm_loadu_si128(super::super::MUL_TABLE_LOW[c as usize].as_ptr().cast()) };

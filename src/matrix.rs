@@ -109,7 +109,7 @@ impl<F: Field> Matrix<F> {
     }
 
     pub fn get(&self, r: usize, c: usize) -> F::Elem {
-        acc!(self, r, c).clone()
+        acc!(self, r, c)
     }
 
     pub fn set(&mut self, r: usize, c: usize, val: F::Elem) {
@@ -128,7 +128,7 @@ impl<F: Field> Matrix<F> {
             for c in 0..rhs.col_count {
                 let mut val = F::zero();
                 for i in 0..self.col_count {
-                    let mul = F::mul(acc!(self, r, i).clone(), acc!(rhs, i, c).clone());
+                    let mul = F::mul(acc!(self, r, i), acc!(rhs, i, c));
 
                     val = F::add(val, mul);
                 }
@@ -148,11 +148,11 @@ impl<F: Field> Matrix<F> {
         let mut result = Self::new(self.row_count, self.col_count + rhs.col_count);
         for r in 0..self.row_count {
             for c in 0..self.col_count {
-                acc!(result, r, c) = acc!(self, r, c).clone();
+                acc!(result, r, c) = acc!(self, r, c);
             }
             let self_column_count = self.col_count;
             for c in 0..rhs.col_count {
-                acc!(result, r, self_column_count + c) = acc!(rhs, r, c).clone();
+                acc!(result, r, self_column_count + c) = acc!(rhs, r, c);
             }
         }
 
@@ -163,7 +163,7 @@ impl<F: Field> Matrix<F> {
         let mut result = Self::new(rmax - rmin, cmax - cmin);
         for r in rmin..rmax {
             for c in cmin..cmax {
-                acc!(result, r - rmin, c - cmin) = acc!(self, r, c).clone();
+                acc!(result, r - rmin, c - cmin) = acc!(self, r, c);
             }
         }
         result
@@ -180,7 +180,6 @@ impl<F: Field> Matrix<F> {
         let (r2_s, _) = self.calc_row_start_end(r2);
 
         if r1 == r2 {
-            return;
         } else {
             for i in 0..self.col_count {
                 self.data.swap(r1_s + i, r2_s + i);
@@ -208,9 +207,9 @@ impl<F: Field> Matrix<F> {
             }
             // Scale to 1.
             if acc!(self, r, r) != F::one() {
-                let scale = F::div(F::one(), acc!(self, r, r).clone());
+                let scale = F::div(F::one(), acc!(self, r, r));
                 for c in 0..self.col_count {
-                    acc!(self, r, c) = F::mul(scale, acc!(self, r, c).clone());
+                    acc!(self, r, c) = F::mul(scale, acc!(self, r, c));
                 }
             }
             // Make everything below the 1 be a 0 by subtracting
@@ -218,12 +217,10 @@ impl<F: Field> Matrix<F> {
             // both exclusive or in the Galois field.)
             for r_below in r + 1..self.row_count {
                 if acc!(self, r_below, r) != F::zero() {
-                    let scale = acc!(self, r_below, r).clone();
+                    let scale = acc!(self, r_below, r);
                     for c in 0..self.col_count {
-                        acc!(self, r_below, c) = F::add(
-                            acc!(self, r_below, c).clone(),
-                            F::mul(scale, acc!(self, r, c).clone()),
-                        );
+                        acc!(self, r_below, c) =
+                            F::add(acc!(self, r_below, c), F::mul(scale, acc!(self, r, c)));
                     }
                 }
             }
@@ -233,12 +230,10 @@ impl<F: Field> Matrix<F> {
         for d in 0..self.row_count {
             for r_above in 0..d {
                 if acc!(self, r_above, d) != F::zero() {
-                    let scale = acc!(self, r_above, d).clone();
+                    let scale = acc!(self, r_above, d);
                     for c in 0..self.col_count {
-                        acc!(self, r_above, c) = F::add(
-                            acc!(self, r_above, c).clone(),
-                            F::mul(scale, acc!(self, d, c).clone()),
-                        );
+                        acc!(self, r_above, c) =
+                            F::add(acc!(self, r_above, c), F::mul(scale, acc!(self, d, c)));
                     }
                 }
             }
