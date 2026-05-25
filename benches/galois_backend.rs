@@ -11,8 +11,11 @@ const LENGTHS: &[usize] = &[64 * 1024, 1024 * 1024, 4 * 1024 * 1024];
 
 fn backend_label() -> String {
     let active = galois_8::active_backend_name();
-    let override_value = std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string());
-    format!("{active}_override_{override_value}")
+    let active_id = format!("{:?}", galois_8::active_backend_id());
+    let active_kind = format!("{:?}", galois_8::active_backend_kind());
+    let override_value =
+        std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string());
+    format!("{active}_{active_id}_{active_kind}_override_{override_value}")
 }
 
 fn make_input(len: usize) -> Vec<u8> {

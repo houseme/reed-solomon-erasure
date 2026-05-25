@@ -749,4 +749,51 @@ mod tests {
             unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
         }
     }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "x86_64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_x86_cross_backend_conformance_matrix() {
+        let lengths = [
+            0usize, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 255, 1024, 10_003,
+        ];
+        let coeffs = [0u8, 1, 2, 15, 16, 31, 127, 173, 255];
+
+        for &len in &lengths {
+            for &c in &coeffs {
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+
+                let mut scalar = vec![0; len];
+                mul_slice_scalar_for_test(c, &input, &mut scalar);
+
+                if cfg!(rse_simd_c_build_baseline) {
+                    let mut simd_c = vec![0; len];
+                    legacy::simd_c::simd_c_mul_slice(c, &input, &mut simd_c);
+                    assert_eq!(scalar, simd_c, "simd-c mismatch len={len} coeff={c}");
+                }
+
+                let mut ssse3 = vec![0; len];
+                x86::ssse3::rust_ssse3_mul_slice(c, &input, &mut ssse3);
+                assert_eq!(scalar, ssse3, "ssse3 mismatch len={len} coeff={c}");
+
+                let mut avx2 = vec![0; len];
+                x86::avx2::rust_avx2_mul_slice(c, &input, &mut avx2);
+                assert_eq!(scalar, avx2, "avx2 mismatch len={len} coeff={c}");
+
+                let mut avx512 = vec![0; len];
+                x86::avx512::rust_avx512_mul_slice(c, &input, &mut avx512);
+                assert_eq!(scalar, avx512, "avx512 mismatch len={len} coeff={c}");
+
+                let mut gfni = vec![0; len];
+                x86::gfni::rust_gfni_avx2_mul_slice(c, &input, &mut gfni);
+                assert_eq!(scalar, gfni, "gfni mismatch len={len} coeff={c}");
+            }
+        }
+    }
 }
