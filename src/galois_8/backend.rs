@@ -32,8 +32,8 @@ const SCALAR_BACKEND: GaloisBackend = GaloisBackend {
     not(any(target_os = "android", target_os = "ios"))
 ))]
 const RUST_NEON_BACKEND: GaloisBackend = GaloisBackend {
-    mul_slice: super::rust_neon_mul_slice,
-    mul_slice_xor: super::rust_neon_mul_slice_xor,
+    mul_slice: super::aarch64::neon::rust_neon_mul_slice,
+    mul_slice_xor: super::aarch64::neon::rust_neon_mul_slice_xor,
     name: "rust-neon",
     kind: BackendKind::RustSimd,
 };
@@ -45,8 +45,8 @@ const RUST_NEON_BACKEND: GaloisBackend = GaloisBackend {
     not(any(target_os = "android", target_os = "ios"))
 ))]
 const RUST_AVX2_BACKEND: GaloisBackend = GaloisBackend {
-    mul_slice: super::rust_avx2_mul_slice,
-    mul_slice_xor: super::rust_avx2_mul_slice_xor,
+    mul_slice: super::x86::avx2::rust_avx2_mul_slice,
+    mul_slice_xor: super::x86::avx2::rust_avx2_mul_slice_xor,
     name: "rust-avx2",
     kind: BackendKind::RustSimd,
 };
@@ -60,8 +60,8 @@ static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
     not(any(target_os = "android", target_os = "ios"))
 ))]
 const SIMD_C_BACKEND: GaloisBackend = GaloisBackend {
-    mul_slice: super::simd_c_mul_slice,
-    mul_slice_xor: super::simd_c_mul_slice_xor,
+    mul_slice: super::legacy::simd_c::simd_c_mul_slice,
+    mul_slice_xor: super::legacy::simd_c::simd_c_mul_slice_xor,
     name: "simd-c",
     kind: BackendKind::SimdC,
 };

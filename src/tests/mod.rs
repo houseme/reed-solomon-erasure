@@ -521,6 +521,16 @@ fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
     assert_eq!(65536, decision.chunk_len);
 }
 
+#[cfg(all(feature = "std", not(target_arch = "aarch64")))]
+#[test]
+fn test_reconstruct_parallel_policy_default_arch_stays_on_default_chunk() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let decision = r.reconstruct_parallel_decision_with(1024 * 1024, 1, 2, false, 8);
+
+    assert!(decision.use_parallel);
+    assert_eq!(256 * 1024, decision.chunk_len);
+}
+
 #[cfg(feature = "std")]
 #[test]
 fn test_effective_parallel_policy_env_overrides() {
