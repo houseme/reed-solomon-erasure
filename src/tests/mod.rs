@@ -505,6 +505,17 @@ fn test_reconstruct_parallel_policy_has_data_only_and_full_tiers() {
 
 #[cfg(feature = "std")]
 #[test]
+fn test_parallel_policy_creates_multiple_chunks_for_small_output_reconstruct_case() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let decision = r.parallel_policy_with(1024 * 1024, 2, 8);
+
+    assert!(decision.use_parallel);
+    assert_eq!(4, decision.jobs);
+    assert_eq!(262144, decision.chunk_len);
+}
+
+#[cfg(feature = "std")]
+#[test]
 fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
     let r = ReedSolomon::new(10, 4).unwrap();
     // SAFETY: tests run in-process and we restore this env var before returning.
