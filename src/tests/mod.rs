@@ -564,7 +564,7 @@ fn test_aarch64_reconstruct_stage_policies_allow_data_parity_split() {
         std::env::set_var("RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB", "65536");
         std::env::set_var("RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB", "262144");
     }
-    let (data_policy, parity_policy) = r.reconstruct_stage_policies_for_test(1, 2, false);
+    let (data_policy, parity_policy) = r.reconstruct_stage_policies_for_test(false);
     // SAFETY: cleanup for process-global env vars set above.
     unsafe {
         std::env::remove_var("RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB");
@@ -986,6 +986,7 @@ fn test_reconstruction_cache_stats_track_hits_and_misses() {
     assert_eq!(0, stats_after_first.hits);
     assert_eq!(1, stats_after_first.misses);
     assert_eq!(1, stats_after_first.inserts);
+    assert_eq!(0, stats_after_first.evictions);
 
     let mut second = shards_to_option_shards(&shards);
     second[0] = None;
@@ -997,6 +998,41 @@ fn test_reconstruction_cache_stats_track_hits_and_misses() {
     assert_eq!(1, stats_after_second.hits);
     assert_eq!(1, stats_after_second.misses);
     assert_eq!(1, stats_after_second.inserts);
+    assert_eq!(0, stats_after_second.evictions);
+
+    let analysis = stats_after_second.analysis();
+    assert!((analysis.hit_rate - 0.5).abs() < f64::EPSILON);
+    assert!((analysis.reuse_ratio - 1.0).abs() < f64::EPSILON);
+    assert!((analysis.miss_cost_per_request - 0.5).abs() < f64::EPSILON);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_reconstruction_cache_stats_track_evictions() {
+    let r = ReedSolomon::with_options(
+        8,
+        5,
+        CodecOptions {
+            inversion_cache: true,
+            inversion_cache_capacity: 2,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut shards = make_random_shards!(4096, 13);
+    r.encode(&mut shards).unwrap();
+
+    for missing in &[(0usize, 1usize), (0, 2), (0, 3)] {
+        let mut working = shards_to_option_shards(&shards);
+        working[missing.0] = None;
+        working[missing.1] = None;
+        r.reconstruct_data(&mut working).unwrap();
+    }
+
+    let stats = r.reconstruction_cache_stats();
+    assert!(stats.inserts >= 3);
+    assert!(stats.evictions >= 1);
 }
 
 #[cfg(feature = "std")]
@@ -1036,8 +1072,15 @@ fn benchmark_reconstruction_cache_patterns() {
     let path = dir.join("reconstruction-cache-stats.json");
 
     let body = format!(
-        "{{\"requests\":{},\"hits\":{},\"misses\":{},\"inserts\":{}}}",
-        stats.requests, stats.hits, stats.misses, stats.inserts
+        "{{\"requests\":{},\"hits\":{},\"misses\":{},\"inserts\":{},\"evictions\":{},\"hit_rate\":{:.6},\"reuse_ratio\":{:.6},\"miss_cost_per_request\":{:.6}}}",
+        stats.requests,
+        stats.hits,
+        stats.misses,
+        stats.inserts,
+        stats.evictions,
+        stats.hit_rate(),
+        stats.reuse_ratio(),
+        stats.miss_cost_per_request()
     );
     fs::write(&path, body).unwrap();
     assert!(path.exists());

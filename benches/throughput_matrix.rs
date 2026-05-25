@@ -89,7 +89,8 @@ fn write_profile_report() {
                 "\"reconstruct_calls\":{},\"reconstruct_data_only_calls\":{},\"reconstruct_total_missing_data\":{},\"reconstruct_total_missing_parity\":{},\"reconstruct_all_present_fast_path\":{},",
                 "\"reconstruct_data_stage_calls\":{},\"reconstruct_data_stage_bytes\":{},\"reconstruct_parity_stage_calls\":{},\"reconstruct_parity_stage_bytes\":{},",
                 "\"neon_mul_calls\":{},\"neon_mul_xor_calls\":{},\"neon_total_bytes\":{},\"neon_vector_64b_chunks\":{},\"neon_vector_16b_chunks\":{},\"neon_tail_bytes\":{},\"neon_tail_calls\":{},\"neon_table_lookups\":{},",
-                "\"cache_requests\":{},\"cache_hits\":{},\"cache_misses\":{},\"cache_inserts\":{}}}{}"
+                "\"cache_requests\":{},\"cache_hits\":{},\"cache_misses\":{},\"cache_inserts\":{},\"cache_evictions\":{},",
+                "\"cache_hit_rate\":{:.6},\"cache_reuse_ratio\":{:.6},\"cache_miss_cost_per_request\":{:.6}}}{}"
             ),
             item.operation,
             item.case_label,
@@ -136,6 +137,10 @@ fn write_profile_report() {
             item.cache.hits,
             item.cache.misses,
             item.cache.inserts,
+            item.cache.evictions,
+            item.cache.hit_rate(),
+            item.cache.reuse_ratio(),
+            item.cache.miss_cost_per_request(),
             comma
         )
         .expect("write profile row");

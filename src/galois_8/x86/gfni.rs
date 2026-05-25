@@ -62,6 +62,56 @@ fn coeff_table_avx512(c: u8) -> [u8; 64] {
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
+#[inline]
+#[target_feature(enable = "gfni,avx2")]
+unsafe fn gfni_avx2_constants(c: u8) -> (core::arch::x86_64::__m256i, core::arch::x86_64::__m256i) {
+    use core::arch::x86_64::{
+        __m128i, __m256i, _mm_loadu_si128, _mm256_broadcastsi128_si256,
+        _mm256_gf2p8affine_epi64_epi8, _mm256_loadu_si256,
+    };
+
+    let iso_bytes = gfni_isomorphism_bytes();
+    let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
+    let iso256: __m256i = _mm256_broadcastsi128_si256(iso128);
+    let coeff_bytes = coeff_table_avx2(c);
+    let coeff_vec: __m256i = unsafe { _mm256_loadu_si256(coeff_bytes.as_ptr().cast()) };
+    let coeff_mapped = _mm256_gf2p8affine_epi64_epi8(coeff_vec, iso256, 0);
+
+    (iso256, coeff_mapped)
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[inline]
+#[target_feature(enable = "gfni,avx512f,avx512bw")]
+unsafe fn gfni_avx512_constants(
+    c: u8,
+) -> (core::arch::x86_64::__m512i, core::arch::x86_64::__m512i) {
+    use core::arch::x86_64::{
+        __m128i, __m512i, _mm_loadu_si128, _mm512_broadcast_i32x4, _mm512_gf2p8affine_epi64_epi8,
+        _mm512_loadu_si512,
+    };
+
+    let iso_bytes = gfni_isomorphism_bytes();
+    let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
+    let iso512: __m512i = _mm512_broadcast_i32x4(iso128);
+    let coeff_bytes = coeff_table_avx512(c);
+    let coeff_vec: __m512i = unsafe { _mm512_loadu_si512(coeff_bytes.as_ptr().cast()) };
+    let coeff_mapped = _mm512_gf2p8affine_epi64_epi8::<0>(coeff_vec, iso512);
+
+    (iso512, coeff_mapped)
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 pub(crate) fn rust_gfni_avx2_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     assert_eq!(input.len(), out.len());
     if input.is_empty() {
@@ -125,17 +175,12 @@ pub(crate) fn rust_gfni_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]
 #[target_feature(enable = "gfni,avx2")]
 unsafe fn rust_gfni_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m256i, _mm256_broadcastsi128_si256, _mm256_gf2p8affine_epi64_epi8,
-        _mm256_gf2p8mul_epi8, _mm256_loadu_si256, _mm256_storeu_si256, _mm_loadu_si128,
+        __m128i, __m256i, _mm_loadu_si128, _mm256_broadcastsi128_si256,
+        _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8, _mm256_loadu_si256,
+        _mm256_storeu_si256,
     };
 
-    let iso_bytes = gfni_isomorphism_bytes();
-    let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
-    let iso256: __m256i = _mm256_broadcastsi128_si256(iso128);
-    let coeff_bytes = coeff_table_avx2(c);
-    let coeff_vec: __m256i = unsafe { _mm256_loadu_si256(coeff_bytes.as_ptr().cast()) };
-
-    let coeff_mapped = _mm256_gf2p8affine_epi64_epi8(coeff_vec, iso256, 0);
+    let (iso256, coeff_mapped): (__m256i, __m256i) = unsafe { gfni_avx2_constants(c) };
 
     let bytes_done = input.len() & !31usize;
     let mut offset = 0usize;
@@ -160,18 +205,12 @@ unsafe fn rust_gfni_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "gfni,avx2")]
 unsafe fn rust_gfni_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m256i, _mm256_broadcastsi128_si256, _mm256_gf2p8affine_epi64_epi8,
-        _mm256_gf2p8mul_epi8, _mm256_loadu_si256, _mm256_storeu_si256, _mm256_xor_si256,
-        _mm_loadu_si128,
+        __m128i, __m256i, _mm_loadu_si128, _mm256_broadcastsi128_si256,
+        _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8, _mm256_loadu_si256,
+        _mm256_storeu_si256, _mm256_xor_si256,
     };
 
-    let iso_bytes = gfni_isomorphism_bytes();
-    let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
-    let iso256: __m256i = _mm256_broadcastsi128_si256(iso128);
-    let coeff_bytes = coeff_table_avx2(c);
-    let coeff_vec: __m256i = unsafe { _mm256_loadu_si256(coeff_bytes.as_ptr().cast()) };
-
-    let coeff_mapped = _mm256_gf2p8affine_epi64_epi8(coeff_vec, iso256, 0);
+    let (iso256, coeff_mapped): (__m256i, __m256i) = unsafe { gfni_avx2_constants(c) };
 
     let bytes_done = input.len() & !31usize;
     let mut offset = 0usize;
@@ -202,17 +241,11 @@ unsafe fn rust_gfni_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8])
 #[target_feature(enable = "gfni,avx512f,avx512bw")]
 unsafe fn rust_gfni_avx512_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m512i, _mm512_broadcast_i32x4, _mm512_gf2p8affine_epi64_epi8,
-        _mm512_gf2p8mul_epi8, _mm512_loadu_si512, _mm512_storeu_si512, _mm_loadu_si128,
+        __m128i, __m512i, _mm_loadu_si128, _mm512_broadcast_i32x4, _mm512_gf2p8affine_epi64_epi8,
+        _mm512_gf2p8mul_epi8, _mm512_loadu_si512, _mm512_storeu_si512,
     };
 
-    let iso_bytes = gfni_isomorphism_bytes();
-    let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
-    let iso512: __m512i = _mm512_broadcast_i32x4(iso128);
-    let coeff_bytes = coeff_table_avx512(c);
-    let coeff_vec: __m512i = unsafe { _mm512_loadu_si512(coeff_bytes.as_ptr().cast()) };
-
-    let coeff_mapped = _mm512_gf2p8affine_epi64_epi8::<0>(coeff_vec, iso512);
+    let (iso512, coeff_mapped): (__m512i, __m512i) = unsafe { gfni_avx512_constants(c) };
 
     let bytes_done = input.len() & !63usize;
     let mut offset = 0usize;
@@ -237,18 +270,11 @@ unsafe fn rust_gfni_avx512_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "gfni,avx512f,avx512bw")]
 unsafe fn rust_gfni_avx512_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
-        __m128i, __m512i, _mm512_broadcast_i32x4, _mm512_gf2p8affine_epi64_epi8,
+        __m128i, __m512i, _mm_loadu_si128, _mm512_broadcast_i32x4, _mm512_gf2p8affine_epi64_epi8,
         _mm512_gf2p8mul_epi8, _mm512_loadu_si512, _mm512_storeu_si512, _mm512_xor_si512,
-        _mm_loadu_si128,
     };
 
-    let iso_bytes = gfni_isomorphism_bytes();
-    let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
-    let iso512: __m512i = _mm512_broadcast_i32x4(iso128);
-    let coeff_bytes = coeff_table_avx512(c);
-    let coeff_vec: __m512i = unsafe { _mm512_loadu_si512(coeff_bytes.as_ptr().cast()) };
-
-    let coeff_mapped = _mm512_gf2p8affine_epi64_epi8::<0>(coeff_vec, iso512);
+    let (iso512, coeff_mapped): (__m512i, __m512i) = unsafe { gfni_avx512_constants(c) };
 
     let bytes_done = input.len() & !63usize;
     let mut offset = 0usize;

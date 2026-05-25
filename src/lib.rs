@@ -49,6 +49,8 @@ pub use crate::core::ParallelDecision;
 #[cfg(feature = "std")]
 pub use crate::core::ParallelPolicy;
 #[cfg(feature = "std")]
+pub use crate::core::ReconstructionCacheAnalysis;
+#[cfg(feature = "std")]
 pub use crate::core::ReconstructionCacheStats;
 pub use crate::core::ReedSolomon;
 #[cfg(feature = "std")]

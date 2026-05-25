@@ -75,6 +75,7 @@ struct ReconstructionCacheMetrics {
     hits: AtomicUsize,
     misses: AtomicUsize,
     inserts: AtomicUsize,
+    evictions: AtomicUsize,
 }
 
 #[cfg(feature = "std")]
@@ -114,6 +115,15 @@ pub struct ReconstructionCacheStats {
     pub hits: usize,
     pub misses: usize,
     pub inserts: usize,
+    pub evictions: usize,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ReconstructionCacheAnalysis {
+    pub hit_rate: f64,
+    pub reuse_ratio: f64,
+    pub miss_cost_per_request: f64,
 }
 
 #[cfg(feature = "std")]
@@ -154,6 +164,46 @@ impl ReconstructionCacheMetrics {
             hits: self.hits.load(Ordering::Relaxed),
             misses: self.misses.load(Ordering::Relaxed),
             inserts: self.inserts.load(Ordering::Relaxed),
+            evictions: self.evictions.load(Ordering::Relaxed),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl ReconstructionCacheStats {
+    #[inline]
+    pub fn hit_rate(&self) -> f64 {
+        if self.requests == 0 {
+            0.0
+        } else {
+            self.hits as f64 / self.requests as f64
+        }
+    }
+
+    #[inline]
+    pub fn reuse_ratio(&self) -> f64 {
+        if self.inserts == 0 {
+            0.0
+        } else {
+            self.hits as f64 / self.inserts as f64
+        }
+    }
+
+    #[inline]
+    pub fn miss_cost_per_request(&self) -> f64 {
+        if self.requests == 0 {
+            0.0
+        } else {
+            self.misses as f64 / self.requests as f64
+        }
+    }
+
+    #[inline]
+    pub fn analysis(&self) -> ReconstructionCacheAnalysis {
+        ReconstructionCacheAnalysis {
+            hit_rate: self.hit_rate(),
+            reuse_ratio: self.reuse_ratio(),
+            miss_cost_per_request: self.miss_cost_per_request(),
         }
     }
 }
@@ -2177,7 +2227,15 @@ impl<F: Field> ReedSolomon<F> {
         if self.options.inversion_cache {
             let data_decode_matrix = data_decode_matrix.clone();
             let mut cache = self.data_decode_matrix_cache.lock();
+            let before_len = cache.len();
+            let capacity = cache.capacity();
             cache.insert(Vec::from(invalid_indices), data_decode_matrix);
+            #[cfg(feature = "std")]
+            if capacity > 0 && before_len >= capacity {
+                self.reconstruction_cache_metrics
+                    .evictions
+                    .fetch_add(1, Ordering::Relaxed);
+            }
             #[cfg(feature = "std")]
             self.reconstruction_cache_metrics
                 .inserts
