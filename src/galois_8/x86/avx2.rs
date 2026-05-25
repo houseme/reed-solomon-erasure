@@ -8,8 +8,9 @@ extern crate alloc;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 #[inline]
-fn load_tables(c: u8) -> (core::arch::x86_64::__m256i, core::arch::x86_64::__m256i) {
-    use core::arch::x86_64::{__m128i, __m256i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
+#[target_feature(enable = "avx2")]
+unsafe fn load_tables(c: u8) -> (core::arch::x86_64::__m256i, core::arch::x86_64::__m256i) {
+    use core::arch::x86_64::{__m128i, _mm256_broadcastsi128_si256, _mm_loadu_si128};
 
     let low128: __m128i =
         unsafe { _mm_loadu_si128(super::super::MUL_TABLE_LOW[c as usize].as_ptr().cast()) };
@@ -65,7 +66,7 @@ unsafe fn rust_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         _mm256_srli_epi64, _mm256_storeu_si256, _mm256_xor_si256,
     };
 
-    let (low_tbl, high_tbl): (__m256i, __m256i) = load_tables(c);
+    let (low_tbl, high_tbl): (__m256i, __m256i) = unsafe { load_tables(c) };
     let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);
 
     let bytes_done = input.len() & !31usize;
@@ -98,7 +99,7 @@ unsafe fn rust_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         _mm256_srli_epi64, _mm256_storeu_si256, _mm256_xor_si256,
     };
 
-    let (low_tbl, high_tbl): (__m256i, __m256i) = load_tables(c);
+    let (low_tbl, high_tbl): (__m256i, __m256i) = unsafe { load_tables(c) };
     let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);
 
     let bytes_done = input.len() & !31usize;

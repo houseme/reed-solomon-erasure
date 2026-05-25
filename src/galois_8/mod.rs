@@ -637,13 +637,24 @@ mod tests {
         {
             #[cfg(all(feature = "std", target_arch = "x86_64"))]
             {
-                if std::is_x86_feature_detected!("avx2") {
-                    assert_eq!(active_backend_name(), "rust-avx2");
+                if std::is_x86_feature_detected!("gfni")
+                    && std::is_x86_feature_detected!("avx512f")
+                    && std::is_x86_feature_detected!("avx512bw")
+                {
+                    assert_eq!(active_backend_name(), "rust-gfni-avx512");
+                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+                } else if std::is_x86_feature_detected!("gfni")
+                    && std::is_x86_feature_detected!("avx2")
+                {
+                    assert_eq!(active_backend_name(), "rust-gfni-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("avx512f")
                     && std::is_x86_feature_detected!("avx512bw")
                 {
                     assert_eq!(active_backend_name(), "rust-avx512");
+                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+                } else if std::is_x86_feature_detected!("avx2") {
+                    assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("ssse3") {
                     assert_eq!(active_backend_name(), "rust-ssse3");
@@ -712,6 +723,21 @@ mod tests {
             } else {
                 assert_eq!(gfni_name, None);
                 assert_eq!(gfni_id, None);
+            }
+            unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
+
+            unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-gfni-avx512") };
+            let gfni512_name = super::backend::runtime_override_backend_name_for_test();
+            let gfni512_id = super::backend::runtime_override_backend_id_for_test();
+            if std::is_x86_feature_detected!("gfni")
+                && std::is_x86_feature_detected!("avx512f")
+                && std::is_x86_feature_detected!("avx512bw")
+            {
+                assert_eq!(gfni512_name, Some("rust-gfni-avx512"));
+                assert_eq!(gfni512_id, Some(BackendId::RustGfniAvx512));
+            } else {
+                assert_eq!(gfni512_name, None);
+                assert_eq!(gfni512_id, None);
             }
             unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
 
