@@ -1,4 +1,5 @@
 /target/
 docs
+benchmarks/x86_64-simd/*.md
 scripts/__pycache__/
 *.pyc

@@ -8,8 +8,9 @@ extern crate alloc;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 #[inline]
-fn load_tables(c: u8) -> (core::arch::x86_64::__m512i, core::arch::x86_64::__m512i) {
-    use core::arch::x86_64::{__m128i, __m512i, _mm512_broadcast_i32x4, _mm_loadu_si128};
+#[target_feature(enable = "avx512f,avx512bw")]
+unsafe fn load_tables(c: u8) -> (core::arch::x86_64::__m512i, core::arch::x86_64::__m512i) {
+    use core::arch::x86_64::{__m128i, _mm512_broadcast_i32x4, _mm_loadu_si128};
 
     let low128: __m128i =
         unsafe { _mm_loadu_si128(super::super::MUL_TABLE_LOW[c as usize].as_ptr().cast()) };
@@ -65,7 +66,7 @@ unsafe fn rust_avx512_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         _mm512_srli_epi64, _mm512_storeu_si512, _mm512_xor_si512,
     };
 
-    let (low_tbl, high_tbl): (__m512i, __m512i) = load_tables(c);
+    let (low_tbl, high_tbl): (__m512i, __m512i) = unsafe { load_tables(c) };
     let nibble_mask: __m512i = _mm512_set1_epi8(0x0f);
 
     let bytes_done = input.len() & !63usize;
@@ -98,7 +99,7 @@ unsafe fn rust_avx512_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         _mm512_srli_epi64, _mm512_storeu_si512, _mm512_xor_si512,
     };
 
-    let (low_tbl, high_tbl): (__m512i, __m512i) = load_tables(c);
+    let (low_tbl, high_tbl): (__m512i, __m512i) = unsafe { load_tables(c) };
     let nibble_mask: __m512i = _mm512_set1_epi8(0x0f);
 
     let bytes_done = input.len() & !63usize;
