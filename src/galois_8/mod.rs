@@ -637,7 +637,12 @@ mod tests {
         {
             #[cfg(all(feature = "std", target_arch = "x86_64"))]
             {
-                if std::is_x86_feature_detected!("avx2") {
+                if std::is_x86_feature_detected!("avx512f")
+                    && std::is_x86_feature_detected!("avx512bw")
+                {
+                    assert_eq!(active_backend_name(), "rust-avx512");
+                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+                } else if std::is_x86_feature_detected!("avx2") {
                     assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("ssse3") {
@@ -698,6 +703,17 @@ mod tests {
 
         #[cfg(target_arch = "x86_64")]
         {
+            unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-avx512") };
+            assert_eq!(
+                super::backend::runtime_override_backend_name_for_test(),
+                Some("rust-avx512")
+            );
+            assert_eq!(
+                super::backend::runtime_override_backend_id_for_test(),
+                Some(BackendId::RustAvx512)
+            );
+            unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
+
             unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-ssse3") };
             assert_eq!(
                 super::backend::runtime_override_backend_name_for_test(),
