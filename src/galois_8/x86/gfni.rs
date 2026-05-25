@@ -158,6 +158,9 @@ mod tests {
 
     #[test]
     fn gfni_avx2_matches_scalar_mul_slice() {
+        if !(std::is_x86_feature_detected!("gfni") && std::is_x86_feature_detected!("avx2")) {
+            return;
+        }
         for &len in &LENGTHS {
             for _ in 0..16 {
                 let c = rand::random::<u8>();
@@ -176,6 +179,9 @@ mod tests {
 
     #[test]
     fn gfni_avx2_matches_scalar_mul_slice_xor() {
+        if !(std::is_x86_feature_detected!("gfni") && std::is_x86_feature_detected!("avx2")) {
+            return;
+        }
         for &len in &LENGTHS {
             for _ in 0..16 {
                 let c = rand::random::<u8>();
@@ -196,6 +202,9 @@ mod tests {
 
     #[test]
     fn gfni_avx2_matches_avx2_mul_slice() {
+        if !(std::is_x86_feature_detected!("gfni") && std::is_x86_feature_detected!("avx2")) {
+            return;
+        }
         for &len in &LENGTHS {
             for _ in 0..16 {
                 let c = rand::random::<u8>();
