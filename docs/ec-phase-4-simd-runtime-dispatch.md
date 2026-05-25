@@ -1607,3 +1607,72 @@ cargo bench --bench throughput_matrix --features "std simd-accel" -- --sample-si
 - 这条 `1-output / 2-output` 专用 fast path 比泛化版“小输出并行”还要更强；
 - 尤其 `reconstruct_data` 的提升最明显，说明 data-stage 在“少输出 shard”场景下确实非常受益于这种更专用的执行形态；
 - 当前这批实现已经不仅是“可提交”，而是值得优先保留并继续在此基础上深挖的主方向。
+
+### 31.8 `aarch64 + missing_data==2` 更窄专用路径试验
+
+在 `1-output / 2-output` 专用 fast path 基础上，又尝试了一条更窄的实现：
+
+- 仅在 `aarch64`
+- 且 `active_backend_id() == BackendId::RustNeon`
+- 且 `reconstruct_data_opt` 命中 `missing_data == 2 && missing == 2`
+
+时，直接走一个更窄的双输出 data-stage 专用路径。
+
+clean-build 结果相对上一版 `small-output-fastpath`：
+
+- `reconstruct_10x4_1m`: `19.029 -> 18.396`
+- `reconstruct_data_10x4_1m`: `25.144 -> 24.839`
+- `reconstruct_32x16_1m`: `24.936 -> 23.849`
+- `reconstruct_data_32x16_1m`: `26.911 -> 26.179`
+- 且 `reconstruct_data_4x2_64k`: `14.040 -> 2.6318`
+
+结论：
+
+- 这条更窄的 `aarch64 + missing_data==2` 专用路径没有超过上一版通用 `1/2-output` fast path；
+- 并且在小 case（`4x2_64k`）上出现了明显回退；
+- 因此没有保留为默认实现，代码已回退到上一版 `1/2-output` fast path。
+
+### 31.9 neon 双输出共享输入 helper 试验
+
+进一步尝试过把“双输出共享输入加载”的专用 helper 直接下沉到 `aarch64/neon` 内核层，
+并只在 `reconstruct_data_opt` 的 `missing_data == 2 && missing == 2` 场景下命中。
+
+clean-build 结果相对上一版 `small-output-fastpath`：
+
+- `reconstruct_10x4_1m`: `19.029 -> 18.394`
+- `reconstruct_data_10x4_1m`: `25.144 -> 24.839`
+- `reconstruct_32x16_1m`: `24.936 -> 23.910`
+- `reconstruct_data_32x16_1m`: `26.911 -> 26.179`
+
+结论：
+
+- 直接把“双输出共享输入加载”下沉到当前 neon helper 形态，并没有超过上一版 `1/2-output` fast path；
+- 因此这条试验性实现没有保留，代码已回退到更强、更通用的上一版实现；
+- 说明下一步若要继续深挖 `aarch64/neon`，应更聚焦在 `vqtbl1q_u8` 主路径的 load/store 与寄存器组织，而不是仅仅把现有逻辑下沉一层。
+
+### 31.10 真正下沉到 neon 双输出 helper 的再次验证
+
+随后又尝试了一版更“正统”的下沉方案：
+
+- 在 `src/galois_8/aarch64/neon.rs` 中新增
+  - `rust_neon_mul_slice_two_outputs(...)`
+  - `rust_neon_mul_slice_xor_two_outputs(...)`
+- 并在 `reconstruct_data_opt` 的 `missing_data == 2 && missing == 2` 场景下直接调用它们
+
+目标是：
+
+- 不再只是高层路径专用分支；
+- 而是让双输出共享输入加载真正发生在 neon helper 本身。
+
+clean-build 结果相对上一版 `small-output-fastpath`：
+
+- `reconstruct_10x4_1m`: `19.029 -> 17.711`
+- `reconstruct_data_10x4_1m`: `25.144 -> 17.140`
+- `reconstruct_32x16_1m`: `24.936 -> 24.017`
+- `reconstruct_data_32x16_1m`: `26.911 -> 16.455`
+
+结论：
+
+- 这版“真正下沉到 neon helper”的实现比上一版通用 `1/2-output` fast path 明显更差；
+- 因此同样没有保留，代码已回退；
+- 进一步说明：当前最优结果并不是“越下沉越好”，而是“在 `core` 的 `1/2-output` fast path 形态下，让 policy 计算出的 chunk 并行度真正落地”。

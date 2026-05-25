@@ -19,6 +19,7 @@ pub(crate) fn rust_neon_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     unsafe { rust_neon_mul_slice_impl(c, input, out) }
 }
 
+
 #[cfg(all(
     feature = "simd-accel",
     target_arch = "aarch64",
@@ -33,6 +34,8 @@ pub(crate) fn rust_neon_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
 
     unsafe { rust_neon_mul_slice_xor_impl(c, input, out) }
 }
+
+
 
 #[cfg(all(
     feature = "simd-accel",
@@ -109,6 +112,7 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 
     super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }
+
 
 #[cfg(all(
     feature = "simd-accel",

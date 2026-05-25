@@ -1,3 +1,5 @@
+use super::{active_backend_id, BackendId};
+
 #[cfg(feature = "std")]
 const RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES: usize = 512 * 1024;
 #[cfg(feature = "std")]

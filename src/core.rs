@@ -1192,6 +1192,7 @@ impl<F: Field> ReedSolomon<F> {
         }
     }
 
+
     #[cfg(feature = "std")]
     fn code_single_slice_par_chunked<U: AsMut<[F::Elem]> + Send>(
         &self,
