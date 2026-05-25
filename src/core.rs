@@ -2227,7 +2227,9 @@ impl<F: Field> ReedSolomon<F> {
         if self.options.inversion_cache {
             let data_decode_matrix = data_decode_matrix.clone();
             let mut cache = self.data_decode_matrix_cache.lock();
+            #[cfg(feature = "std")]
             let before_len = cache.len();
+            #[cfg(feature = "std")]
             let capacity = cache.capacity();
             cache.insert(Vec::from(invalid_indices), data_decode_matrix);
             #[cfg(feature = "std")]

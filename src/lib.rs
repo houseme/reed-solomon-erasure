@@ -167,7 +167,7 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]> + FromIterator<F::Elem>> R
     ) -> Result<&mut [F::Elem], Result<&mut [F::Elem], Error>> {
         let is_some = self.is_some();
         let x = self
-            .get_or_insert_with(|| std::iter::repeat_n(F::zero(), len).collect())
+            .get_or_insert_with(|| ::core::iter::repeat_n(F::zero(), len).collect())
             .as_mut();
 
         if is_some { Ok(x) } else { Err(Ok(x)) }
