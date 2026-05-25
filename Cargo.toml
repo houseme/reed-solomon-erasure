@@ -45,7 +45,7 @@ parking_lot = { version = "0.12.5", optional = true }
 rayon = { version = "1.12", optional = true }
 smallvec = "1.15"
 # `Mutex` implementation for `no_std` environment with the same high-level API as `parking_lot`
-spin = { version = "0.12.0", default-features = false, features = ["spin_mutex"] }
+spin = { version = "0.12.0", default-features = false, features = ["once", "spin_mutex"] }
 
 [dev-dependencies]
 rand = { version = "0.10.1" }
@@ -63,4 +63,8 @@ harness = false
 
 [[bench]]
 name = "throughput_matrix"
+harness = false
+
+[[bench]]
+name = "galois_backend"
 harness = false

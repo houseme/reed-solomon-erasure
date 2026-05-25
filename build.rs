@@ -10,6 +10,18 @@ const FIELD_SIZE: usize = 256;
 
 const GENERATING_POLYNOMIAL: usize = 29;
 
+#[cfg(all(
+    feature = "simd-accel",
+    any(target_arch = "x86_64", target_arch = "aarch64"),
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[derive(Copy, Clone)]
+enum SimdCBuildTarget {
+    Baseline,
+    Haswell,
+}
+
 fn gen_log_table(polynomial: usize) -> [u8; FIELD_SIZE] {
     let mut result: [u8; FIELD_SIZE] = [0; FIELD_SIZE];
     let mut b: usize = 1;
@@ -161,18 +173,36 @@ fn compile_simd_c() {
     let mut build = cc::Build::new();
     build.opt_level(3);
 
+    let mut build_target = SimdCBuildTarget::Baseline;
+
     match env::var("RUST_REED_SOLOMON_ERASURE_ARCH") {
         Ok(arch) => {
             // Use explicitly specified environment variable as architecture.
             build.flag(&format!("-march={}", arch));
+            println!("cargo:rustc-env=RSE_SIMD_C_ARCH={arch}");
+            println!("cargo:rustc-cfg=rse_simd_c_build_unknown");
         }
         Err(_error) => {
             // On x86-64 enabling Haswell architecture unlocks useful instructions and improves performance
             // dramatically while allowing it to run ony modern CPU.
             match env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str(){
-                "x86_64"  => { build.flag(&"-march=haswell"); },
+                "x86_64"  => {
+                    build.flag(&"-march=haswell");
+                    build_target = SimdCBuildTarget::Haswell;
+                },
                 _         => ()
             }
+        }
+    }
+
+    match build_target {
+        SimdCBuildTarget::Baseline => {
+            println!("cargo:rustc-cfg=rse_simd_c_build_baseline");
+            println!("cargo:rustc-env=RSE_SIMD_C_ARCH=baseline");
+        }
+        SimdCBuildTarget::Haswell => {
+            println!("cargo:rustc-cfg=rse_simd_c_build_haswell");
+            println!("cargo:rustc-env=RSE_SIMD_C_ARCH=haswell");
         }
     }
 
@@ -191,6 +221,9 @@ fn compile_simd_c() {
 fn compile_simd_c() {}
 
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_baseline)");
+    println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_haswell)");
+    println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_unknown)");
     compile_simd_c();
     write_tables();
 }

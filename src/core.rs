@@ -33,6 +33,13 @@ const CODE_SLICE_LARGE_CHUNK_BYTES: usize = 256 * 1024;
 const PARALLEL_MIN_SHARD_BYTES: usize = 256 * 1024;
 #[cfg(feature = "std")]
 pub const PARALLEL_POLICY_VERSION: u32 = 1;
+#[cfg(feature = "std")]
+const RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES_ENV: &str =
+    "RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES";
+#[cfg(feature = "std")]
+const RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB_ENV: &str = "RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB";
+#[cfg(feature = "std")]
+const RS_PARALLEL_POLICY_MAX_JOBS_ENV: &str = "RS_PARALLEL_POLICY_MAX_JOBS";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatrixMode {
@@ -71,12 +78,66 @@ struct ReconstructionCacheMetrics {
 }
 
 #[cfg(feature = "std")]
+#[derive(Debug, Default)]
+struct RuntimeProfileMetrics {
+    code_some_serial_calls: AtomicUsize,
+    code_some_parallel_calls: AtomicUsize,
+    code_some_total_bytes: AtomicUsize,
+    code_some_total_chunks: AtomicUsize,
+    code_single_serial_calls: AtomicUsize,
+    code_single_parallel_calls: AtomicUsize,
+    code_single_total_bytes: AtomicUsize,
+    code_single_total_chunks: AtomicUsize,
+    parallel_policy_calls: AtomicUsize,
+    parallel_policy_parallel: AtomicUsize,
+    parallel_policy_serial: AtomicUsize,
+    parallel_policy_total_jobs: AtomicUsize,
+    parallel_policy_total_chunk_len: AtomicUsize,
+    reconstruct_calls: AtomicUsize,
+    reconstruct_data_only_calls: AtomicUsize,
+    reconstruct_total_missing_data: AtomicUsize,
+    reconstruct_total_missing_parity: AtomicUsize,
+    reconstruct_all_present_fast_path: AtomicUsize,
+    reconstruct_data_stage_calls: AtomicUsize,
+    reconstruct_data_stage_bytes: AtomicUsize,
+    reconstruct_parity_stage_calls: AtomicUsize,
+    reconstruct_parity_stage_bytes: AtomicUsize,
+}
+
+#[cfg(feature = "std")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReconstructionCacheStats {
     pub requests: usize,
     pub hits: usize,
     pub misses: usize,
     pub inserts: usize,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeProfileStats {
+    pub code_some_serial_calls: usize,
+    pub code_some_parallel_calls: usize,
+    pub code_some_total_bytes: usize,
+    pub code_some_total_chunks: usize,
+    pub code_single_serial_calls: usize,
+    pub code_single_parallel_calls: usize,
+    pub code_single_total_bytes: usize,
+    pub code_single_total_chunks: usize,
+    pub parallel_policy_calls: usize,
+    pub parallel_policy_parallel: usize,
+    pub parallel_policy_serial: usize,
+    pub parallel_policy_total_jobs: usize,
+    pub parallel_policy_total_chunk_len: usize,
+    pub reconstruct_calls: usize,
+    pub reconstruct_data_only_calls: usize,
+    pub reconstruct_total_missing_data: usize,
+    pub reconstruct_total_missing_parity: usize,
+    pub reconstruct_all_present_fast_path: usize,
+    pub reconstruct_data_stage_calls: usize,
+    pub reconstruct_data_stage_bytes: usize,
+    pub reconstruct_parity_stage_calls: usize,
+    pub reconstruct_parity_stage_bytes: usize,
 }
 
 #[cfg(feature = "std")]
@@ -88,6 +149,155 @@ impl ReconstructionCacheMetrics {
             misses: self.misses.load(Ordering::Relaxed),
             inserts: self.inserts.load(Ordering::Relaxed),
         }
+    }
+}
+
+#[cfg(feature = "std")]
+impl RuntimeProfileMetrics {
+    fn snapshot(&self) -> RuntimeProfileStats {
+        RuntimeProfileStats {
+            code_some_serial_calls: self.code_some_serial_calls.load(Ordering::Relaxed),
+            code_some_parallel_calls: self.code_some_parallel_calls.load(Ordering::Relaxed),
+            code_some_total_bytes: self.code_some_total_bytes.load(Ordering::Relaxed),
+            code_some_total_chunks: self.code_some_total_chunks.load(Ordering::Relaxed),
+            code_single_serial_calls: self.code_single_serial_calls.load(Ordering::Relaxed),
+            code_single_parallel_calls: self.code_single_parallel_calls.load(Ordering::Relaxed),
+            code_single_total_bytes: self.code_single_total_bytes.load(Ordering::Relaxed),
+            code_single_total_chunks: self.code_single_total_chunks.load(Ordering::Relaxed),
+            parallel_policy_calls: self.parallel_policy_calls.load(Ordering::Relaxed),
+            parallel_policy_parallel: self.parallel_policy_parallel.load(Ordering::Relaxed),
+            parallel_policy_serial: self.parallel_policy_serial.load(Ordering::Relaxed),
+            parallel_policy_total_jobs: self.parallel_policy_total_jobs.load(Ordering::Relaxed),
+            parallel_policy_total_chunk_len: self.parallel_policy_total_chunk_len.load(Ordering::Relaxed),
+            reconstruct_calls: self.reconstruct_calls.load(Ordering::Relaxed),
+            reconstruct_data_only_calls: self.reconstruct_data_only_calls.load(Ordering::Relaxed),
+            reconstruct_total_missing_data: self.reconstruct_total_missing_data.load(Ordering::Relaxed),
+            reconstruct_total_missing_parity: self.reconstruct_total_missing_parity.load(Ordering::Relaxed),
+            reconstruct_all_present_fast_path: self
+                .reconstruct_all_present_fast_path
+                .load(Ordering::Relaxed),
+            reconstruct_data_stage_calls: self
+                .reconstruct_data_stage_calls
+                .load(Ordering::Relaxed),
+            reconstruct_data_stage_bytes: self
+                .reconstruct_data_stage_bytes
+                .load(Ordering::Relaxed),
+            reconstruct_parity_stage_calls: self
+                .reconstruct_parity_stage_calls
+                .load(Ordering::Relaxed),
+            reconstruct_parity_stage_bytes: self
+                .reconstruct_parity_stage_bytes
+                .load(Ordering::Relaxed),
+        }
+    }
+
+    fn reset(&self) {
+        self.code_some_serial_calls.store(0, Ordering::Relaxed);
+        self.code_some_parallel_calls.store(0, Ordering::Relaxed);
+        self.code_some_total_bytes.store(0, Ordering::Relaxed);
+        self.code_some_total_chunks.store(0, Ordering::Relaxed);
+        self.code_single_serial_calls.store(0, Ordering::Relaxed);
+        self.code_single_parallel_calls.store(0, Ordering::Relaxed);
+        self.code_single_total_bytes.store(0, Ordering::Relaxed);
+        self.code_single_total_chunks.store(0, Ordering::Relaxed);
+        self.parallel_policy_calls.store(0, Ordering::Relaxed);
+        self.parallel_policy_parallel.store(0, Ordering::Relaxed);
+        self.parallel_policy_serial.store(0, Ordering::Relaxed);
+        self.parallel_policy_total_jobs.store(0, Ordering::Relaxed);
+        self.parallel_policy_total_chunk_len.store(0, Ordering::Relaxed);
+        self.reconstruct_calls.store(0, Ordering::Relaxed);
+        self.reconstruct_data_only_calls.store(0, Ordering::Relaxed);
+        self.reconstruct_total_missing_data.store(0, Ordering::Relaxed);
+        self.reconstruct_total_missing_parity.store(0, Ordering::Relaxed);
+        self.reconstruct_all_present_fast_path.store(0, Ordering::Relaxed);
+        self.reconstruct_data_stage_calls.store(0, Ordering::Relaxed);
+        self.reconstruct_data_stage_bytes.store(0, Ordering::Relaxed);
+        self.reconstruct_parity_stage_calls.store(0, Ordering::Relaxed);
+        self.reconstruct_parity_stage_bytes.store(0, Ordering::Relaxed);
+    }
+
+    fn record_code_some(&self, parallel: bool, shard_len: usize, inputs: usize, outputs: usize, chunk_len: usize) {
+        if parallel {
+            self.code_some_parallel_calls.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.code_some_serial_calls.fetch_add(1, Ordering::Relaxed);
+        }
+        self.code_some_total_bytes
+            .fetch_add(shard_len.saturating_mul(inputs).saturating_mul(outputs), Ordering::Relaxed);
+        let chunks = if chunk_len == 0 {
+            0
+        } else {
+            shard_len.div_ceil(chunk_len)
+        };
+        self.code_some_total_chunks.fetch_add(chunks, Ordering::Relaxed);
+    }
+
+    fn record_code_single(&self, parallel: bool, shard_len: usize, outputs: usize, chunk_len: usize) {
+        if parallel {
+            self.code_single_parallel_calls.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.code_single_serial_calls.fetch_add(1, Ordering::Relaxed);
+        }
+        self.code_single_total_bytes
+            .fetch_add(shard_len.saturating_mul(outputs), Ordering::Relaxed);
+        let chunks = if chunk_len == 0 {
+            0
+        } else {
+            shard_len.div_ceil(chunk_len)
+        };
+        self.code_single_total_chunks
+            .fetch_add(chunks, Ordering::Relaxed);
+    }
+
+    fn record_parallel_policy(&self, decision: ParallelDecision) {
+        self.parallel_policy_calls.fetch_add(1, Ordering::Relaxed);
+        if decision.use_parallel {
+            self.parallel_policy_parallel.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.parallel_policy_serial.fetch_add(1, Ordering::Relaxed);
+        }
+        self.parallel_policy_total_jobs.fetch_add(decision.jobs, Ordering::Relaxed);
+        self.parallel_policy_total_chunk_len
+            .fetch_add(decision.chunk_len, Ordering::Relaxed);
+    }
+
+    fn record_reconstruct(
+        &self,
+        data_only: bool,
+        missing_data_count: usize,
+        missing_parity_count: usize,
+        all_present_fast_path: bool,
+    ) {
+        self.reconstruct_calls.fetch_add(1, Ordering::Relaxed);
+        if data_only {
+            self.reconstruct_data_only_calls.fetch_add(1, Ordering::Relaxed);
+        }
+        if all_present_fast_path {
+            self.reconstruct_all_present_fast_path
+                .fetch_add(1, Ordering::Relaxed);
+        }
+        self.reconstruct_total_missing_data
+            .fetch_add(missing_data_count, Ordering::Relaxed);
+        self.reconstruct_total_missing_parity
+            .fetch_add(missing_parity_count, Ordering::Relaxed);
+    }
+
+    fn record_reconstruct_data_stage(&self, shard_len: usize, output_count: usize) {
+        self.reconstruct_data_stage_calls
+            .fetch_add(1, Ordering::Relaxed);
+        self.reconstruct_data_stage_bytes.fetch_add(
+            shard_len.saturating_mul(output_count),
+            Ordering::Relaxed,
+        );
+    }
+
+    fn record_reconstruct_parity_stage(&self, shard_len: usize, output_count: usize) {
+        self.reconstruct_parity_stage_calls
+            .fetch_add(1, Ordering::Relaxed);
+        self.reconstruct_parity_stage_bytes.fetch_add(
+            shard_len.saturating_mul(output_count),
+            Ordering::Relaxed,
+        );
     }
 }
 
@@ -181,6 +391,31 @@ impl ParallelPolicy {
             CODE_SLICE_LARGE_CHUNK_BYTES
         }
     }
+
+    pub fn with_env_overrides(self) -> Self {
+        let mut policy = self;
+        if let Some(value) = parse_env_usize(RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES_ENV) {
+            if value > 0 {
+                policy.min_parallel_shard_bytes = value;
+            }
+        }
+        if let Some(value) = parse_env_usize(RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB_ENV) {
+            if value > 0 {
+                policy.min_bytes_per_job = value;
+            }
+        }
+        if let Some(value) = parse_env_usize(RS_PARALLEL_POLICY_MAX_JOBS_ENV) {
+            policy.max_jobs = value;
+        }
+        policy
+    }
+}
+
+#[cfg(feature = "std")]
+fn parse_env_usize(name: &str) -> Option<usize> {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
 }
 
 /// Bookkeeper for shard by shard encoding.
@@ -489,6 +724,8 @@ pub struct ReedSolomon<F: Field> {
     data_decode_matrix_cache: Mutex<LruCache<Vec<usize>, Arc<Matrix<F>>>>,
     #[cfg(feature = "std")]
     reconstruction_cache_metrics: ReconstructionCacheMetrics,
+    #[cfg(feature = "std")]
+    runtime_profile_metrics: RuntimeProfileMetrics,
 }
 
 impl<F: Field> Clone for ReedSolomon<F> {
@@ -644,6 +881,8 @@ impl<F: Field> ReedSolomon<F> {
             data_decode_matrix_cache: Mutex::new(LruCache::new(options.inversion_cache_capacity)),
             #[cfg(feature = "std")]
             reconstruction_cache_metrics: ReconstructionCacheMetrics::default(),
+            #[cfg(feature = "std")]
+            runtime_profile_metrics: RuntimeProfileMetrics::default(),
         })
     }
 
@@ -662,6 +901,16 @@ impl<F: Field> ReedSolomon<F> {
     #[cfg(feature = "std")]
     pub fn reconstruction_cache_stats(&self) -> ReconstructionCacheStats {
         self.reconstruction_cache_metrics.snapshot()
+    }
+
+    #[cfg(feature = "std")]
+    pub fn runtime_profile_stats(&self) -> RuntimeProfileStats {
+        self.runtime_profile_metrics.snapshot()
+    }
+
+    #[cfg(feature = "std")]
+    pub fn reset_runtime_profile_stats(&self) {
+        self.runtime_profile_metrics.reset();
     }
 
     pub fn split(&self, data: &[F::Elem]) -> Result<Vec<Vec<F::Elem>>, Error> {
@@ -730,6 +979,9 @@ impl<F: Field> ReedSolomon<F> {
         }
 
         let chunk_len = self.code_chunk_len(shard_len);
+        #[cfg(feature = "std")]
+        self.runtime_profile_metrics
+            .record_code_some(false, shard_len, inputs.len(), outputs.len(), chunk_len);
         let mut start = 0;
         while start < shard_len {
             let end = core::cmp::min(start + chunk_len, shard_len);
@@ -788,6 +1040,7 @@ impl<F: Field> ReedSolomon<F> {
             );
         }
 
+        self.runtime_profile_metrics.record_parallel_policy(decision);
         decision
     }
 
@@ -798,7 +1051,7 @@ impl<F: Field> ReedSolomon<F> {
         output_shards: usize,
         available_parallelism: usize,
     ) -> ParallelDecision {
-        ParallelPolicy::default().decide(
+        self.effective_parallel_policy().decide(
             shard_len,
             self.data_shard_count,
             output_shards,
@@ -809,6 +1062,11 @@ impl<F: Field> ReedSolomon<F> {
     #[cfg(feature = "std")]
     pub fn parallel_policy_version(&self) -> u32 {
         PARALLEL_POLICY_VERSION
+    }
+
+    #[cfg(feature = "std")]
+    pub fn effective_parallel_policy(&self) -> ParallelPolicy {
+        ParallelPolicy::default().with_env_overrides()
     }
 
     #[cfg(feature = "std")]
@@ -828,6 +1086,8 @@ impl<F: Field> ReedSolomon<F> {
             return;
         }
 
+        self.runtime_profile_metrics
+            .record_code_some(true, shard_len, inputs.len(), outputs.len(), chunk_len);
         let data_shard_count = self.data_shard_count;
         outputs.par_iter_mut().enumerate().for_each(|(i_row, output)| {
             let matrix_row = matrix_rows[i_row];
@@ -868,6 +1128,8 @@ impl<F: Field> ReedSolomon<F> {
             return;
         }
 
+        self.runtime_profile_metrics
+            .record_code_single(true, shard_len, outputs.len(), chunk_len);
         outputs.par_iter_mut().enumerate().for_each(|(i_row, output)| {
             let coefficient = matrix_rows[i_row][i_input];
             let output = output.as_mut();
@@ -1099,10 +1361,58 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     #[cfg(feature = "std")]
+    pub(crate) fn code_some_slices_with_policy_raw(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[&[F::Elem]],
+        outputs: &mut [&mut [F::Elem]],
+        policy: ParallelPolicy,
+    ) where
+        F::Elem: Send + Sync,
+    {
+        let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
+        if shard_len == 0 {
+            return;
+        }
+
+        let decision = policy.decide(
+            shard_len,
+            self.data_shard_count,
+            outputs.len(),
+            std::thread::available_parallelism()
+                .map(|parallelism| parallelism.get())
+                .unwrap_or(1),
+        );
+        self.runtime_profile_metrics.record_parallel_policy(decision);
+        if !decision.use_parallel {
+            self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+            return;
+        }
+        self.code_some_slices_par_chunked(matrix_rows, inputs, outputs, decision.chunk_len);
+    }
+
+    #[cfg(feature = "std")]
     pub(crate) fn reconstruct_internal_option_vec_par(
         &self,
         shards: &mut [Option<Vec<F::Elem>>],
         data_only: bool,
+    ) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+    {
+        self.reconstruct_internal_option_vec_par_with_policy(
+            shards,
+            data_only,
+            ParallelPolicy::default().with_env_overrides(),
+        )
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn reconstruct_internal_option_vec_par_with_policy(
+        &self,
+        shards: &mut [Option<Vec<F::Elem>>],
+        data_only: bool,
+        policy: ParallelPolicy,
     ) -> Result<(), Error>
     where
         F::Elem: Send + Sync,
@@ -1130,6 +1440,8 @@ impl<F: Field> ReedSolomon<F> {
         }
 
         if number_present == self.total_shard_count {
+            self.runtime_profile_metrics
+                .record_reconstruct(data_only, 0, 0, true);
             return Ok(());
         }
         if number_present < data_shard_count {
@@ -1161,9 +1473,19 @@ impl<F: Field> ReedSolomon<F> {
             }
         }
 
+        self.runtime_profile_metrics.record_reconstruct(
+            data_only,
+            missing_data_indices.len(),
+            missing_parity_indices.len(),
+            false,
+        );
+
         let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
 
         if !missing_data_indices.is_empty() {
+            #[cfg(feature = "std")]
+            self.runtime_profile_metrics
+                .record_reconstruct_data_stage(shard_len, missing_data_indices.len());
             let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
                 SmallVec::with_capacity(missing_data_indices.len());
             for &idx in &missing_data_indices {
@@ -1186,7 +1508,7 @@ impl<F: Field> ReedSolomon<F> {
                     .map(|shard| shard.as_mut_slice())
                     .collect();
 
-                self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
+                self.code_some_slices_with_policy_raw(&matrix_rows, &sub_shards, &mut outputs, policy);
             }
 
             for (idx, recovered) in missing_data_indices.into_iter().zip(recovered_data.into_iter()) {
@@ -1202,6 +1524,9 @@ impl<F: Field> ReedSolomon<F> {
             return Ok(());
         }
 
+        #[cfg(feature = "std")]
+        self.runtime_profile_metrics
+            .record_reconstruct_parity_stage(shard_len, missing_parity_indices.len());
         let parity_rows = self.get_parity_rows();
         let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
             SmallVec::with_capacity(missing_parity_indices.len());
@@ -1224,7 +1549,7 @@ impl<F: Field> ReedSolomon<F> {
                 .map(|shard| shard.as_mut_slice())
                 .collect();
 
-            self.code_some_slices_par_raw(&matrix_rows, &all_data, &mut outputs);
+            self.code_some_slices_with_policy_raw(&matrix_rows, &all_data, &mut outputs, policy);
         }
 
         for (idx, recovered) in missing_parity_indices.into_iter().zip(recovered_parity.into_iter()) {
@@ -1262,6 +1587,9 @@ impl<F: Field> ReedSolomon<F> {
         input: &[F::Elem],
         outputs: &mut [U],
     ) {
+        #[cfg(feature = "std")]
+        self.runtime_profile_metrics
+            .record_code_single(false, input.len(), outputs.len(), input.len());
         self.code_single_slice_range(matrix_rows, i_input, input, outputs, 0, input.len());
     }
 
@@ -1706,6 +2034,9 @@ impl<F: Field> ReedSolomon<F> {
         if number_present == self.total_shard_count {
             // Cool.  All of the shards are there.  We don't
             // need to do anything.
+            #[cfg(feature = "std")]
+            self.runtime_profile_metrics
+                .record_reconstruct(data_only, 0, 0, true);
             return Ok(());
         }
 
@@ -1783,6 +2114,28 @@ impl<F: Field> ReedSolomon<F> {
             }
         }
 
+        #[cfg(feature = "std")]
+        {
+            let missing_data_count = invalid_indices
+                .iter()
+                .filter(|&&i| i < data_shard_count)
+                .count();
+            let missing_parity_count = if data_only {
+                0
+            } else {
+                invalid_indices
+                    .iter()
+                    .filter(|&&i| i >= data_shard_count)
+                    .count()
+            };
+            self.runtime_profile_metrics.record_reconstruct(
+                data_only,
+                missing_data_count,
+                missing_parity_count,
+                false,
+            );
+        }
+
         let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
 
         // Re-create any data shards that were missing.
@@ -1801,6 +2154,9 @@ impl<F: Field> ReedSolomon<F> {
             matrix_rows.push(data_decode_matrix.get_row(i_slice));
         }
 
+        #[cfg(feature = "std")]
+        self.runtime_profile_metrics
+            .record_reconstruct_data_stage(shard_len, matrix_rows.len());
         self.code_some_slices(&matrix_rows, &sub_shards, &mut missing_data_slices);
 
         if data_only {
@@ -1823,6 +2179,9 @@ impl<F: Field> ReedSolomon<F> {
             {
                 matrix_rows.push(parity_rows[i_slice - data_shard_count]);
             }
+            #[cfg(feature = "std")]
+            self.runtime_profile_metrics
+                .record_reconstruct_parity_stage(shard_len, matrix_rows.len());
             {
                 // Gather up all the data shards.
                 // old data shards are in `sub_shards`,

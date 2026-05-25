@@ -6,6 +6,11 @@ mod backend;
 
 pub use backend::BackendKind;
 
+#[cfg(feature = "std")]
+use core::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
+
 /// The field GF(2^8).
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct Field;
@@ -58,11 +63,210 @@ pub type ReedSolomon = crate::ReedSolomon<Field>;
 pub type ShardByShard<'a> = crate::ShardByShard<'a, Field>;
 
 #[cfg(feature = "std")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct RustNeonProfileStats {
+    pub mul_calls: usize,
+    pub mul_xor_calls: usize,
+    pub total_bytes: usize,
+    pub vector_64b_chunks: usize,
+    pub vector_16b_chunks: usize,
+    pub tail_bytes: usize,
+    pub tail_calls: usize,
+    pub table_lookups: usize,
+}
+
+#[cfg(feature = "std")]
+impl RustNeonProfileStats {
+    pub fn saturating_sub(self, baseline: Self) -> Self {
+        Self {
+            mul_calls: self.mul_calls.saturating_sub(baseline.mul_calls),
+            mul_xor_calls: self.mul_xor_calls.saturating_sub(baseline.mul_xor_calls),
+            total_bytes: self.total_bytes.saturating_sub(baseline.total_bytes),
+            vector_64b_chunks: self
+                .vector_64b_chunks
+                .saturating_sub(baseline.vector_64b_chunks),
+            vector_16b_chunks: self
+                .vector_16b_chunks
+                .saturating_sub(baseline.vector_16b_chunks),
+            tail_bytes: self.tail_bytes.saturating_sub(baseline.tail_bytes),
+            tail_calls: self.tail_calls.saturating_sub(baseline.tail_calls),
+            table_lookups: self.table_lookups.saturating_sub(baseline.table_lookups),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Default)]
+struct RustNeonProfileMetrics {
+    mul_calls: AtomicUsize,
+    mul_xor_calls: AtomicUsize,
+    total_bytes: AtomicUsize,
+    vector_64b_chunks: AtomicUsize,
+    vector_16b_chunks: AtomicUsize,
+    tail_bytes: AtomicUsize,
+    tail_calls: AtomicUsize,
+    table_lookups: AtomicUsize,
+}
+
+#[cfg(feature = "std")]
+impl RustNeonProfileMetrics {
+    fn snapshot(&self) -> RustNeonProfileStats {
+        RustNeonProfileStats {
+            mul_calls: self.mul_calls.load(Ordering::Relaxed),
+            mul_xor_calls: self.mul_xor_calls.load(Ordering::Relaxed),
+            total_bytes: self.total_bytes.load(Ordering::Relaxed),
+            vector_64b_chunks: self.vector_64b_chunks.load(Ordering::Relaxed),
+            vector_16b_chunks: self.vector_16b_chunks.load(Ordering::Relaxed),
+            tail_bytes: self.tail_bytes.load(Ordering::Relaxed),
+            tail_calls: self.tail_calls.load(Ordering::Relaxed),
+            table_lookups: self.table_lookups.load(Ordering::Relaxed),
+        }
+    }
+
+    fn reset(&self) {
+        self.mul_calls.store(0, Ordering::Relaxed);
+        self.mul_xor_calls.store(0, Ordering::Relaxed);
+        self.total_bytes.store(0, Ordering::Relaxed);
+        self.vector_64b_chunks.store(0, Ordering::Relaxed);
+        self.vector_16b_chunks.store(0, Ordering::Relaxed);
+        self.tail_bytes.store(0, Ordering::Relaxed);
+        self.tail_calls.store(0, Ordering::Relaxed);
+        self.table_lookups.store(0, Ordering::Relaxed);
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
+    fn record_call(
+        &self,
+        is_xor: bool,
+        input_len: usize,
+        vector_64b_chunks: usize,
+        vector_16b_chunks: usize,
+        tail_bytes: usize,
+    ) {
+        if is_xor {
+            self.mul_xor_calls.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.mul_calls.fetch_add(1, Ordering::Relaxed);
+        }
+        self.total_bytes.fetch_add(input_len, Ordering::Relaxed);
+        self.vector_64b_chunks
+            .fetch_add(vector_64b_chunks, Ordering::Relaxed);
+        self.vector_16b_chunks
+            .fetch_add(vector_16b_chunks, Ordering::Relaxed);
+        if tail_bytes > 0 {
+            self.tail_calls.fetch_add(1, Ordering::Relaxed);
+            self.tail_bytes.fetch_add(tail_bytes, Ordering::Relaxed);
+        }
+        let lookups = vector_64b_chunks
+            .saturating_mul(8)
+            .saturating_add(vector_16b_chunks.saturating_mul(2));
+        self.table_lookups.fetch_add(lookups, Ordering::Relaxed);
+    }
+}
+
+#[cfg(feature = "std")]
+static RUST_NEON_PROFILE_METRICS: RustNeonProfileMetrics = RustNeonProfileMetrics {
+    mul_calls: AtomicUsize::new(0),
+    mul_xor_calls: AtomicUsize::new(0),
+    total_bytes: AtomicUsize::new(0),
+    vector_64b_chunks: AtomicUsize::new(0),
+    vector_16b_chunks: AtomicUsize::new(0),
+    tail_bytes: AtomicUsize::new(0),
+    tail_calls: AtomicUsize::new(0),
+    table_lookups: AtomicUsize::new(0),
+};
+
+#[cfg(feature = "std")]
+const RS_NEON_MUL_SLICE_XOR_UNROLL_ENV: &str = "RS_NEON_MUL_SLICE_XOR_UNROLL";
+#[cfg(feature = "std")]
+const RS_NEON_MUL_SLICE_XOR_SCHEDULE_ENV: &str = "RS_NEON_MUL_SLICE_XOR_SCHEDULE";
+
+#[cfg(feature = "std")]
+fn parse_rust_neon_xor_unroll(value: &str) -> Option<usize> {
+    match value {
+        "2" => Some(2),
+        "4" => Some(4),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "std")]
+fn rust_neon_mul_slice_xor_unroll() -> usize {
+    static UNROLL: OnceLock<usize> = OnceLock::new();
+    *UNROLL.get_or_init(|| {
+        std::env::var(RS_NEON_MUL_SLICE_XOR_UNROLL_ENV)
+            .ok()
+            .as_deref()
+            .and_then(parse_rust_neon_xor_unroll)
+            .unwrap_or(4)
+    })
+}
+
+#[cfg(feature = "std")]
+fn rust_neon_mul_slice_xor_schedule_split() -> bool {
+    static SPLIT: OnceLock<bool> = OnceLock::new();
+    *SPLIT.get_or_init(|| {
+        std::env::var(RS_NEON_MUL_SLICE_XOR_SCHEDULE_ENV)
+            .ok()
+            .is_some_and(|value| value == "split")
+    })
+}
+
+#[cfg(feature = "std")]
+pub fn rust_neon_profile_stats() -> RustNeonProfileStats {
+    RUST_NEON_PROFILE_METRICS.snapshot()
+}
+
+#[cfg(feature = "std")]
+pub fn reset_rust_neon_profile_stats() {
+    RUST_NEON_PROFILE_METRICS.reset();
+}
+
+#[cfg(feature = "std")]
 const RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES: usize = 512 * 1024;
 #[cfg(feature = "std")]
 const RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES: usize = 256 * 1024;
+#[cfg(feature = "std")]
+const RS_RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES_ENV: &str =
+    "RS_RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES";
+#[cfg(feature = "std")]
+const RS_RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES_ENV: &str =
+    "RS_RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES";
+#[cfg(feature = "std")]
+const RS_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV: &str = "RS_RECONSTRUCT_MIN_BYTES_PER_JOB";
 
 impl crate::ReedSolomon<Field> {
+    #[cfg(feature = "std")]
+    fn read_env_usize(name: &str) -> Option<usize> {
+        std::env::var(name)
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+    }
+
+    #[cfg(feature = "std")]
+    fn reconstruct_data_min_parallel_shard_bytes(&self) -> usize {
+        Self::read_env_usize(RS_RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES_ENV)
+            .filter(|value| *value > 0)
+            .unwrap_or(RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES)
+    }
+
+    #[cfg(feature = "std")]
+    fn reconstruct_full_min_parallel_shard_bytes(&self) -> usize {
+        Self::read_env_usize(RS_RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES_ENV)
+            .filter(|value| *value > 0)
+            .unwrap_or(RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES)
+    }
+
+    #[cfg(feature = "std")]
+    fn reconstruct_min_bytes_per_job(&self) -> Option<usize> {
+        Self::read_env_usize(RS_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV).filter(|value| *value > 0)
+    }
+
     #[cfg(feature = "std")]
     fn first_shard_len<T: AsRef<[u8]>>(slices: &[T]) -> usize {
         slices
@@ -93,23 +297,28 @@ impl crate::ReedSolomon<Field> {
         data_only: bool,
         available_parallelism: usize,
     ) -> crate::ParallelDecision {
-        let base = crate::ParallelPolicy::default();
+        let base = self.effective_parallel_policy();
+        let data_only_min = self.reconstruct_data_min_parallel_shard_bytes();
+        let full_min = self.reconstruct_full_min_parallel_shard_bytes();
+        let min_bytes_per_job = self
+            .reconstruct_min_bytes_per_job()
+            .unwrap_or(base.min_bytes_per_job);
         let tuned = if data_only {
             crate::ParallelPolicy {
                 min_parallel_shard_bytes: core::cmp::max(
                     base.min_parallel_shard_bytes,
-                    RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES,
+                    data_only_min,
                 ),
-                min_bytes_per_job: base.min_bytes_per_job,
+                min_bytes_per_job,
                 max_jobs: base.max_jobs,
             }
         } else {
             crate::ParallelPolicy {
                 min_parallel_shard_bytes: core::cmp::max(
                     base.min_parallel_shard_bytes / 2,
-                    RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES,
+                    full_min,
                 ),
-                min_bytes_per_job: base.min_bytes_per_job,
+                min_bytes_per_job,
                 max_jobs: base.max_jobs,
             }
         };
@@ -124,6 +333,35 @@ impl crate::ReedSolomon<Field> {
             output_shards,
             available_parallelism,
         )
+    }
+
+    #[cfg(feature = "std")]
+    fn reconstruct_parallel_policy(&self, data_only: bool) -> crate::ParallelPolicy {
+        let base = self.effective_parallel_policy();
+        let data_only_min = self.reconstruct_data_min_parallel_shard_bytes();
+        let full_min = self.reconstruct_full_min_parallel_shard_bytes();
+        let min_bytes_per_job = self
+            .reconstruct_min_bytes_per_job()
+            .unwrap_or(base.min_bytes_per_job);
+        if data_only {
+            crate::ParallelPolicy {
+                min_parallel_shard_bytes: core::cmp::max(
+                    base.min_parallel_shard_bytes,
+                    data_only_min,
+                ),
+                min_bytes_per_job,
+                max_jobs: base.max_jobs,
+            }
+        } else {
+            crate::ParallelPolicy {
+                min_parallel_shard_bytes: core::cmp::max(
+                    base.min_parallel_shard_bytes / 2,
+                    full_min,
+                ),
+                min_bytes_per_job,
+                max_jobs: base.max_jobs,
+            }
+        }
     }
 
     #[cfg(feature = "std")]
@@ -217,7 +455,11 @@ impl crate::ReedSolomon<Field> {
             .reconstruct_parallel_decision(shard_len, missing_data, missing, false)
             .use_parallel
         {
-            self.reconstruct_internal_option_vec_par(shards, false)
+            self.reconstruct_internal_option_vec_par_with_policy(
+                shards,
+                false,
+                self.reconstruct_parallel_policy(false),
+            )
         } else {
             self.reconstruct(shards)
         }
@@ -239,7 +481,11 @@ impl crate::ReedSolomon<Field> {
             .reconstruct_parallel_decision(shard_len, missing_data, missing, true)
             .use_parallel
         {
-            self.reconstruct_internal_option_vec_par(shards, true)
+            self.reconstruct_internal_option_vec_par_with_policy(
+                shards,
+                true,
+                self.reconstruct_parallel_policy(true),
+            )
         } else {
             self.reconstruct_data(shards)
         }
@@ -416,6 +662,16 @@ pub fn active_backend_kind() -> BackendKind {
     backend::active_backend().kind
 }
 
+#[cfg(test)]
+fn mul_slice_scalar_for_test(c: u8, input: &[u8], out: &mut [u8]) {
+    mul_slice_pure_rust(c, input, out);
+}
+
+#[cfg(test)]
+fn mul_slice_xor_scalar_for_test(c: u8, input: &[u8], out: &mut [u8]) {
+    mul_slice_xor_pure_rust(c, input, out);
+}
+
 fn mul_slice_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
     let mt = &MUL_TABLE[c as usize];
     let mt_ptr: *const u8 = &mt[0];
@@ -498,6 +754,388 @@ fn mul_slice_xor_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
      *   out[n] ^= mt[input[n] as usize];
      * }
      */
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+fn rust_neon_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
+    assert_eq!(input.len(), out.len());
+    if input.is_empty() {
+        return;
+    }
+
+    unsafe { rust_neon_mul_slice_impl(c, input, out) }
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+fn rust_neon_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
+    assert_eq!(input.len(), out.len());
+    if input.is_empty() {
+        return;
+    }
+
+    unsafe { rust_neon_mul_slice_xor_impl(c, input, out) }
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[target_feature(enable = "neon")]
+unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
+    use core::arch::aarch64::{
+        uint8x16_t, uint8x16x4_t, vandq_u8, veorq_u8, vdupq_n_u8, vld1q_u8, vld1q_u8_x4,
+        vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x4,
+    };
+
+    let low_tbl = unsafe { vld1q_u8(MUL_TABLE_LOW[c as usize].as_ptr()) };
+    let high_tbl = unsafe { vld1q_u8(MUL_TABLE_HIGH[c as usize].as_ptr()) };
+    let nibble_mask = vdupq_n_u8(0x0f);
+    let bytes_done = input.len() & !15usize;
+    let bytes_done_unrolled = input.len() & !63usize;
+    #[cfg(feature = "std")]
+    {
+        let vector_64b_chunks = bytes_done_unrolled / 64;
+        let vector_16b_chunks = (bytes_done - bytes_done_unrolled) / 16;
+        let tail_bytes = input.len() - bytes_done;
+        RUST_NEON_PROFILE_METRICS.record_call(
+            false,
+            input.len(),
+            vector_64b_chunks,
+            vector_16b_chunks,
+            tail_bytes,
+        );
+    }
+
+    let mut offset = 0usize;
+    while offset < bytes_done_unrolled {
+        let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
+        let input0 = inputs.0;
+        let input1 = inputs.1;
+        let input2 = inputs.2;
+        let input3 = inputs.3;
+
+        let low0 = vandq_u8(input0, nibble_mask);
+        let low1 = vandq_u8(input1, nibble_mask);
+        let low2 = vandq_u8(input2, nibble_mask);
+        let low3 = vandq_u8(input3, nibble_mask);
+
+        let high0 = vshrq_n_u8::<4>(input0);
+        let high1 = vshrq_n_u8::<4>(input1);
+        let high2 = vshrq_n_u8::<4>(input2);
+        let high3 = vshrq_n_u8::<4>(input3);
+
+        let result0: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
+        let result1: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
+        let result2: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
+        let result3: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
+
+        unsafe {
+            vst1q_u8_x4(
+                out.as_mut_ptr().add(offset),
+                uint8x16x4_t(result0, result1, result2, result3),
+            )
+        };
+        offset += 64;
+    }
+
+    while offset < bytes_done {
+        let input_vec = unsafe { vld1q_u8(input.as_ptr().add(offset)) };
+        let low = vandq_u8(input_vec, nibble_mask);
+        let high = vshrq_n_u8::<4>(input_vec);
+        let result: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low), vqtbl1q_u8(high_tbl, high));
+        unsafe { vst1q_u8(out.as_mut_ptr().add(offset), result) };
+        offset += 16;
+    }
+
+    mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[target_feature(enable = "neon")]
+unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
+    use core::arch::aarch64::{
+        uint8x16_t, uint8x16x2_t, uint8x16x4_t, vandq_u8, veorq_u8, vdupq_n_u8, vld1q_u8,
+        vld1q_u8_x2, vld1q_u8_x4, vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x2, vst1q_u8_x4,
+    };
+
+    let low_tbl = unsafe { vld1q_u8(MUL_TABLE_LOW[c as usize].as_ptr()) };
+    let high_tbl = unsafe { vld1q_u8(MUL_TABLE_HIGH[c as usize].as_ptr()) };
+    let nibble_mask = vdupq_n_u8(0x0f);
+    let unroll4 = {
+        #[cfg(feature = "std")]
+        {
+            rust_neon_mul_slice_xor_unroll() != 2
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            true
+        }
+    };
+    let bytes_done = input.len() & !15usize;
+    let bytes_done_unrolled = if unroll4 {
+        input.len() & !63usize
+    } else {
+        input.len() & !31usize
+    };
+    #[cfg(feature = "std")]
+    {
+        let vector_64b_chunks = if unroll4 { bytes_done_unrolled / 64 } else { 0 };
+        let vector_16b_chunks = if unroll4 {
+            (bytes_done - bytes_done_unrolled) / 16
+        } else {
+            ((bytes_done_unrolled / 32) * 2) + ((bytes_done - bytes_done_unrolled) / 16)
+        };
+        let tail_bytes = input.len() - bytes_done;
+        RUST_NEON_PROFILE_METRICS.record_call(
+            true,
+            input.len(),
+            vector_64b_chunks,
+            vector_16b_chunks,
+            tail_bytes,
+        );
+    }
+
+    let mut offset = 0usize;
+    if unroll4 {
+        let schedule_split = {
+            #[cfg(feature = "std")]
+            {
+                rust_neon_mul_slice_xor_schedule_split()
+            }
+            #[cfg(not(feature = "std"))]
+            {
+                false
+            }
+        };
+        if schedule_split {
+            while offset < bytes_done_unrolled {
+                let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
+                let input0 = inputs.0;
+                let input1 = inputs.1;
+                let input2 = inputs.2;
+                let input3 = inputs.3;
+
+                let low0 = vandq_u8(input0, nibble_mask);
+                let low1 = vandq_u8(input1, nibble_mask);
+                let low2 = vandq_u8(input2, nibble_mask);
+                let low3 = vandq_u8(input3, nibble_mask);
+
+                let high0 = vshrq_n_u8::<4>(input0);
+                let high1 = vshrq_n_u8::<4>(input1);
+                let high2 = vshrq_n_u8::<4>(input2);
+                let high3 = vshrq_n_u8::<4>(input3);
+
+                let product0: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
+                let product1: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
+                let product2: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
+                let product3: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
+                let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out.as_ptr().add(offset)) };
+                unsafe {
+                    vst1q_u8_x4(
+                        out.as_mut_ptr().add(offset),
+                        uint8x16x4_t(
+                            veorq_u8(outs.0, product0),
+                            veorq_u8(outs.1, product1),
+                            veorq_u8(outs.2, product2),
+                            veorq_u8(outs.3, product3),
+                        ),
+                    )
+                };
+                offset += 64;
+            }
+        } else {
+            while offset < bytes_done_unrolled {
+                let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
+                let input0 = inputs.0;
+                let input1 = inputs.1;
+                let input2 = inputs.2;
+                let input3 = inputs.3;
+
+                let low0 = vandq_u8(input0, nibble_mask);
+                let low1 = vandq_u8(input1, nibble_mask);
+                let low2 = vandq_u8(input2, nibble_mask);
+                let low3 = vandq_u8(input3, nibble_mask);
+
+                let high0 = vshrq_n_u8::<4>(input0);
+                let high1 = vshrq_n_u8::<4>(input1);
+                let high2 = vshrq_n_u8::<4>(input2);
+                let high3 = vshrq_n_u8::<4>(input3);
+
+                let product0: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
+                let product1: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
+                let product2: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
+                let product3: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
+                let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out.as_ptr().add(offset)) };
+                unsafe {
+                    vst1q_u8_x4(
+                        out.as_mut_ptr().add(offset),
+                        uint8x16x4_t(
+                            veorq_u8(outs.0, product0),
+                            veorq_u8(outs.1, product1),
+                            veorq_u8(outs.2, product2),
+                            veorq_u8(outs.3, product3),
+                        ),
+                    )
+                };
+                offset += 64;
+            }
+        }
+    } else {
+        while offset < bytes_done_unrolled {
+            let inputs: uint8x16x2_t = unsafe { vld1q_u8_x2(input.as_ptr().add(offset)) };
+            let input0 = inputs.0;
+            let input1 = inputs.1;
+
+            let low0 = vandq_u8(input0, nibble_mask);
+            let low1 = vandq_u8(input1, nibble_mask);
+
+            let high0 = vshrq_n_u8::<4>(input0);
+            let high1 = vshrq_n_u8::<4>(input1);
+
+            let product0: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
+            let product1: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
+
+            let outs: uint8x16x2_t = unsafe { vld1q_u8_x2(out.as_ptr().add(offset)) };
+            unsafe {
+                vst1q_u8_x2(
+                    out.as_mut_ptr().add(offset),
+                    uint8x16x2_t(
+                        veorq_u8(outs.0, product0),
+                        veorq_u8(outs.1, product1),
+                    ),
+                )
+            };
+            offset += 32;
+        }
+    }
+
+    while offset < bytes_done {
+        let input_vec = unsafe { vld1q_u8(input.as_ptr().add(offset)) };
+        let low = vandq_u8(input_vec, nibble_mask);
+        let high = vshrq_n_u8::<4>(input_vec);
+        let product: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low), vqtbl1q_u8(high_tbl, high));
+        let out_vec = unsafe { vld1q_u8(out.as_ptr().add(offset)) };
+        unsafe { vst1q_u8(out.as_mut_ptr().add(offset), veorq_u8(out_vec, product)) };
+        offset += 16;
+    }
+
+    mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+fn rust_avx2_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
+    assert_eq!(input.len(), out.len());
+    if input.is_empty() {
+        return;
+    }
+
+    unsafe { rust_avx2_mul_slice_impl(c, input, out) }
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+fn rust_avx2_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
+    assert_eq!(input.len(), out.len());
+    if input.is_empty() {
+        return;
+    }
+
+    unsafe { rust_avx2_mul_slice_xor_impl(c, input, out) }
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[target_feature(enable = "avx2")]
+unsafe fn rust_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
+    use core::arch::x86_64::{
+        __m128i, __m256i, _mm_loadu_si128, _mm256_and_si256, _mm256_broadcastsi128_si256,
+        _mm256_loadu_si256, _mm256_shuffle_epi8, _mm256_srli_epi64, _mm256_storeu_si256,
+        _mm256_xor_si256, _mm256_set1_epi8,
+    };
+
+    let low128: __m128i = unsafe { _mm_loadu_si128(MUL_TABLE_LOW[c as usize].as_ptr().cast()) };
+    let high128: __m128i = unsafe { _mm_loadu_si128(MUL_TABLE_HIGH[c as usize].as_ptr().cast()) };
+    let low_tbl: __m256i = _mm256_broadcastsi128_si256(low128);
+    let high_tbl: __m256i = _mm256_broadcastsi128_si256(high128);
+    let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);
+
+    let bytes_done = input.len() & !31usize;
+    let mut offset = 0usize;
+    while offset < bytes_done {
+        let input_vec = unsafe { _mm256_loadu_si256(input.as_ptr().add(offset).cast()) };
+        let low = _mm256_and_si256(input_vec, nibble_mask);
+        let high = _mm256_and_si256(_mm256_srli_epi64::<4>(input_vec), nibble_mask);
+        let result = _mm256_xor_si256(_mm256_shuffle_epi8(low_tbl, low), _mm256_shuffle_epi8(high_tbl, high));
+        unsafe { _mm256_storeu_si256(out.as_mut_ptr().add(offset).cast(), result) };
+        offset += 32;
+    }
+
+    mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[target_feature(enable = "avx2")]
+unsafe fn rust_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
+    use core::arch::x86_64::{
+        __m128i, __m256i, _mm_loadu_si128, _mm256_and_si256, _mm256_broadcastsi128_si256,
+        _mm256_loadu_si256, _mm256_shuffle_epi8, _mm256_srli_epi64, _mm256_storeu_si256,
+        _mm256_xor_si256, _mm256_set1_epi8,
+    };
+
+    let low128: __m128i = unsafe { _mm_loadu_si128(MUL_TABLE_LOW[c as usize].as_ptr().cast()) };
+    let high128: __m128i = unsafe { _mm_loadu_si128(MUL_TABLE_HIGH[c as usize].as_ptr().cast()) };
+    let low_tbl: __m256i = _mm256_broadcastsi128_si256(low128);
+    let high_tbl: __m256i = _mm256_broadcastsi128_si256(high128);
+    let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);
+
+    let bytes_done = input.len() & !31usize;
+    let mut offset = 0usize;
+    while offset < bytes_done {
+        let input_vec = unsafe { _mm256_loadu_si256(input.as_ptr().add(offset).cast()) };
+        let low = _mm256_and_si256(input_vec, nibble_mask);
+        let high = _mm256_and_si256(_mm256_srli_epi64::<4>(input_vec), nibble_mask);
+        let product = _mm256_xor_si256(_mm256_shuffle_epi8(low_tbl, low), _mm256_shuffle_epi8(high_tbl, high));
+        let out_vec = unsafe { _mm256_loadu_si256(out.as_ptr().add(offset).cast()) };
+        unsafe { _mm256_storeu_si256(out.as_mut_ptr().add(offset).cast(), _mm256_xor_si256(out_vec, product)) };
+        offset += 32;
+    }
+
+    mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
 }
 
 #[cfg(test)]
@@ -907,6 +1545,271 @@ mod tests {
         }
     }
 
+    #[cfg(all(
+        feature = "simd-accel",
+        any(target_arch = "x86_64", target_arch = "aarch64"),
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_simd_c_matches_scalar_mul_slice() {
+        let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut scalar = vec![0; len];
+                let mut simd = vec![0; len];
+
+                mul_slice_scalar_for_test(c, &input, &mut scalar);
+                simd_c_mul_slice(c, &input, &mut simd);
+
+                assert_eq!(scalar, simd);
+            }
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        any(target_arch = "x86_64", target_arch = "aarch64"),
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_simd_c_matches_scalar_mul_slice_xor() {
+        let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut scalar = vec![0; len];
+                let mut simd = vec![0; len];
+                fill_random(&mut scalar);
+                simd.copy_from_slice(&scalar);
+
+                mul_slice_xor_scalar_for_test(c, &input, &mut scalar);
+                simd_c_mul_slice_xor(c, &input, &mut simd);
+
+                assert_eq!(scalar, simd);
+            }
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_rust_neon_matches_scalar_mul_slice() {
+        let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut scalar = vec![0; len];
+                let mut neon = vec![0; len];
+
+                mul_slice_scalar_for_test(c, &input, &mut scalar);
+                rust_neon_mul_slice(c, &input, &mut neon);
+
+                assert_eq!(scalar, neon);
+            }
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_rust_neon_matches_scalar_mul_slice_xor() {
+        let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut scalar = vec![0; len];
+                let mut neon = vec![0; len];
+                fill_random(&mut scalar);
+                neon.copy_from_slice(&scalar);
+
+                mul_slice_xor_scalar_for_test(c, &input, &mut scalar);
+                rust_neon_mul_slice_xor(c, &input, &mut neon);
+
+                assert_eq!(scalar, neon);
+            }
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_rust_neon_matches_simd_c() {
+        let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut simd_c = vec![0; len];
+                let mut neon = vec![0; len];
+
+                simd_c_mul_slice(c, &input, &mut simd_c);
+                rust_neon_mul_slice(c, &input, &mut neon);
+
+                assert_eq!(simd_c, neon);
+            }
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_rust_neon_profile_stats_track_vector_vs_tail() {
+        reset_rust_neon_profile_stats();
+
+        let c = 25u8;
+        let mut input = vec![0u8; 65];
+        fill_random(&mut input);
+        let mut out = vec![0u8; 65];
+        let mut out_xor = vec![0u8; 65];
+
+        let before = rust_neon_profile_stats();
+        rust_neon_mul_slice(c, &input, &mut out);
+        rust_neon_mul_slice_xor(c, &input, &mut out_xor);
+        let delta = rust_neon_profile_stats().saturating_sub(before);
+
+        assert_eq!(1, delta.mul_calls);
+        assert_eq!(1, delta.mul_xor_calls);
+        assert_eq!(130, delta.total_bytes);
+        assert_eq!(2, delta.vector_64b_chunks);
+        assert_eq!(0, delta.vector_16b_chunks);
+        assert_eq!(2, delta.tail_bytes);
+        assert_eq!(2, delta.tail_calls);
+        assert_eq!(16, delta.table_lookups);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_parse_rust_neon_xor_unroll() {
+        assert_eq!(Some(2), parse_rust_neon_xor_unroll("2"));
+        assert_eq!(Some(4), parse_rust_neon_xor_unroll("4"));
+        assert_eq!(None, parse_rust_neon_xor_unroll("1"));
+        assert_eq!(None, parse_rust_neon_xor_unroll("8"));
+        assert_eq!(None, parse_rust_neon_xor_unroll("abc"));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_rust_neon_xor_schedule_env_constant() {
+        assert_eq!(
+            "RS_NEON_MUL_SLICE_XOR_SCHEDULE",
+            RS_NEON_MUL_SLICE_XOR_SCHEDULE_ENV
+        );
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "x86_64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_rust_avx2_matches_scalar_mul_slice() {
+        let lengths = [0usize, 1, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut scalar = vec![0; len];
+                let mut avx2 = vec![0; len];
+
+                mul_slice_scalar_for_test(c, &input, &mut scalar);
+                rust_avx2_mul_slice(c, &input, &mut avx2);
+
+                assert_eq!(scalar, avx2);
+            }
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "x86_64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_rust_avx2_matches_scalar_mul_slice_xor() {
+        let lengths = [0usize, 1, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut scalar = vec![0; len];
+                let mut avx2 = vec![0; len];
+                fill_random(&mut scalar);
+                avx2.copy_from_slice(&scalar);
+
+                mul_slice_xor_scalar_for_test(c, &input, &mut scalar);
+                rust_avx2_mul_slice_xor(c, &input, &mut avx2);
+
+                assert_eq!(scalar, avx2);
+            }
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "x86_64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_rust_avx2_matches_simd_c() {
+        let lengths = [0usize, 1, 31, 32, 33, 255, 1024, 10_003];
+        for &len in &lengths {
+            for _ in 0..16 {
+                let c = rand::random::<u8>();
+                let mut input = vec![0; len];
+                fill_random(&mut input);
+                let mut simd_c = vec![0; len];
+                let mut avx2 = vec![0; len];
+
+                simd_c_mul_slice(c, &input, &mut simd_c);
+                rust_avx2_mul_slice(c, &input, &mut avx2);
+
+                assert_eq!(simd_c, avx2);
+            }
+        }
+    }
+
     #[test]
     fn test_active_backend_metadata() {
         #[cfg(all(
@@ -916,8 +1819,33 @@ mod tests {
             not(any(target_os = "android", target_os = "ios"))
         ))]
         {
-            assert_eq!(active_backend_name(), "simd-c");
-            assert_eq!(active_backend_kind(), BackendKind::SimdC);
+            #[cfg(all(feature = "std", target_arch = "x86_64"))]
+            {
+                if cfg!(rse_simd_c_build_haswell) {
+                    if std::is_x86_feature_detected!("avx2") {
+                        assert_eq!(active_backend_name(), "simd-c");
+                        assert_eq!(active_backend_kind(), BackendKind::SimdC);
+                    } else {
+                        assert_eq!(active_backend_name(), "scalar-rust");
+                        assert_eq!(active_backend_kind(), BackendKind::Scalar);
+                    }
+                } else {
+                    assert_eq!(active_backend_name(), "simd-c");
+                    assert_eq!(active_backend_kind(), BackendKind::SimdC);
+                }
+            }
+
+            #[cfg(all(feature = "std", target_arch = "aarch64"))]
+            {
+                assert_eq!(active_backend_name(), "rust-neon");
+                assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+            }
+
+            #[cfg(not(feature = "std"))]
+            {
+                assert_eq!(active_backend_name(), "scalar-rust");
+                assert_eq!(active_backend_kind(), BackendKind::Scalar);
+            }
         }
 
         #[cfg(not(all(
@@ -929,6 +1857,30 @@ mod tests {
         {
             assert_eq!(active_backend_name(), "scalar-rust");
             assert_eq!(active_backend_kind(), BackendKind::Scalar);
+        }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        feature = "std",
+        any(target_arch = "x86_64", target_arch = "aarch64"),
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
+    #[test]
+    fn test_backend_override_affects_active_backend() {
+        #[cfg(target_arch = "aarch64")]
+        {
+            unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-neon") };
+            assert_eq!(super::backend::runtime_override_backend_name_for_test(), Some("rust-neon"));
+            unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-avx2") };
+            assert_eq!(super::backend::runtime_override_backend_name_for_test(), Some("rust-avx2"));
+            unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
         }
     }
 }

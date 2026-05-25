@@ -504,6 +504,65 @@ fn test_reconstruct_parallel_policy_has_data_only_and_full_tiers() {
 }
 
 #[cfg(feature = "std")]
+#[test]
+fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    // SAFETY: tests run in-process and we restore this env var before returning.
+    unsafe {
+        std::env::set_var("RS_RECONSTRUCT_MIN_BYTES_PER_JOB", "65536");
+    }
+    let decision = r.reconstruct_parallel_decision_with(1024 * 1024, 2, 4, false, 8);
+    // SAFETY: cleanup for process-global env var set above.
+    unsafe {
+        std::env::remove_var("RS_RECONSTRUCT_MIN_BYTES_PER_JOB");
+    }
+
+    assert!(decision.use_parallel);
+    assert_eq!(65536, decision.chunk_len);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_effective_parallel_policy_env_overrides() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    // SAFETY: tests run in-process and we restore these env vars before returning.
+    unsafe {
+        std::env::set_var("RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES", "131072");
+        std::env::set_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536");
+        std::env::set_var("RS_PARALLEL_POLICY_MAX_JOBS", "3");
+    }
+    let policy = r.effective_parallel_policy();
+    // SAFETY: cleanup for process-global env vars set above.
+    unsafe {
+        std::env::remove_var("RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES");
+        std::env::remove_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB");
+        std::env::remove_var("RS_PARALLEL_POLICY_MAX_JOBS");
+    }
+
+    assert_eq!(131072, policy.min_parallel_shard_bytes);
+    assert_eq!(65536, policy.min_bytes_per_job);
+    assert_eq!(3, policy.max_jobs);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_parallel_policy_respects_env_max_jobs_cap() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    // SAFETY: tests run in-process and we restore these env vars before returning.
+    unsafe {
+        std::env::set_var("RS_PARALLEL_POLICY_MAX_JOBS", "2");
+    }
+    let decision = r.parallel_policy_with(1024 * 1024, 16, 16);
+    // SAFETY: cleanup for process-global env var set above.
+    unsafe {
+        std::env::remove_var("RS_PARALLEL_POLICY_MAX_JOBS");
+    }
+
+    assert!(decision.use_parallel);
+    assert!(decision.jobs <= 2);
+}
+
+#[cfg(feature = "std")]
 struct ParallelHelperBenchResult {
     operation: &'static str,
     data_shards: usize,

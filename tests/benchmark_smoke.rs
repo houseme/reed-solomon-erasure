@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
 
-use reed_solomon_erasure::galois_8::ReedSolomon;
+use reed_solomon_erasure::galois_8::{active_backend_name, ReedSolomon};
 
 use self::bench_common::{derived_seed, make_full_shards, BenchCase, Operation, SMOKE_CASES};
 
@@ -47,11 +47,11 @@ fn features() -> String {
 }
 
 fn backend() -> &'static str {
-    if cfg!(feature = "simd-accel") {
-        "simd-c"
-    } else {
-        "scalar"
-    }
+    active_backend_name()
+}
+
+fn backend_override() -> String {
+    std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string())
 }
 
 fn target_triple() -> String {
@@ -125,6 +125,7 @@ fn write_results(results: &[SmokeResult]) {
     let target = target_triple();
     let features = features();
     let backend = backend();
+    let backend_override = backend_override();
 
     let json_path = dir.join("smoke-results.json");
     let csv_path = dir.join("smoke-results.csv");
@@ -133,11 +134,12 @@ fn write_results(results: &[SmokeResult]) {
     for (i, result) in results.iter().enumerate() {
         let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
         json.push_str(&format!(
-            "  {{\"git_revision\":\"{}\",\"target_triple\":\"{}\",\"features\":\"{}\",\"backend\":\"{}\",\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"seed\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2}}}{}",
+            "  {{\"git_revision\":\"{}\",\"target_triple\":\"{}\",\"features\":\"{}\",\"backend\":\"{}\",\"backend_override\":\"{}\",\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"seed\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2}}}{}",
             revision,
             target,
             features,
             backend,
+            backend_override,
             result.operation,
             result.data_shards,
             result.parity_shards,
@@ -152,15 +154,16 @@ fn write_results(results: &[SmokeResult]) {
     fs::write(&json_path, json).unwrap();
 
     let mut csv = String::from(
-        "git_revision,target_triple,features,backend,operation,data_shards,parity_shards,shard_size,seed,throughput_mb_s,ns_per_iter\n",
+        "git_revision,target_triple,features,backend,backend_override,operation,data_shards,parity_shards,shard_size,seed,throughput_mb_s,ns_per_iter\n",
     );
     for result in results {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{:.4},{:.2}\n",
+            "{},{},{},{},{},{},{},{},{},{},{:.4},{:.2}\n",
             revision,
             target,
             features,
             backend,
+            backend_override,
             result.operation,
             result.data_shards,
             result.parity_shards,
