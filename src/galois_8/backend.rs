@@ -10,8 +10,17 @@ pub enum BackendKind {
     RustSimd,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BackendId {
+    ScalarRust,
+    SimdC,
+    RustNeon,
+    RustAvx2,
+}
+
 #[derive(Copy, Clone)]
 pub struct GaloisBackend {
+    pub id: BackendId,
     pub mul_slice: MulSliceFn,
     pub mul_slice_xor: MulSliceFn,
     pub name: &'static str,
@@ -19,6 +28,7 @@ pub struct GaloisBackend {
 }
 
 const SCALAR_BACKEND: GaloisBackend = GaloisBackend {
+    id: BackendId::ScalarRust,
     mul_slice: mul_slice_pure_rust,
     mul_slice_xor: mul_slice_xor_pure_rust,
     name: "scalar-rust",
@@ -32,6 +42,7 @@ const SCALAR_BACKEND: GaloisBackend = GaloisBackend {
     not(any(target_os = "android", target_os = "ios"))
 ))]
 const RUST_NEON_BACKEND: GaloisBackend = GaloisBackend {
+    id: BackendId::RustNeon,
     mul_slice: super::aarch64::neon::rust_neon_mul_slice,
     mul_slice_xor: super::aarch64::neon::rust_neon_mul_slice_xor,
     name: "rust-neon",
@@ -45,6 +56,7 @@ const RUST_NEON_BACKEND: GaloisBackend = GaloisBackend {
     not(any(target_os = "android", target_os = "ios"))
 ))]
 const RUST_AVX2_BACKEND: GaloisBackend = GaloisBackend {
+    id: BackendId::RustAvx2,
     mul_slice: super::x86::avx2::rust_avx2_mul_slice,
     mul_slice_xor: super::x86::avx2::rust_avx2_mul_slice_xor,
     name: "rust-avx2",
@@ -60,6 +72,7 @@ static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
     not(any(target_os = "android", target_os = "ios"))
 ))]
 const SIMD_C_BACKEND: GaloisBackend = GaloisBackend {
+    id: BackendId::SimdC,
     mul_slice: super::legacy::simd_c::simd_c_mul_slice,
     mul_slice_xor: super::legacy::simd_c::simd_c_mul_slice_xor,
     name: "simd-c",
@@ -78,6 +91,35 @@ enum BackendOverride {
 
 #[cfg(all(
     feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+struct X86FeatureSet {
+    sse2: bool,
+    ssse3: bool,
+    avx2: bool,
+    avx512f: bool,
+    avx512bw: bool,
+    gfni: bool,
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+struct Aarch64FeatureSet {
+    neon: bool,
+}
+
+#[cfg(all(
+    feature = "simd-accel",
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -88,21 +130,7 @@ fn runtime_select_backend() -> GaloisBackend {
         return backend;
     }
 
-    #[cfg(target_arch = "x86_64")]
-    if rust_avx2_supported_at_runtime() {
-        return RUST_AVX2_BACKEND;
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    if rust_neon_supported_at_runtime() {
-        return RUST_NEON_BACKEND;
-    }
-
-    if simd_c_supported_at_runtime() {
-        return SIMD_C_BACKEND;
-    }
-
-    SCALAR_BACKEND
+    auto_select_backend()
 }
 
 #[cfg(feature = "std")]
@@ -129,12 +157,166 @@ fn runtime_override_backend() -> Option<GaloisBackend> {
     }
 }
 
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn auto_select_backend() -> GaloisBackend {
+    select_x86_backend(detect_x86_features())
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn auto_select_backend() -> GaloisBackend {
+    select_aarch64_backend(detect_aarch64_features())
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    any(target_arch = "x86_64", target_arch = "aarch64"),
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    not(feature = "std")
+))]
+fn auto_select_backend() -> GaloisBackend {
+    SCALAR_BACKEND
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn detect_x86_features() -> X86FeatureSet {
+    X86FeatureSet {
+        sse2: std::is_x86_feature_detected!("sse2"),
+        ssse3: std::is_x86_feature_detected!("ssse3"),
+        avx2: std::is_x86_feature_detected!("avx2"),
+        avx512f: std::is_x86_feature_detected!("avx512f"),
+        avx512bw: std::is_x86_feature_detected!("avx512bw"),
+        gfni: std::is_x86_feature_detected!("gfni"),
+    }
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn supports_rust_avx2(features: X86FeatureSet) -> bool {
+    features.avx2
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
+    if cfg!(rse_simd_c_build_haswell) {
+        return features.avx2;
+    }
+    if cfg!(rse_simd_c_build_baseline) {
+        return features.sse2;
+    }
+    false
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
+    if supports_rust_avx2(features) {
+        return RUST_AVX2_BACKEND;
+    }
+    if supports_simd_c_x86(features) {
+        return SIMD_C_BACKEND;
+    }
+    SCALAR_BACKEND
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn detect_aarch64_features() -> Aarch64FeatureSet {
+    Aarch64FeatureSet {
+        neon: std::arch::is_aarch64_feature_detected!("neon"),
+    }
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn supports_rust_neon(features: Aarch64FeatureSet) -> bool {
+    features.neon
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn supports_simd_c_aarch64(features: Aarch64FeatureSet) -> bool {
+    !cfg!(rse_simd_c_build_unknown) && features.neon
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn select_aarch64_backend(features: Aarch64FeatureSet) -> GaloisBackend {
+    if supports_rust_neon(features) {
+        return RUST_NEON_BACKEND;
+    }
+    if supports_simd_c_aarch64(features) {
+        return SIMD_C_BACKEND;
+    }
+    SCALAR_BACKEND
+}
+
 #[cfg(test)]
 #[cfg(feature = "std")]
 pub(super) fn runtime_override_backend_name_for_test() -> Option<&'static str> {
     runtime_override_backend().map(|backend| backend.name)
 }
 
+#[cfg(test)]
+#[cfg(feature = "std")]
+pub(super) fn runtime_override_backend_id_for_test() -> Option<BackendId> {
+    runtime_override_backend().map(|backend| backend.id)
+}
+
 #[cfg(feature = "std")]
 #[cfg(all(
     feature = "simd-accel",
@@ -143,145 +325,70 @@ pub(super) fn runtime_override_backend_name_for_test() -> Option<&'static str> {
     not(any(target_os = "android", target_os = "ios"))
 ))]
 fn simd_c_override_backend() -> Option<GaloisBackend> {
-    simd_c_supported_at_runtime().then_some(SIMD_C_BACKEND)
-}
-
-#[cfg(feature = "std")]
-#[cfg(not(all(
-    feature = "simd-accel",
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-)))]
-fn simd_c_override_backend() -> Option<GaloisBackend> {
-    None
-}
-
-#[cfg(feature = "std")]
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-fn rust_neon_override_backend() -> Option<GaloisBackend> {
-    rust_neon_supported_at_runtime().then_some(RUST_NEON_BACKEND)
-}
-
-#[cfg(feature = "std")]
-#[cfg(not(all(
-    feature = "simd-accel",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-)))]
-fn rust_neon_override_backend() -> Option<GaloisBackend> {
-    None
-}
-
-#[cfg(feature = "std")]
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-fn rust_avx2_override_backend() -> Option<GaloisBackend> {
-    rust_avx2_supported_at_runtime().then_some(RUST_AVX2_BACKEND)
-}
-
-#[cfg(feature = "std")]
-#[cfg(not(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-)))]
-fn rust_avx2_override_backend() -> Option<GaloisBackend> {
-    None
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[cfg(feature = "std")]
-fn rust_neon_supported_at_runtime() -> bool {
-    std::arch::is_aarch64_feature_detected!("neon")
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[cfg(not(feature = "std"))]
-fn rust_neon_supported_at_runtime() -> bool {
-    false
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[cfg(feature = "std")]
-fn rust_avx2_supported_at_runtime() -> bool {
-    std::is_x86_feature_detected!("avx2")
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[cfg(not(feature = "std"))]
-fn rust_avx2_supported_at_runtime() -> bool {
-    false
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[cfg(feature = "std")]
-fn simd_c_supported_at_runtime() -> bool {
     #[cfg(target_arch = "x86_64")]
     {
-        if cfg!(rse_simd_c_build_haswell) {
-            return std::is_x86_feature_detected!("avx2");
-        }
-        if cfg!(rse_simd_c_build_baseline) {
-            return std::is_x86_feature_detected!("sse2");
-        }
-        false
+        return supports_simd_c_x86(detect_x86_features()).then_some(SIMD_C_BACKEND);
     }
 
     #[cfg(target_arch = "aarch64")]
     {
-        if cfg!(rse_simd_c_build_unknown) {
-            return false;
-        }
-        std::arch::is_aarch64_feature_detected!("neon")
+        return supports_simd_c_aarch64(detect_aarch64_features()).then_some(SIMD_C_BACKEND);
     }
 }
 
-#[cfg(all(
+#[cfg(feature = "std")]
+#[cfg(not(all(
     feature = "simd-accel",
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
+)))]
+fn simd_c_override_backend() -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(feature = "std")]
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
 ))]
-#[cfg(not(feature = "std"))]
-fn simd_c_supported_at_runtime() -> bool {
-    false
+fn rust_neon_override_backend() -> Option<GaloisBackend> {
+    supports_rust_neon(detect_aarch64_features()).then_some(RUST_NEON_BACKEND)
+}
+
+#[cfg(feature = "std")]
+#[cfg(not(all(
+    feature = "simd-accel",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+)))]
+fn rust_neon_override_backend() -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(feature = "std")]
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+fn rust_avx2_override_backend() -> Option<GaloisBackend> {
+    supports_rust_avx2(detect_x86_features()).then_some(RUST_AVX2_BACKEND)
+}
+
+#[cfg(feature = "std")]
+#[cfg(not(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+)))]
+fn rust_avx2_override_backend() -> Option<GaloisBackend> {
+    None
 }
 
 #[cfg(all(
@@ -307,6 +414,11 @@ pub(super) fn active_backend() -> &'static GaloisBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_backend_ids_are_stable() {
+        assert_eq!(BackendId::ScalarRust, SCALAR_BACKEND.id);
+    }
 
     #[cfg(feature = "std")]
     #[test]
@@ -336,5 +448,60 @@ mod tests {
             Some(BackendOverride::RustAvx2)
         ));
         assert!(parse_backend_override("bogus").is_none());
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "x86_64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_select_x86_backend_priority() {
+        assert_eq!(
+            BackendId::RustAvx2,
+            select_x86_backend(X86FeatureSet {
+                avx2: true,
+                ..X86FeatureSet::default()
+            })
+            .id
+        );
+
+        if cfg!(rse_simd_c_build_baseline) {
+            assert_eq!(
+                BackendId::SimdC,
+                select_x86_backend(X86FeatureSet {
+                    sse2: true,
+                    ..X86FeatureSet::default()
+                })
+                .id
+            );
+        }
+
+        assert_eq!(
+            BackendId::ScalarRust,
+            select_x86_backend(X86FeatureSet::default()).id
+        );
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_select_aarch64_backend_priority() {
+        assert_eq!(
+            BackendId::RustNeon,
+            select_aarch64_backend(Aarch64FeatureSet { neon: true }).id
+        );
+
+        assert_eq!(
+            BackendId::ScalarRust,
+            select_aarch64_backend(Aarch64FeatureSet { neon: false }).id
+        );
     }
 }

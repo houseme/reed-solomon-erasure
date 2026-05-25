@@ -10,7 +10,7 @@ mod profile;
 mod scalar;
 mod x86;
 
-pub use backend::BackendKind;
+pub use backend::{BackendId, BackendKind};
 #[cfg(feature = "std")]
 pub use profile::RustNeonProfileStats;
 #[cfg(feature = "std")]
@@ -130,6 +130,10 @@ pub fn active_backend_name() -> &'static str {
 
 pub fn active_backend_kind() -> BackendKind {
     backend::active_backend().kind
+}
+
+pub fn active_backend_id() -> BackendId {
+    backend::active_backend().id
 }
 
 #[cfg(test)]
