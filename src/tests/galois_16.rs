@@ -444,8 +444,8 @@ quickcheck! {
             let mut parity_refs =
                 convert_2D_slices!(parity_shards =>to_mut_vec &mut [[u8; 2]]);
 
-            for i in 0..data {
-                r.encode_single_sep(i, data_refs[i], &mut parity_refs).unwrap();
+            for (i, shard) in data_refs.iter().enumerate().take(data) {
+                r.encode_single_sep(i, shard, &mut parity_refs).unwrap();
             }
         }
 
@@ -477,8 +477,8 @@ quickcheck! {
         {
             let (data_shards, parity_shards) = shards.split_at_mut(data);
 
-            for i in 0..data {
-                r.encode_single_sep(i, &data_shards[i], parity_shards).unwrap();
+            for (i, shard) in data_shards.iter().enumerate().take(data) {
+                r.encode_single_sep(i, shard, parity_shards).unwrap();
             }
         }
 

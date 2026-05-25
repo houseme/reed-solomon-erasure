@@ -1171,11 +1171,11 @@ impl<F: Field> ReedSolomon<F> {
         let mut start = 0;
         while start < shard_len {
             let end = core::cmp::min(start + chunk_len, shard_len);
-            for i_input in 0..self.data_shard_count {
+            for (i_input, input) in inputs.iter().enumerate().take(self.data_shard_count) {
                 self.code_single_slice_range(
                     matrix_rows,
                     i_input,
-                    inputs[i_input].as_ref(),
+                    input.as_ref(),
                     outputs,
                     start,
                     end,
@@ -1433,7 +1433,7 @@ impl<F: Field> ReedSolomon<F> {
     #[cfg(feature = "std")]
     /// Constructs the parity shards partially using only one data shard on the
     /// std-only parallel fast path.
-    pub fn encode_single_sep_par<U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+    pub fn encode_single_sep_par<U>(
         &self,
         i_data: usize,
         single_data: &[F::Elem],
@@ -1441,7 +1441,7 @@ impl<F: Field> ReedSolomon<F> {
     ) -> Result<(), Error>
     where
         F::Elem: Send + Sync,
-        U: Send,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send,
     {
         check_slice_index!(data => self, i_data);
         check_piece_count!(parity => self, parity);
@@ -1467,7 +1467,7 @@ impl<F: Field> ReedSolomon<F> {
     #[cfg(feature = "std")]
     /// Constructs the parity shards partially using one data shard and
     /// automatically chooses serial/parallel execution.
-    pub fn encode_single_sep_opt<U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+    pub fn encode_single_sep_opt<U>(
         &self,
         i_data: usize,
         single_data: &[F::Elem],
@@ -1475,7 +1475,7 @@ impl<F: Field> ReedSolomon<F> {
     ) -> Result<(), Error>
     where
         F::Elem: Send + Sync,
-        U: Send,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send,
     {
         let decision = self.parallel_policy(single_data.len(), parity.len());
         if decision.use_parallel {
@@ -1805,8 +1805,8 @@ impl<F: Field> ReedSolomon<F> {
         {
             let mut all_data: SmallVec<[&[F::Elem]; 32]> =
                 SmallVec::with_capacity(data_shard_count);
-            for idx in 0..data_shard_count {
-                let shard = shards[idx].as_deref().ok_or(Error::TooFewShardsPresent)?;
+            for shard in shards.iter().take(data_shard_count) {
+                let shard = shard.as_deref().ok_or(Error::TooFewShardsPresent)?;
                 all_data.push(shard);
             }
 

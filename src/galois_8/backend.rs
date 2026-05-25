@@ -452,7 +452,7 @@ pub(super) fn runtime_override_backend_id_for_test() -> Option<BackendId> {
 fn simd_c_override_backend() -> Option<GaloisBackend> {
     #[cfg(target_arch = "x86_64")]
     {
-        return supports_simd_c_x86(detect_x86_features()).then_some(SIMD_C_BACKEND);
+        supports_simd_c_x86(detect_x86_features()).then_some(SIMD_C_BACKEND)
     }
 
     #[cfg(target_arch = "aarch64")]

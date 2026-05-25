@@ -63,6 +63,28 @@ fn coeff_table_avx512(c: u8) -> [u8; 64] {
     not(any(target_os = "android", target_os = "ios"))
 ))]
 #[inline]
+fn gfni_avx2_constant_bytes(c: u8) -> ([u8; 16], [u8; 32]) {
+    (gfni_isomorphism_bytes(), coeff_table_avx2(c))
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[inline]
+fn gfni_avx512_constant_bytes(c: u8) -> ([u8; 16], [u8; 64]) {
+    (gfni_isomorphism_bytes(), coeff_table_avx512(c))
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[inline]
 #[target_feature(enable = "gfni,avx2")]
 unsafe fn gfni_avx2_constants(c: u8) -> (core::arch::x86_64::__m256i, core::arch::x86_64::__m256i) {
     use core::arch::x86_64::{
@@ -70,10 +92,9 @@ unsafe fn gfni_avx2_constants(c: u8) -> (core::arch::x86_64::__m256i, core::arch
         _mm256_gf2p8affine_epi64_epi8, _mm256_loadu_si256,
     };
 
-    let iso_bytes = gfni_isomorphism_bytes();
+    let (iso_bytes, coeff_bytes) = gfni_avx2_constant_bytes(c);
     let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
     let iso256: __m256i = _mm256_broadcastsi128_si256(iso128);
-    let coeff_bytes = coeff_table_avx2(c);
     let coeff_vec: __m256i = unsafe { _mm256_loadu_si256(coeff_bytes.as_ptr().cast()) };
     let coeff_mapped = _mm256_gf2p8affine_epi64_epi8(coeff_vec, iso256, 0);
 
@@ -96,10 +117,9 @@ unsafe fn gfni_avx512_constants(
         _mm512_loadu_si512,
     };
 
-    let iso_bytes = gfni_isomorphism_bytes();
+    let (iso_bytes, coeff_bytes) = gfni_avx512_constant_bytes(c);
     let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
     let iso512: __m512i = _mm512_broadcast_i32x4(iso128);
-    let coeff_bytes = coeff_table_avx512(c);
     let coeff_vec: __m512i = unsafe { _mm512_loadu_si512(coeff_bytes.as_ptr().cast()) };
     let coeff_mapped = _mm512_gf2p8affine_epi64_epi8::<0>(coeff_vec, iso512);
 

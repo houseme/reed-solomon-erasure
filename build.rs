@@ -44,8 +44,8 @@ const EXP_TABLE_SIZE: usize = FIELD_SIZE * 2 - 2;
 fn gen_exp_table(log_table: &[u8; FIELD_SIZE]) -> [u8; EXP_TABLE_SIZE] {
     let mut result: [u8; EXP_TABLE_SIZE] = [0; EXP_TABLE_SIZE];
 
-    for i in 1..FIELD_SIZE {
-        let log = log_table[i] as usize;
+    for (i, &log_entry) in log_table.iter().enumerate().skip(1) {
+        let log = log_entry as usize;
         result[log] = i as u8;
         result[log + FIELD_SIZE - 1] = i as u8;
     }
@@ -70,9 +70,9 @@ fn gen_mul_table(
 ) -> [[u8; FIELD_SIZE]; FIELD_SIZE] {
     let mut result: [[u8; FIELD_SIZE]; FIELD_SIZE] = [[0; 256]; 256];
 
-    for a in 0..FIELD_SIZE {
-        for b in 0..FIELD_SIZE {
-            result[a][b] = multiply(log_table, exp_table, a as u8, b as u8);
+    for (a, row) in result.iter_mut().enumerate() {
+        for (b, cell) in row.iter_mut().enumerate() {
+            *cell = multiply(log_table, exp_table, a as u8, b as u8);
         }
     }
 

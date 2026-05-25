@@ -350,7 +350,10 @@ fn reconstruct_policy_cache_aarch64(
     if let Some(value) = parse_positive_env_usize(RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV) {
         reconstruct_full_data.min_bytes_per_job = value;
     }
-    if let Some(value) = crate::core::parse_env_usize(RS_AARCH64_RECONSTRUCT_MAX_JOBS_ENV) {
+    if let Some(value) = std::env::var(RS_AARCH64_RECONSTRUCT_MAX_JOBS_ENV)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+    {
         reconstruct_full_data.max_jobs = value;
     }
 

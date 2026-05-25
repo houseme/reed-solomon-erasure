@@ -131,6 +131,9 @@ pub trait Field: Sized {
     }
 }
 
+pub type ReconstructInitResult<'a, F> =
+    Result<&'a mut [<F as Field>::Elem], Result<&'a mut [<F as Field>::Elem], Error>>;
+
 /// Something which might hold a shard.
 ///
 /// This trait is used in reconstruction, where some of the shards
@@ -138,6 +141,10 @@ pub trait Field: Sized {
 pub trait ReconstructShard<F: Field> {
     /// The size of the shard data; `None` if empty.
     fn len(&self) -> Option<usize>;
+
+    fn is_empty(&self) -> bool {
+        self.len().is_none()
+    }
 
     /// Get a mutable reference to the shard data, returning `None` if uninitialized.
     fn get(&mut self) -> Option<&mut [F::Elem]>;
@@ -147,7 +154,7 @@ pub trait ReconstructShard<F: Field> {
     fn get_or_initialize(
         &mut self,
         len: usize,
-    ) -> Result<&mut [F::Elem], Result<&mut [F::Elem], Error>>;
+    ) -> ReconstructInitResult<'_, F>;
 }
 
 impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]> + FromIterator<F::Elem>> ReconstructShard<F>
@@ -164,7 +171,7 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]> + FromIterator<F::Elem>> R
     fn get_or_initialize(
         &mut self,
         len: usize,
-    ) -> Result<&mut [F::Elem], Result<&mut [F::Elem], Error>> {
+    ) -> ReconstructInitResult<'_, F> {
         let is_some = self.is_some();
         let x = self
             .get_or_insert_with(|| ::core::iter::repeat_n(F::zero(), len).collect())
@@ -190,7 +197,7 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]>> ReconstructShard<F> for (
     fn get_or_initialize(
         &mut self,
         len: usize,
-    ) -> Result<&mut [F::Elem], Result<&mut [F::Elem], Error>> {
+    ) -> ReconstructInitResult<'_, F> {
         let x = self.0.as_mut();
         if x.len() == len {
             if self.1 { Ok(x) } else { Err(Ok(x)) }

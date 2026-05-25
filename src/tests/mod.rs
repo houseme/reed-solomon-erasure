@@ -79,9 +79,9 @@ fn shards_into_option_shards<T>(shards: Vec<Vec<T>>) -> Vec<Option<Vec<T>>> {
 fn option_shards_to_shards<T: Clone>(shards: &[Option<Vec<T>>]) -> Vec<Vec<T>> {
     let mut result = Vec::with_capacity(shards.len());
 
-    for i in 0..shards.len() {
-        let shard = match shards[i] {
-            Some(ref x) => x,
+    for (i, shard) in shards.iter().enumerate() {
+        let shard = match shard {
+            Some(x) => x,
             None => panic!("Missing shard, index : {}", i),
         };
         let inner: Vec<T> = shard.clone();
@@ -1219,10 +1219,10 @@ fn test_encode_single_sep_par_matches_encode_single_sep() {
     let mut expected_parity = parity_src.to_vec();
     let mut actual_parity = parity_src.to_vec();
 
-    for i in 0..10 {
-        r.encode_single_sep(i, &data[i], &mut expected_parity)
+    for (i, shard) in data.iter().enumerate().take(10) {
+        r.encode_single_sep(i, shard, &mut expected_parity)
             .unwrap();
-        r.encode_single_sep_par(i, &data[i], &mut actual_parity)
+        r.encode_single_sep_par(i, shard, &mut actual_parity)
             .unwrap();
     }
 
@@ -1255,10 +1255,10 @@ fn test_encode_single_sep_opt_matches_encode_single_sep_for_small_shards() {
 
     assert!(!r.parallel_policy(8 * 1024, 4).use_parallel);
 
-    for i in 0..10 {
-        r.encode_single_sep(i, &data[i], &mut expected_parity)
+    for (i, shard) in data.iter().enumerate().take(10) {
+        r.encode_single_sep(i, shard, &mut expected_parity)
             .unwrap();
-        r.encode_single_sep_opt(i, &data[i], &mut actual_parity)
+        r.encode_single_sep_opt(i, shard, &mut actual_parity)
             .unwrap();
     }
 
@@ -1276,10 +1276,10 @@ fn test_encode_single_sep_opt_matches_encode_single_sep_for_large_shards() {
 
     assert!(r.parallel_policy(256 * 1024, 4).use_parallel);
 
-    for i in 0..10 {
-        r.encode_single_sep(i, &data[i], &mut expected_parity)
+    for (i, shard) in data.iter().enumerate().take(10) {
+        r.encode_single_sep(i, shard, &mut expected_parity)
             .unwrap();
-        r.encode_single_sep_opt(i, &data[i], &mut actual_parity)
+        r.encode_single_sep_opt(i, shard, &mut actual_parity)
             .unwrap();
     }
 
@@ -2163,8 +2163,8 @@ quickcheck! {
             let mut parity_refs =
                 convert_2D_slices!(parity_shards =>to_mut_vec &mut [u8]);
 
-            for i in 0..data {
-                r.encode_single_sep(i, data_refs[i], &mut parity_refs).unwrap();
+            for (i, shard) in data_refs.iter().enumerate().take(data) {
+                r.encode_single_sep(i, shard, &mut parity_refs).unwrap();
             }
         }
 
@@ -2196,8 +2196,8 @@ quickcheck! {
         {
             let (data_shards, parity_shards) = shards.split_at_mut(data);
 
-            for i in 0..data {
-                r.encode_single_sep(i, &data_shards[i], parity_shards).unwrap();
+            for (i, shard) in data_shards.iter().enumerate().take(data) {
+                r.encode_single_sep(i, shard, parity_shards).unwrap();
             }
         }
 
@@ -3615,8 +3615,8 @@ fn test_encode_single_sep() {
         {
             let (data, parity) = shards_copy.split_at_mut(10);
 
-            for i in 0..10 {
-                r.encode_single_sep(i, &data[i], parity).unwrap();
+            for (i, shard) in data.iter().enumerate().take(10) {
+                r.encode_single_sep(i, shard, parity).unwrap();
             }
         }
         assert!(r.verify(&shards).unwrap());
@@ -3641,8 +3641,8 @@ fn test_encode_single_sep() {
 
             r.encode(&mut slice_refs).unwrap();
 
-            for i in 0..10 {
-                r.encode_single_sep(i, data_copy_refs[i], &mut parity_copy_refs)
+            for (i, shard) in data_copy_refs.iter().enumerate().take(10) {
+                r.encode_single_sep(i, shard, &mut parity_copy_refs)
                     .unwrap();
             }
         }
@@ -3711,8 +3711,8 @@ fn test_encode_single_sep_error_handling() {
         {
             let (data, parity) = shards.split_at_mut(10);
 
-            for i in 0..10 {
-                r.encode_single_sep(i, &data[i], parity).unwrap();
+            for (i, shard) in data.iter().enumerate().take(10) {
+                r.encode_single_sep(i, shard, parity).unwrap();
             }
 
             assert_eq!(
@@ -3766,8 +3766,8 @@ fn test_encode_single_sep_error_handling() {
             let data_refs = convert_2D_slices!(data=>to_mut_vec &[u8]);
             let mut parity_refs = convert_2D_slices!(parity=>to_mut_vec &mut [u8]);
 
-            for i in 0..10 {
-                r.encode_single_sep(i, data_refs[i], &mut parity_refs)
+            for (i, shard) in data_refs.iter().enumerate().take(10) {
+                r.encode_single_sep(i, shard, &mut parity_refs)
                     .unwrap();
             }
 

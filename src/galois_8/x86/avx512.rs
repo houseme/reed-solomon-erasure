@@ -8,14 +8,29 @@ extern crate alloc;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 #[inline]
+fn load_table_halves(c: u8) -> (&'static [u8; 16], &'static [u8; 16]) {
+    (
+        &super::super::MUL_TABLE_LOW[c as usize],
+        &super::super::MUL_TABLE_HIGH[c as usize],
+    )
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[inline]
 #[target_feature(enable = "avx512f,avx512bw")]
-unsafe fn load_tables(c: u8) -> (core::arch::x86_64::__m512i, core::arch::x86_64::__m512i) {
+unsafe fn load_tables(
+    low: &[u8; 16],
+    high: &[u8; 16],
+) -> (core::arch::x86_64::__m512i, core::arch::x86_64::__m512i) {
     use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm512_broadcast_i32x4};
 
-    let low128: __m128i =
-        unsafe { _mm_loadu_si128(super::super::MUL_TABLE_LOW[c as usize].as_ptr().cast()) };
-    let high128: __m128i =
-        unsafe { _mm_loadu_si128(super::super::MUL_TABLE_HIGH[c as usize].as_ptr().cast()) };
+    let low128: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
+    let high128: __m128i = unsafe { _mm_loadu_si128(high.as_ptr().cast()) };
 
     (
         _mm512_broadcast_i32x4(low128),
@@ -66,24 +81,32 @@ unsafe fn rust_avx512_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         _mm512_srli_epi64, _mm512_storeu_si512, _mm512_xor_si512,
     };
 
-    let (low_tbl, high_tbl): (__m512i, __m512i) = unsafe { load_tables(c) };
+    let (low_half, high_half) = load_table_halves(c);
+    let (low_tbl, high_tbl): (__m512i, __m512i) = unsafe { load_tables(low_half, high_half) };
     let nibble_mask: __m512i = _mm512_set1_epi8(0x0f);
+    let load = |chunk: &[u8]| unsafe { _mm512_loadu_si512(chunk.as_ptr().cast()) };
+    let store = |chunk: &mut [u8], value: __m512i| unsafe {
+        _mm512_storeu_si512(chunk.as_mut_ptr().cast(), value)
+    };
 
     let bytes_done = input.len() & !63usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm512_loadu_si512(input.as_ptr().add(offset).cast()) };
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
+    for (input_chunk, out_chunk) in simd_input
+        .chunks_exact(64)
+        .zip(simd_out.chunks_exact_mut(64))
+    {
+        let input_vec = load(input_chunk);
         let low = _mm512_and_si512(input_vec, nibble_mask);
         let high = _mm512_and_si512(_mm512_srli_epi64::<4>(input_vec), nibble_mask);
         let result = _mm512_xor_si512(
             _mm512_shuffle_epi8(low_tbl, low),
             _mm512_shuffle_epi8(high_tbl, high),
         );
-        unsafe { _mm512_storeu_si512(out.as_mut_ptr().add(offset).cast(), result) };
-        offset += 64;
+        store(out_chunk, result);
     }
 
-    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_pure_rust(c, tail_input, tail_out);
 }
 
 #[cfg(all(
@@ -99,30 +122,33 @@ unsafe fn rust_avx512_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         _mm512_srli_epi64, _mm512_storeu_si512, _mm512_xor_si512,
     };
 
-    let (low_tbl, high_tbl): (__m512i, __m512i) = unsafe { load_tables(c) };
+    let (low_half, high_half) = load_table_halves(c);
+    let (low_tbl, high_tbl): (__m512i, __m512i) = unsafe { load_tables(low_half, high_half) };
     let nibble_mask: __m512i = _mm512_set1_epi8(0x0f);
+    let load = |chunk: &[u8]| unsafe { _mm512_loadu_si512(chunk.as_ptr().cast()) };
+    let store = |chunk: &mut [u8], value: __m512i| unsafe {
+        _mm512_storeu_si512(chunk.as_mut_ptr().cast(), value)
+    };
 
     let bytes_done = input.len() & !63usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm512_loadu_si512(input.as_ptr().add(offset).cast()) };
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
+    for (input_chunk, out_chunk) in simd_input
+        .chunks_exact(64)
+        .zip(simd_out.chunks_exact_mut(64))
+    {
+        let input_vec = load(input_chunk);
         let low = _mm512_and_si512(input_vec, nibble_mask);
         let high = _mm512_and_si512(_mm512_srli_epi64::<4>(input_vec), nibble_mask);
         let product = _mm512_xor_si512(
             _mm512_shuffle_epi8(low_tbl, low),
             _mm512_shuffle_epi8(high_tbl, high),
         );
-        let out_vec = unsafe { _mm512_loadu_si512(out.as_ptr().add(offset).cast()) };
-        unsafe {
-            _mm512_storeu_si512(
-                out.as_mut_ptr().add(offset).cast(),
-                _mm512_xor_si512(out_vec, product),
-            )
-        };
-        offset += 64;
+        let out_vec = load(out_chunk);
+        store(out_chunk, _mm512_xor_si512(out_vec, product));
     }
 
-    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_xor_pure_rust(c, tail_input, tail_out);
 }
 
 #[cfg(all(

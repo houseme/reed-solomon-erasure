@@ -3,7 +3,7 @@
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
 
-pub const BASE_SEED: u64 = 0xEC5E_ED20_2605_24;
+pub const BASE_SEED: u64 = 0x00EC_5EED_2026_0524;
 
 #[derive(Clone, Copy, Debug)]
 pub struct BenchCase {

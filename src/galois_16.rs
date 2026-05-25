@@ -168,6 +168,7 @@ impl Mul<u8> for Element {
 impl Div for Element {
     type Output = Element;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Element {
         self * rhs.inverse()
     }

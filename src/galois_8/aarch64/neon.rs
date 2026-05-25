@@ -63,9 +63,16 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         );
     }
 
-    let mut offset = 0usize;
-    while offset < bytes_done_unrolled {
-        let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
+    let (unrolled_input, remainder_input) = simd_input.split_at(bytes_done_unrolled);
+    let (unrolled_out, remainder_out) = simd_out.split_at_mut(bytes_done_unrolled);
+
+    for (input_chunk, out_chunk) in unrolled_input
+        .chunks_exact(64)
+        .zip(unrolled_out.chunks_exact_mut(64))
+    {
+        let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input_chunk.as_ptr()) };
         let input0 = inputs.0;
         let input1 = inputs.1;
         let input2 = inputs.2;
@@ -88,23 +95,24 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 
         unsafe {
             vst1q_u8_x4(
-                out.as_mut_ptr().add(offset),
+                out_chunk.as_mut_ptr(),
                 uint8x16x4_t(result0, result1, result2, result3),
             )
         };
-        offset += 64;
     }
 
-    while offset < bytes_done {
-        let input_vec = unsafe { vld1q_u8(input.as_ptr().add(offset)) };
+    for (input_chunk, out_chunk) in remainder_input
+        .chunks_exact(16)
+        .zip(remainder_out.chunks_exact_mut(16))
+    {
+        let input_vec = unsafe { vld1q_u8(input_chunk.as_ptr()) };
         let low = vandq_u8(input_vec, nibble_mask);
         let high = vshrq_n_u8::<4>(input_vec);
         let result: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low), vqtbl1q_u8(high_tbl, high));
-        unsafe { vst1q_u8(out.as_mut_ptr().add(offset), result) };
-        offset += 16;
+        unsafe { vst1q_u8(out_chunk.as_mut_ptr(), result) };
     }
 
-    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_pure_rust(c, tail_input, tail_out);
 }
 
 #[cfg(all(
@@ -157,10 +165,17 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         );
     }
 
-    let mut offset = 0usize;
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
+    let (unrolled_input, remainder_input) = simd_input.split_at(bytes_done_unrolled);
+    let (unrolled_out, remainder_out) = simd_out.split_at_mut(bytes_done_unrolled);
+
     if unroll4 {
-        while offset < bytes_done_unrolled {
-            let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input.as_ptr().add(offset)) };
+        for (input_chunk, out_chunk) in unrolled_input
+            .chunks_exact(64)
+            .zip(unrolled_out.chunks_exact_mut(64))
+        {
+            let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input_chunk.as_ptr()) };
             let input0 = inputs.0;
             let input1 = inputs.1;
             let input2 = inputs.2;
@@ -184,10 +199,10 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
                 veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
             let product3: uint8x16_t =
                 veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
-            let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out.as_ptr().add(offset)) };
+            let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out_chunk.as_ptr()) };
             unsafe {
                 vst1q_u8_x4(
-                    out.as_mut_ptr().add(offset),
+                    out_chunk.as_mut_ptr(),
                     uint8x16x4_t(
                         veorq_u8(outs.0, product0),
                         veorq_u8(outs.1, product1),
@@ -196,11 +211,13 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
                     ),
                 )
             };
-            offset += 64;
         }
     } else {
-        while offset < bytes_done_unrolled {
-            let inputs: uint8x16x2_t = unsafe { vld1q_u8_x2(input.as_ptr().add(offset)) };
+        for (input_chunk, out_chunk) in unrolled_input
+            .chunks_exact(32)
+            .zip(unrolled_out.chunks_exact_mut(32))
+        {
+            let inputs: uint8x16x2_t = unsafe { vld1q_u8_x2(input_chunk.as_ptr()) };
             let input0 = inputs.0;
             let input1 = inputs.1;
 
@@ -215,26 +232,27 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
             let product1: uint8x16_t =
                 veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
 
-            let outs: uint8x16x2_t = unsafe { vld1q_u8_x2(out.as_ptr().add(offset)) };
+            let outs: uint8x16x2_t = unsafe { vld1q_u8_x2(out_chunk.as_ptr()) };
             unsafe {
                 vst1q_u8_x2(
-                    out.as_mut_ptr().add(offset),
+                    out_chunk.as_mut_ptr(),
                     uint8x16x2_t(veorq_u8(outs.0, product0), veorq_u8(outs.1, product1)),
                 )
             };
-            offset += 32;
         }
     }
 
-    while offset < bytes_done {
-        let input_vec = unsafe { vld1q_u8(input.as_ptr().add(offset)) };
+    for (input_chunk, out_chunk) in remainder_input
+        .chunks_exact(16)
+        .zip(remainder_out.chunks_exact_mut(16))
+    {
+        let input_vec = unsafe { vld1q_u8(input_chunk.as_ptr()) };
         let low = vandq_u8(input_vec, nibble_mask);
         let high = vshrq_n_u8::<4>(input_vec);
         let product: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low), vqtbl1q_u8(high_tbl, high));
-        let out_vec = unsafe { vld1q_u8(out.as_ptr().add(offset)) };
-        unsafe { vst1q_u8(out.as_mut_ptr().add(offset), veorq_u8(out_vec, product)) };
-        offset += 16;
+        let out_vec = unsafe { vld1q_u8(out_chunk.as_ptr()) };
+        unsafe { vst1q_u8(out_chunk.as_mut_ptr(), veorq_u8(out_vec, product)) };
     }
 
-    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    super::super::scalar::mul_slice_xor_pure_rust(c, tail_input, tail_out);
 }
