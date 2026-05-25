@@ -1,2 +1,4 @@
 /target/
 docs
+scripts/__pycache__/
+*.pyc

@@ -1,0 +1,1956 @@
+{
+  "date_utc": "2026-05-25",
+  "machine_slug": "amd-epyc-9v45",
+  "hostname": "rustfs-jumpbox",
+  "arch": "x86_64",
+  "lscpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  16\nOn-line CPU(s) list:                     0-15\nVendor ID:                               AuthenticAMD\nBIOS Vendor ID:                          Advanced Micro Devices, Inc.\nModel name:                              AMD EPYC 9V45 96-Core Processor\nBIOS Model name:                         AMD EPYC 9V45 96-Core Processor                 None CPU @ 2.6GHz\nBIOS CPU family:                         107\nCPU family:                              26\nModel:                                   2\nThread(s) per core:                      1\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                1\nBogoMIPS:                                5192.24\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves user_shstk avx_vnni avx512_bf16 clzero xsaveerptr rdpru arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                64 MiB (2 instances)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-15\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n",
+  "criterion_galois_backend": [
+    {
+      "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_1048576",
+      "mean_ns": 18963.209430904695,
+      "lower_ns": 18875.803377018186,
+      "upper_ns": 19079.436400810682
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_4194304",
+      "mean_ns": 86771.6844517492,
+      "lower_ns": 86518.58097014925,
+      "upper_ns": 87049.89590697308
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_65536",
+      "mean_ns": 1013.3095313206799,
+      "lower_ns": 1011.5447496576382,
+      "upper_ns": 1015.2261262617812
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_1048576",
+      "mean_ns": 19073.300227518957,
+      "lower_ns": 18672.375067172263,
+      "upper_ns": 19541.011957385337
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_4194304",
+      "mean_ns": 77625.0343470576,
+      "lower_ns": 76001.25334788937,
+      "upper_ns": 79494.48898939489
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_65536",
+      "mean_ns": 706.8544872165567,
+      "lower_ns": 688.3780666187298,
+      "upper_ns": 728.0463741480295
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_1048576",
+      "mean_ns": 18969.18191105809,
+      "lower_ns": 18923.682930211748,
+      "upper_ns": 19016.913543377406
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_4194304",
+      "mean_ns": 85037.71449913734,
+      "lower_ns": 84079.5034673913,
+      "upper_ns": 86137.14036749481
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_65536",
+      "mean_ns": 769.4626883030311,
+      "lower_ns": 766.2429799033898,
+      "upper_ns": 772.4548345990537
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_1048576",
+      "mean_ns": 18690.748374122722,
+      "lower_ns": 18643.36958480913,
+      "upper_ns": 18742.894664953103
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_4194304",
+      "mean_ns": 78056.22546263228,
+      "lower_ns": 77747.81113791336,
+      "upper_ns": 78325.5235495949
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_65536",
+      "mean_ns": 682.2372284628029,
+      "lower_ns": 676.1521403663058,
+      "upper_ns": 689.0268707354534
+    },
+    {
+      "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_1048576",
+      "mean_ns": 215476.76881362888,
+      "lower_ns": 209971.59200191573,
+      "upper_ns": 221660.6088204707
+    },
+    {
+      "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_4194304",
+      "mean_ns": 893586.3454347042,
+      "lower_ns": 865968.2127318272,
+      "upper_ns": 923756.9837258297
+    },
+    {
+      "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_65536",
+      "mean_ns": 16247.861363887825,
+      "lower_ns": 16206.231918379504,
+      "upper_ns": 16307.846362398399
+    },
+    {
+      "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_1048576",
+      "mean_ns": 1206077.5201661708,
+      "lower_ns": 1188974.3311160717,
+      "upper_ns": 1233095.2915014261
+    },
+    {
+      "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_4194304",
+      "mean_ns": 4786525.721240079,
+      "lower_ns": 4764415.460996527,
+      "upper_ns": 4816151.693535961
+    },
+    {
+      "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_65536",
+      "mean_ns": 75580.78219903326,
+      "lower_ns": 74577.24112997256,
+      "upper_ns": 77419.81209713242
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_1048576",
+      "mean_ns": 21149.42053837482,
+      "lower_ns": 20650.20181723485,
+      "upper_ns": 21596.568692487373
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_4194304",
+      "mean_ns": 89819.85653151028,
+      "lower_ns": 87534.25762887004,
+      "upper_ns": 92238.8275461457
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_65536",
+      "mean_ns": 1013.642376160364,
+      "lower_ns": 992.7983179781829,
+      "upper_ns": 1037.387570743088
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_1048576",
+      "mean_ns": 18319.85580880231,
+      "lower_ns": 18203.579812890814,
+      "upper_ns": 18445.409094462484
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_4194304",
+      "mean_ns": 68155.77877965043,
+      "lower_ns": 67714.13165106117,
+      "upper_ns": 68691.24708177279
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_65536",
+      "mean_ns": 873.7336522963448,
+      "lower_ns": 856.1462848004096,
+      "upper_ns": 894.0908724009108
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_1048576",
+      "mean_ns": 19591.7841110769,
+      "lower_ns": 19444.580532892036,
+      "upper_ns": 19747.66414451628
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_4194304",
+      "mean_ns": 87889.80645089285,
+      "lower_ns": 87594.79985904592,
+      "upper_ns": 88258.80209897266
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_65536",
+      "mean_ns": 753.0228072653547,
+      "lower_ns": 751.576018023467,
+      "upper_ns": 754.6755254066304
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_1048576",
+      "mean_ns": 19760.63910308833,
+      "lower_ns": 19727.401636904764,
+      "upper_ns": 19796.82813705357
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_4194304",
+      "mean_ns": 81810.88762308612,
+      "lower_ns": 81666.80743731561,
+      "upper_ns": 81955.7806417685
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_65536",
+      "mean_ns": 730.0184184611521,
+      "lower_ns": 728.2012514716793,
+      "upper_ns": 732.0203941541187
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_1048576",
+      "mean_ns": 283115.98762506014,
+      "lower_ns": 274264.4465623497,
+      "upper_ns": 292242.81994802185
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_4194304",
+      "mean_ns": 1136901.6236064427,
+      "lower_ns": 1109200.0076470587,
+      "upper_ns": 1163038.3404693624
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_65536",
+      "mean_ns": 12976.273109306056,
+      "lower_ns": 12646.253569594866,
+      "upper_ns": 13342.38286863217
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_1048576",
+      "mean_ns": 1295926.1073148148,
+      "lower_ns": 1268812.8723194443,
+      "upper_ns": 1319608.5990555556
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_4194304",
+      "mean_ns": 5195074.843214286,
+      "lower_ns": 5067081.632142857,
+      "upper_ns": 5320247.0610625
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_65536",
+      "mean_ns": 79729.70210420087,
+      "lower_ns": 77799.87364721879,
+      "upper_ns": 81477.41023221982
+    }
+  ],
+  "release_smoke": {
+    "smoke-results-release-auto.csv": [
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "encode",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495029",
+        "throughput_mb_s": "819.5208",
+        "ns_per_iter": "305056.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "verify",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494982",
+        "throughput_mb_s": "809.4850",
+        "ns_per_iter": "308838.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "reconstruct",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494999",
+        "throughput_mb_s": "385.0652",
+        "ns_per_iter": "649240.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "reconstruct_data",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495072",
+        "throughput_mb_s": "923.2428",
+        "ns_per_iter": "270784.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "encode",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252981",
+        "throughput_mb_s": "696.5777",
+        "ns_per_iter": "14355899.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "verify",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252934",
+        "throughput_mb_s": "751.1553",
+        "ns_per_iter": "13312826.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "reconstruct",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252951",
+        "throughput_mb_s": "813.4621",
+        "ns_per_iter": "12293135.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "reconstruct_data",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004253024",
+        "throughput_mb_s": "816.0825",
+        "ns_per_iter": "12253663.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "encode",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121845",
+        "throughput_mb_s": "655.6239",
+        "ns_per_iter": "48808467.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "verify",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121798",
+        "throughput_mb_s": "570.0279",
+        "ns_per_iter": "56137605.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "reconstruct",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121815",
+        "throughput_mb_s": "661.9203",
+        "ns_per_iter": "48344190.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "auto",
+        "operation": "reconstruct_data",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121888",
+        "throughput_mb_s": "676.2528",
+        "ns_per_iter": "47319585.00"
+      }
+    ],
+    "smoke-results-release-rust-avx2.csv": [
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "encode",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495029",
+        "throughput_mb_s": "783.7146",
+        "ns_per_iter": "318993.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "verify",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494982",
+        "throughput_mb_s": "764.5517",
+        "ns_per_iter": "326989.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "reconstruct",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494999",
+        "throughput_mb_s": "897.1281",
+        "ns_per_iter": "278667.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "reconstruct_data",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495072",
+        "throughput_mb_s": "890.8115",
+        "ns_per_iter": "280643.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "encode",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252981",
+        "throughput_mb_s": "675.1893",
+        "ns_per_iter": "14810662.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "verify",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252934",
+        "throughput_mb_s": "742.1784",
+        "ns_per_iter": "13473849.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "reconstruct",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252951",
+        "throughput_mb_s": "807.4775",
+        "ns_per_iter": "12384246.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "reconstruct_data",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004253024",
+        "throughput_mb_s": "810.6625",
+        "ns_per_iter": "12335590.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "encode",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121845",
+        "throughput_mb_s": "644.6163",
+        "ns_per_iter": "49641932.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "verify",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121798",
+        "throughput_mb_s": "547.7860",
+        "ns_per_iter": "58416974.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "reconstruct",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121815",
+        "throughput_mb_s": "632.7589",
+        "ns_per_iter": "50572183.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx2",
+        "backend_id": "RustAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx2",
+        "operation": "reconstruct_data",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121888",
+        "throughput_mb_s": "655.1649",
+        "ns_per_iter": "48842663.67"
+      }
+    ],
+    "smoke-results-release-rust-avx512.csv": [
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "encode",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495029",
+        "throughput_mb_s": "788.5838",
+        "ns_per_iter": "317024.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "verify",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494982",
+        "throughput_mb_s": "802.0035",
+        "ns_per_iter": "311719.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "reconstruct",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494999",
+        "throughput_mb_s": "878.1297",
+        "ns_per_iter": "284696.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "reconstruct_data",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495072",
+        "throughput_mb_s": "913.7572",
+        "ns_per_iter": "273595.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "encode",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252981",
+        "throughput_mb_s": "671.9964",
+        "ns_per_iter": "14881031.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "verify",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252934",
+        "throughput_mb_s": "721.6624",
+        "ns_per_iter": "13856895.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "reconstruct",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252951",
+        "throughput_mb_s": "780.9230",
+        "ns_per_iter": "12805359.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "reconstruct_data",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004253024",
+        "throughput_mb_s": "792.5275",
+        "ns_per_iter": "12617859.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "encode",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121845",
+        "throughput_mb_s": "650.4544",
+        "ns_per_iter": "49196379.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "verify",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121798",
+        "throughput_mb_s": "562.6804",
+        "ns_per_iter": "56870647.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "reconstruct",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121815",
+        "throughput_mb_s": "654.2941",
+        "ns_per_iter": "48907670.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-avx512",
+        "backend_id": "RustAvx512",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-avx512",
+        "operation": "reconstruct_data",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121888",
+        "throughput_mb_s": "670.4574",
+        "ns_per_iter": "47728607.33"
+      }
+    ],
+    "smoke-results-release-rust-gfni-avx2.csv": [
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "encode",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495029",
+        "throughput_mb_s": "809.8259",
+        "ns_per_iter": "308708.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "verify",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494982",
+        "throughput_mb_s": "805.8433",
+        "ns_per_iter": "310234.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "reconstruct",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494999",
+        "throughput_mb_s": "915.7576",
+        "ns_per_iter": "272998.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "reconstruct_data",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495072",
+        "throughput_mb_s": "929.2103",
+        "ns_per_iter": "269045.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "encode",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252981",
+        "throughput_mb_s": "690.8135",
+        "ns_per_iter": "14475687.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "verify",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252934",
+        "throughput_mb_s": "730.0862",
+        "ns_per_iter": "13697012.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "reconstruct",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252951",
+        "throughput_mb_s": "796.2677",
+        "ns_per_iter": "12558590.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "reconstruct_data",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004253024",
+        "throughput_mb_s": "804.3492",
+        "ns_per_iter": "12432411.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "encode",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121845",
+        "throughput_mb_s": "652.0733",
+        "ns_per_iter": "49074239.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "verify",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121798",
+        "throughput_mb_s": "530.7560",
+        "ns_per_iter": "60291360.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "reconstruct",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121815",
+        "throughput_mb_s": "633.2470",
+        "ns_per_iter": "50533204.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "rust-gfni-avx2",
+        "backend_id": "RustGfniAvx2",
+        "backend_kind": "RustSimd",
+        "backend_override": "rust-gfni-avx2",
+        "operation": "reconstruct_data",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121888",
+        "throughput_mb_s": "629.2000",
+        "ns_per_iter": "50858234.00"
+      }
+    ],
+    "smoke-results-release-scalar.csv": [
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "encode",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495029",
+        "throughput_mb_s": "566.5123",
+        "ns_per_iter": "441296.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "verify",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494982",
+        "throughput_mb_s": "439.9578",
+        "ns_per_iter": "568236.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "reconstruct",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494999",
+        "throughput_mb_s": "481.4794",
+        "ns_per_iter": "519233.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "reconstruct_data",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495072",
+        "throughput_mb_s": "489.7323",
+        "ns_per_iter": "510483.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "encode",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252981",
+        "throughput_mb_s": "402.5467",
+        "ns_per_iter": "24841839.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "verify",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252934",
+        "throughput_mb_s": "305.2524",
+        "ns_per_iter": "32759773.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "reconstruct",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252951",
+        "throughput_mb_s": "373.0981",
+        "ns_per_iter": "26802604.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "reconstruct_data",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004253024",
+        "throughput_mb_s": "375.7557",
+        "ns_per_iter": "26613034.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "encode",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121845",
+        "throughput_mb_s": "189.4842",
+        "ns_per_iter": "168879507.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "verify",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121798",
+        "throughput_mb_s": "107.7027",
+        "ns_per_iter": "297114172.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "reconstruct",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121815",
+        "throughput_mb_s": "175.8722",
+        "ns_per_iter": "181950294.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "scalar-rust",
+        "backend_id": "ScalarRust",
+        "backend_kind": "Scalar",
+        "backend_override": "scalar",
+        "operation": "reconstruct_data",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121888",
+        "throughput_mb_s": "175.4626",
+        "ns_per_iter": "182375016.00"
+      }
+    ],
+    "smoke-results-release-simd-c.csv": [
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "encode",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495029",
+        "throughput_mb_s": "270.9814",
+        "ns_per_iter": "922572.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "verify",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494982",
+        "throughput_mb_s": "163.6582",
+        "ns_per_iter": "1527574.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "reconstruct",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726494999",
+        "throughput_mb_s": "168.7785",
+        "ns_per_iter": "1481231.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "reconstruct_data",
+        "data_shards": "4",
+        "parity_shards": "2",
+        "shard_size": "65536",
+        "seed": "65406575726495072",
+        "throughput_mb_s": "169.3027",
+        "ns_per_iter": "1476644.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "encode",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252981",
+        "throughput_mb_s": "162.4933",
+        "ns_per_iter": "61540982.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "verify",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252934",
+        "throughput_mb_s": "93.4602",
+        "ns_per_iter": "106997414.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "reconstruct",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004252951",
+        "throughput_mb_s": "120.7656",
+        "ns_per_iter": "82805050.67"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "reconstruct_data",
+        "data_shards": "10",
+        "parity_shards": "4",
+        "shard_size": "1048576",
+        "seed": "64843600004253024",
+        "throughput_mb_s": "120.8034",
+        "ns_per_iter": "82779132.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "encode",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121845",
+        "throughput_mb_s": "49.2480",
+        "ns_per_iter": "649772974.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "verify",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121798",
+        "throughput_mb_s": "25.4979",
+        "ns_per_iter": "1255006876.00"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "reconstruct",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121815",
+        "throughput_mb_s": "44.1712",
+        "ns_per_iter": "724453243.33"
+      },
+      {
+        "git_revision": "a47ec8f",
+        "target_triple": "x86_64-linux-unknown",
+        "features": "std|simd-accel",
+        "backend": "simd-c",
+        "backend_id": "SimdC",
+        "backend_kind": "SimdC",
+        "backend_override": "simd-c",
+        "operation": "reconstruct_data",
+        "data_shards": "32",
+        "parity_shards": "16",
+        "shard_size": "1048576",
+        "seed": "57525336509121888",
+        "throughput_mb_s": "44.3302",
+        "ns_per_iter": "721854743.33"
+      }
+    ]
+  },
+  "rankings_10x4_1m": {
+    "encode": [
+      {
+        "backend": "rust-avx512",
+        "backend_override": "auto",
+        "throughput_mb_s": 696.5777,
+        "source": "smoke-results-release-auto.csv"
+      },
+      {
+        "backend": "rust-gfni-avx2",
+        "backend_override": "rust-gfni-avx2",
+        "throughput_mb_s": 690.8135,
+        "source": "smoke-results-release-rust-gfni-avx2.csv"
+      },
+      {
+        "backend": "rust-avx2",
+        "backend_override": "rust-avx2",
+        "throughput_mb_s": 675.1893,
+        "source": "smoke-results-release-rust-avx2.csv"
+      },
+      {
+        "backend": "rust-avx512",
+        "backend_override": "rust-avx512",
+        "throughput_mb_s": 671.9964,
+        "source": "smoke-results-release-rust-avx512.csv"
+      },
+      {
+        "backend": "scalar-rust",
+        "backend_override": "scalar",
+        "throughput_mb_s": 402.5467,
+        "source": "smoke-results-release-scalar.csv"
+      },
+      {
+        "backend": "simd-c",
+        "backend_override": "simd-c",
+        "throughput_mb_s": 162.4933,
+        "source": "smoke-results-release-simd-c.csv"
+      }
+    ],
+    "verify": [
+      {
+        "backend": "rust-avx512",
+        "backend_override": "auto",
+        "throughput_mb_s": 751.1553,
+        "source": "smoke-results-release-auto.csv"
+      },
+      {
+        "backend": "rust-avx2",
+        "backend_override": "rust-avx2",
+        "throughput_mb_s": 742.1784,
+        "source": "smoke-results-release-rust-avx2.csv"
+      },
+      {
+        "backend": "rust-gfni-avx2",
+        "backend_override": "rust-gfni-avx2",
+        "throughput_mb_s": 730.0862,
+        "source": "smoke-results-release-rust-gfni-avx2.csv"
+      },
+      {
+        "backend": "rust-avx512",
+        "backend_override": "rust-avx512",
+        "throughput_mb_s": 721.6624,
+        "source": "smoke-results-release-rust-avx512.csv"
+      },
+      {
+        "backend": "scalar-rust",
+        "backend_override": "scalar",
+        "throughput_mb_s": 305.2524,
+        "source": "smoke-results-release-scalar.csv"
+      },
+      {
+        "backend": "simd-c",
+        "backend_override": "simd-c",
+        "throughput_mb_s": 93.4602,
+        "source": "smoke-results-release-simd-c.csv"
+      }
+    ],
+    "reconstruct": [
+      {
+        "backend": "rust-avx512",
+        "backend_override": "auto",
+        "throughput_mb_s": 813.4621,
+        "source": "smoke-results-release-auto.csv"
+      },
+      {
+        "backend": "rust-avx2",
+        "backend_override": "rust-avx2",
+        "throughput_mb_s": 807.4775,
+        "source": "smoke-results-release-rust-avx2.csv"
+      },
+      {
+        "backend": "rust-gfni-avx2",
+        "backend_override": "rust-gfni-avx2",
+        "throughput_mb_s": 796.2677,
+        "source": "smoke-results-release-rust-gfni-avx2.csv"
+      },
+      {
+        "backend": "rust-avx512",
+        "backend_override": "rust-avx512",
+        "throughput_mb_s": 780.923,
+        "source": "smoke-results-release-rust-avx512.csv"
+      },
+      {
+        "backend": "scalar-rust",
+        "backend_override": "scalar",
+        "throughput_mb_s": 373.0981,
+        "source": "smoke-results-release-scalar.csv"
+      },
+      {
+        "backend": "simd-c",
+        "backend_override": "simd-c",
+        "throughput_mb_s": 120.7656,
+        "source": "smoke-results-release-simd-c.csv"
+      }
+    ],
+    "reconstruct_data": [
+      {
+        "backend": "rust-avx512",
+        "backend_override": "auto",
+        "throughput_mb_s": 816.0825,
+        "source": "smoke-results-release-auto.csv"
+      },
+      {
+        "backend": "rust-avx2",
+        "backend_override": "rust-avx2",
+        "throughput_mb_s": 810.6625,
+        "source": "smoke-results-release-rust-avx2.csv"
+      },
+      {
+        "backend": "rust-gfni-avx2",
+        "backend_override": "rust-gfni-avx2",
+        "throughput_mb_s": 804.3492,
+        "source": "smoke-results-release-rust-gfni-avx2.csv"
+      },
+      {
+        "backend": "rust-avx512",
+        "backend_override": "rust-avx512",
+        "throughput_mb_s": 792.5275,
+        "source": "smoke-results-release-rust-avx512.csv"
+      },
+      {
+        "backend": "scalar-rust",
+        "backend_override": "scalar",
+        "throughput_mb_s": 375.7557,
+        "source": "smoke-results-release-scalar.csv"
+      },
+      {
+        "backend": "simd-c",
+        "backend_override": "simd-c",
+        "throughput_mb_s": 120.8034,
+        "source": "smoke-results-release-simd-c.csv"
+      }
+    ]
+  },
+  "criterion_rankings": {
+    "galois_mul_slice": [
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 682.2372284628029
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 706.8544872165567
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 730.0184184611521
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 753.0228072653547
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 769.4626883030311
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 873.7336522963448
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 1013.3095313206799
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 1013.642376160364
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 12976.273109306056
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 16247.861363887825
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 18319.85580880231
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 18690.748374122722
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 18963.209430904695
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 18969.18191105809
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 19073.300227518957
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 19591.7841110769
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 19760.63910308833
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 21149.42053837482
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 68155.77877965043
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 75580.78219903326
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 77625.0343470576
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 78056.22546263228
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 79729.70210420087
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 81810.88762308612
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 85037.71449913734
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 86771.6844517492
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 87889.80645089285
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 89819.85653151028
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 215476.76881362888
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 283115.98762506014
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 893586.3454347042
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 1136901.6236064427
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1206077.5201661708
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1295926.1073148148
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 4786525.721240079
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 5195074.843214286
+      }
+    ],
+    "galois_mul_slice_xor": [
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 730.0184184611521
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 753.0228072653547
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 873.7336522963448
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 1013.642376160364
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 12976.273109306056
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 18319.85580880231
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 19591.7841110769
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 19760.63910308833
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 21149.42053837482
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 68155.77877965043
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 79729.70210420087
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 81810.88762308612
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 87889.80645089285
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 89819.85653151028
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 283115.98762506014
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 1136901.6236064427
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1295926.1073148148
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 5195074.843214286
+      }
+    ]
+  },
+  "recommended_default_priority": {
+    "priority_order": [
+      "rust-avx512",
+      "rust-gfni-avx2",
+      "rust-avx2",
+      "scalar",
+      "simd-c"
+    ],
+    "scored_backends": [
+      {
+        "backend_override": "rust-avx512",
+        "score": 8.9781
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "score": 8.5821
+      },
+      {
+        "backend_override": "rust-avx2",
+        "score": 8.4955
+      },
+      {
+        "backend_override": "scalar",
+        "score": 2.7985
+      },
+      {
+        "backend_override": "simd-c",
+        "score": 0.8894
+      }
+    ],
+    "rationale": [
+      "Release smoke results for 10x4_1m are weighted most heavily.",
+      "Reconstruct and reconstruct_data are weighted above encode.",
+      "Criterion mul_slice and mul_slice_xor at 1 MiB and 4 MiB break close ties.",
+      "The recommendation is benchmark-driven and may differ from the current runtime dispatch order."
+    ],
+    "current_runtime_priority_x86": [
+      "rust-avx2",
+      "rust-avx512",
+      "rust-ssse3",
+      "simd-c",
+      "scalar"
+    ],
+    "diverges_from_current_runtime_priority_x86": true
+  }
+}

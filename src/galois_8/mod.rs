@@ -637,13 +637,13 @@ mod tests {
         {
             #[cfg(all(feature = "std", target_arch = "x86_64"))]
             {
-                if std::is_x86_feature_detected!("avx512f")
+                if std::is_x86_feature_detected!("avx2") {
+                    assert_eq!(active_backend_name(), "rust-avx2");
+                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+                } else if std::is_x86_feature_detected!("avx512f")
                     && std::is_x86_feature_detected!("avx512bw")
                 {
                     assert_eq!(active_backend_name(), "rust-avx512");
-                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
-                } else if std::is_x86_feature_detected!("avx2") {
-                    assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("ssse3") {
                     assert_eq!(active_backend_name(), "rust-ssse3");
@@ -759,6 +759,13 @@ mod tests {
     ))]
     #[test]
     fn test_x86_cross_backend_conformance_matrix() {
+        let has_sse2 = std::is_x86_feature_detected!("sse2");
+        let has_ssse3 = std::is_x86_feature_detected!("ssse3");
+        let has_avx2 = std::is_x86_feature_detected!("avx2");
+        let has_avx512 =
+            std::is_x86_feature_detected!("avx512f") && std::is_x86_feature_detected!("avx512bw");
+        let has_gfni = std::is_x86_feature_detected!("gfni") && has_avx2;
+
         let lengths = [
             0usize, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 255, 1024, 10_003,
         ];
@@ -772,27 +779,35 @@ mod tests {
                 let mut scalar = vec![0; len];
                 mul_slice_scalar_for_test(c, &input, &mut scalar);
 
-                if cfg!(rse_simd_c_build_baseline) {
+                if cfg!(rse_simd_c_build_baseline) && has_sse2 {
                     let mut simd_c = vec![0; len];
                     legacy::simd_c::simd_c_mul_slice(c, &input, &mut simd_c);
                     assert_eq!(scalar, simd_c, "simd-c mismatch len={len} coeff={c}");
                 }
 
-                let mut ssse3 = vec![0; len];
-                x86::ssse3::rust_ssse3_mul_slice(c, &input, &mut ssse3);
-                assert_eq!(scalar, ssse3, "ssse3 mismatch len={len} coeff={c}");
+                if has_ssse3 {
+                    let mut ssse3 = vec![0; len];
+                    x86::ssse3::rust_ssse3_mul_slice(c, &input, &mut ssse3);
+                    assert_eq!(scalar, ssse3, "ssse3 mismatch len={len} coeff={c}");
+                }
 
-                let mut avx2 = vec![0; len];
-                x86::avx2::rust_avx2_mul_slice(c, &input, &mut avx2);
-                assert_eq!(scalar, avx2, "avx2 mismatch len={len} coeff={c}");
+                if has_avx2 {
+                    let mut avx2 = vec![0; len];
+                    x86::avx2::rust_avx2_mul_slice(c, &input, &mut avx2);
+                    assert_eq!(scalar, avx2, "avx2 mismatch len={len} coeff={c}");
+                }
 
-                let mut avx512 = vec![0; len];
-                x86::avx512::rust_avx512_mul_slice(c, &input, &mut avx512);
-                assert_eq!(scalar, avx512, "avx512 mismatch len={len} coeff={c}");
+                if has_avx512 {
+                    let mut avx512 = vec![0; len];
+                    x86::avx512::rust_avx512_mul_slice(c, &input, &mut avx512);
+                    assert_eq!(scalar, avx512, "avx512 mismatch len={len} coeff={c}");
+                }
 
-                let mut gfni = vec![0; len];
-                x86::gfni::rust_gfni_avx2_mul_slice(c, &input, &mut gfni);
-                assert_eq!(scalar, gfni, "gfni mismatch len={len} coeff={c}");
+                if has_gfni {
+                    let mut gfni = vec![0; len];
+                    x86::gfni::rust_gfni_avx2_mul_slice(c, &input, &mut gfni);
+                    assert_eq!(scalar, gfni, "gfni mismatch len={len} coeff={c}");
+                }
             }
         }
     }
