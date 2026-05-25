@@ -521,6 +521,49 @@ fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
     assert_eq!(65536, decision.chunk_len);
 }
 
+#[cfg(all(feature = "std", target_arch = "aarch64"))]
+#[test]
+fn test_aarch64_reconstruct_parallel_policy_has_arch_specific_override() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    // SAFETY: tests run in-process and we restore this env var before returning.
+    unsafe {
+        std::env::set_var("RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES", "131072");
+        std::env::set_var("RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB", "131072");
+        std::env::set_var("RS_AARCH64_RECONSTRUCT_MAX_JOBS", "4");
+    }
+    let decision = r.reconstruct_parallel_decision_with(1024 * 1024, 2, 4, false, 8);
+    // SAFETY: cleanup for process-global env var set above.
+    unsafe {
+        std::env::remove_var("RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES");
+        std::env::remove_var("RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB");
+        std::env::remove_var("RS_AARCH64_RECONSTRUCT_MAX_JOBS");
+    }
+
+    assert!(decision.use_parallel);
+    assert_eq!(131072, decision.chunk_len);
+    assert_eq!(4, decision.jobs);
+}
+
+#[cfg(all(feature = "std", target_arch = "aarch64"))]
+#[test]
+fn test_aarch64_reconstruct_stage_policies_allow_data_parity_split() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    // SAFETY: tests run in-process and we restore these env vars before returning.
+    unsafe {
+        std::env::set_var("RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB", "65536");
+        std::env::set_var("RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB", "262144");
+    }
+    let (data_policy, parity_policy) = r.reconstruct_stage_policies_for_test(1, 2, false);
+    // SAFETY: cleanup for process-global env vars set above.
+    unsafe {
+        std::env::remove_var("RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB");
+        std::env::remove_var("RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB");
+    }
+
+    assert_eq!(65536, data_policy.min_bytes_per_job);
+    assert_eq!(262144, parity_policy.min_bytes_per_job);
+}
+
 #[cfg(all(feature = "std", not(target_arch = "aarch64")))]
 #[test]
 fn test_reconstruct_parallel_policy_default_arch_stays_on_default_chunk() {
