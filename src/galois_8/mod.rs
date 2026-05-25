@@ -703,6 +703,18 @@ mod tests {
 
         #[cfg(target_arch = "x86_64")]
         {
+            unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-gfni-avx2") };
+            let gfni_name = super::backend::runtime_override_backend_name_for_test();
+            let gfni_id = super::backend::runtime_override_backend_id_for_test();
+            if std::is_x86_feature_detected!("gfni") && std::is_x86_feature_detected!("avx2") {
+                assert_eq!(gfni_name, Some("rust-gfni-avx2"));
+                assert_eq!(gfni_id, Some(BackendId::RustGfniAvx2));
+            } else {
+                assert_eq!(gfni_name, None);
+                assert_eq!(gfni_id, None);
+            }
+            unsafe { std::env::remove_var("RSE_BACKEND_OVERRIDE") };
+
             unsafe { std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-avx512") };
             assert_eq!(
                 super::backend::runtime_override_backend_name_for_test(),

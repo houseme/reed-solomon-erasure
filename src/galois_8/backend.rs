@@ -18,6 +18,7 @@ pub enum BackendId {
     RustSsse3,
     RustAvx2,
     RustAvx512,
+    RustGfniAvx2,
 }
 
 #[derive(Copy, Clone)]
@@ -85,6 +86,20 @@ const RUST_AVX512_BACKEND: GaloisBackend = GaloisBackend {
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
+const RUST_GFNI_AVX2_BACKEND: GaloisBackend = GaloisBackend {
+    id: BackendId::RustGfniAvx2,
+    mul_slice: super::x86::gfni::rust_gfni_avx2_mul_slice,
+    mul_slice_xor: super::x86::gfni::rust_gfni_avx2_mul_slice_xor,
+    name: "rust-gfni-avx2",
+    kind: BackendKind::RustSimd,
+};
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 const RUST_SSSE3_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustSsse3,
     mul_slice: super::x86::ssse3::rust_ssse3_mul_slice,
@@ -119,6 +134,7 @@ enum BackendOverride {
     RustSsse3,
     RustAvx2,
     RustAvx512,
+    RustGfniAvx2,
 }
 
 #[cfg(all(
@@ -175,6 +191,7 @@ fn parse_backend_override(value: &str) -> Option<BackendOverride> {
         "rust-ssse3" => Some(BackendOverride::RustSsse3),
         "rust-avx2" => Some(BackendOverride::RustAvx2),
         "rust-avx512" => Some(BackendOverride::RustAvx512),
+        "rust-gfni-avx2" => Some(BackendOverride::RustGfniAvx2),
         _ => None,
     }
 }
@@ -190,6 +207,7 @@ fn runtime_override_backend() -> Option<GaloisBackend> {
         BackendOverride::RustSsse3 => rust_ssse3_override_backend(),
         BackendOverride::RustAvx2 => rust_avx2_override_backend(),
         BackendOverride::RustAvx512 => rust_avx512_override_backend(),
+        BackendOverride::RustGfniAvx2 => rust_gfni_avx2_override_backend(),
     }
 }
 
@@ -264,6 +282,17 @@ fn supports_rust_avx2(features: X86FeatureSet) -> bool {
 ))]
 fn supports_rust_avx512(features: X86FeatureSet) -> bool {
     features.avx512f && features.avx512bw
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+fn supports_rust_gfni_avx2(features: X86FeatureSet) -> bool {
+    features.gfni && features.avx2
 }
 
 #[cfg(all(
@@ -481,6 +510,28 @@ fn rust_avx512_override_backend() -> Option<GaloisBackend> {
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
+fn rust_gfni_avx2_override_backend() -> Option<GaloisBackend> {
+    supports_rust_gfni_avx2(detect_x86_features()).then_some(RUST_GFNI_AVX2_BACKEND)
+}
+
+#[cfg(feature = "std")]
+#[cfg(not(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+)))]
+fn rust_gfni_avx2_override_backend() -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(feature = "std")]
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 fn rust_avx2_override_backend() -> Option<GaloisBackend> {
     supports_rust_avx2(detect_x86_features()).then_some(RUST_AVX2_BACKEND)
 }
@@ -559,6 +610,10 @@ mod tests {
         assert!(matches!(
             parse_backend_override("rust-avx512"),
             Some(BackendOverride::RustAvx512)
+        ));
+        assert!(matches!(
+            parse_backend_override("rust-gfni-avx2"),
+            Some(BackendOverride::RustGfniAvx2)
         ));
         assert!(parse_backend_override("bogus").is_none());
     }
