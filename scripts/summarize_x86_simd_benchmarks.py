@@ -11,24 +11,30 @@ from typing import Dict, List, Tuple
 KNOWN_BACKENDS = {
     "auto",
     "scalar",
+    "rust-ssse3",
     "simd-c",
     "rust-avx2",
     "rust-avx512",
     "rust-gfni-avx2",
+    "rust-gfni-avx512",
 }
 
 SUPPORTED_RELEASE_SMOKE_FILES = {
     "smoke-results-release-auto.csv",
     "smoke-results-release-scalar.csv",
+    "smoke-results-release-rust-ssse3.csv",
     "smoke-results-release-simd-c.csv",
     "smoke-results-release-rust-avx2.csv",
     "smoke-results-release-rust-avx512.csv",
     "smoke-results-release-rust-gfni-avx2.csv",
+    "smoke-results-release-rust-gfni-avx512.csv",
 }
 
 CURRENT_RUNTIME_PRIORITY_X86 = [
-    "rust-avx2",
+    "rust-gfni-avx512",
+    "rust-gfni-avx2",
     "rust-avx512",
+    "rust-avx2",
     "rust-ssse3",
     "simd-c",
     "scalar",
@@ -100,6 +106,8 @@ def backend_rankings(machine_json: Dict) -> Dict[str, List[Dict]]:
         for file_name, records in smoke.items():
             for record in records:
                 if record["backend_override"] not in KNOWN_BACKENDS:
+                    continue
+                if record.get("override_honored", "true").lower() != "true":
                     continue
                 if (
                     record["operation"] == op
@@ -215,6 +223,7 @@ def choose_recommended_priority(machine_json: Dict) -> Dict:
 
 
 def write_machine_json(root: pathlib.Path, out_json: pathlib.Path, machine_slug: str, date_utc: str):
+    release_smoke = collect_release_smoke(root)
     report = {
         "date_utc": date_utc,
         "machine_slug": machine_slug,
@@ -222,7 +231,13 @@ def write_machine_json(root: pathlib.Path, out_json: pathlib.Path, machine_slug:
         "arch": platform.machine(),
         "lscpu": subprocess.check_output(["lscpu"], text=True),
         "criterion_galois_backend": collect_criterion(root),
-        "release_smoke": collect_release_smoke(root),
+        "release_smoke": release_smoke,
+        "release_smoke_override_mismatches": {
+            file_name: [
+                row for row in rows if row.get("override_honored", "true").lower() != "true"
+            ]
+            for file_name, rows in release_smoke.items()
+        },
     }
     report["rankings_10x4_1m"] = backend_rankings(report)
     report["criterion_rankings"] = criterion_rankings(report)

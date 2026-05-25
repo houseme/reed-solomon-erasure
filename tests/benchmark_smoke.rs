@@ -1,5 +1,6 @@
 #[path = "../benches/common/mod.rs"]
 mod bench_common;
+mod common;
 
 use std::fs;
 use std::path::PathBuf;
@@ -11,6 +12,7 @@ use reed_solomon_erasure::galois_8::{
 };
 
 use self::bench_common::{BenchCase, Operation, SMOKE_CASES, derived_seed, make_full_shards};
+use self::common::{assert_backend_override_honored_if_strict, override_honored};
 
 struct SmokeResult {
     operation: &'static str,
@@ -138,6 +140,7 @@ fn write_results(results: &[SmokeResult]) {
     let backend_id = backend_id();
     let backend_kind = backend_kind();
     let backend_override = backend_override();
+    let override_honored = override_honored();
 
     let json_path = dir.join("smoke-results.json");
     let csv_path = dir.join("smoke-results.csv");
@@ -146,7 +149,7 @@ fn write_results(results: &[SmokeResult]) {
     for (i, result) in results.iter().enumerate() {
         let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
         json.push_str(&format!(
-            "  {{\"git_revision\":\"{}\",\"target_triple\":\"{}\",\"features\":\"{}\",\"backend\":\"{}\",\"backend_id\":\"{}\",\"backend_kind\":\"{}\",\"backend_override\":\"{}\",\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"seed\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2}}}{}",
+            "  {{\"git_revision\":\"{}\",\"target_triple\":\"{}\",\"features\":\"{}\",\"backend\":\"{}\",\"backend_id\":\"{}\",\"backend_kind\":\"{}\",\"backend_override\":\"{}\",\"override_honored\":{},\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"seed\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2}}}{}",
             revision,
             target,
             features,
@@ -154,6 +157,7 @@ fn write_results(results: &[SmokeResult]) {
             backend_id,
             backend_kind,
             backend_override,
+            override_honored,
             result.operation,
             result.data_shards,
             result.parity_shards,
@@ -168,11 +172,11 @@ fn write_results(results: &[SmokeResult]) {
     fs::write(&json_path, json).unwrap();
 
     let mut csv = String::from(
-        "git_revision,target_triple,features,backend,backend_id,backend_kind,backend_override,operation,data_shards,parity_shards,shard_size,seed,throughput_mb_s,ns_per_iter\n",
+        "git_revision,target_triple,features,backend,backend_id,backend_kind,backend_override,override_honored,operation,data_shards,parity_shards,shard_size,seed,throughput_mb_s,ns_per_iter\n",
     );
     for result in results {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{:.2}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{:.2}\n",
             revision,
             target,
             features,
@@ -180,6 +184,7 @@ fn write_results(results: &[SmokeResult]) {
             backend_id,
             backend_kind,
             backend_override,
+            override_honored,
             result.operation,
             result.data_shards,
             result.parity_shards,
@@ -197,6 +202,7 @@ fn write_results(results: &[SmokeResult]) {
 
 #[test]
 fn benchmark_smoke_matrix_runs_and_exports_results() {
+    assert_backend_override_honored_if_strict();
     let mut results = Vec::new();
     for case in SMOKE_CASES {
         results.push(run_operation(*case, Operation::Encode, 3));

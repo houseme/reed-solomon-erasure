@@ -4,6 +4,8 @@ use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use reed_solomon_erasure::galois_8;
+#[path = "../tests/common/mod.rs"]
+mod test_common;
 
 const COEFF: u8 = 173;
 const XOR_COEFF: u8 = 91;
@@ -55,6 +57,7 @@ fn bench_mul_slice_xor(c: &mut Criterion) {
 }
 
 fn benches(c: &mut Criterion) {
+    test_common::assert_backend_override_honored_if_strict();
     bench_mul_slice(c);
     bench_mul_slice_xor(c);
 }

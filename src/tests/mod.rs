@@ -103,6 +103,21 @@ fn option_shards_into_shards<T>(shards: Vec<Option<Vec<T>>>) -> Vec<Vec<T>> {
     result
 }
 
+#[cfg(feature = "std")]
+fn with_env_var<R>(key: &str, value: &str, f: impl FnOnce() -> R) -> R {
+    // SAFETY: tests in this module set process-global env vars in a scoped manner
+    // and restore them immediately after the assertion under test.
+    unsafe {
+        std::env::set_var(key, value);
+    }
+    let result = f();
+    // SAFETY: paired cleanup for the scoped env var override above.
+    unsafe {
+        std::env::remove_var(key);
+    }
+    result
+}
+
 #[test]
 fn test_no_data_shards() {
     assert_eq!(Error::TooFewDataShards, ReedSolomon::new(0, 1).unwrap_err());
@@ -517,16 +532,10 @@ fn test_parallel_policy_creates_multiple_chunks_for_small_output_reconstruct_cas
 #[cfg(feature = "std")]
 #[test]
 fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
-    let r = ReedSolomon::new(10, 4).unwrap();
-    // SAFETY: tests run in-process and we restore this env var before returning.
-    unsafe {
-        std::env::set_var("RS_RECONSTRUCT_MIN_BYTES_PER_JOB", "65536");
-    }
-    let decision = r.reconstruct_parallel_decision_with(1024 * 1024, 2, 4, false, 8);
-    // SAFETY: cleanup for process-global env var set above.
-    unsafe {
-        std::env::remove_var("RS_RECONSTRUCT_MIN_BYTES_PER_JOB");
-    }
+    let decision = with_env_var("RS_RECONSTRUCT_MIN_BYTES_PER_JOB", "65536", || {
+        let r = ReedSolomon::new(10, 4).unwrap();
+        r.reconstruct_parallel_decision_with(1024 * 1024, 2, 4, false, 8)
+    });
 
     assert!(decision.use_parallel);
     assert_eq!(65536, decision.chunk_len);
@@ -535,13 +544,13 @@ fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
 #[cfg(all(feature = "std", target_arch = "aarch64"))]
 #[test]
 fn test_aarch64_reconstruct_parallel_policy_has_arch_specific_override() {
-    let r = ReedSolomon::new(10, 4).unwrap();
     // SAFETY: tests run in-process and we restore this env var before returning.
     unsafe {
         std::env::set_var("RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES", "131072");
         std::env::set_var("RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB", "131072");
         std::env::set_var("RS_AARCH64_RECONSTRUCT_MAX_JOBS", "4");
     }
+    let r = ReedSolomon::new(10, 4).unwrap();
     let decision = r.reconstruct_parallel_decision_with(1024 * 1024, 2, 4, false, 8);
     // SAFETY: cleanup for process-global env var set above.
     unsafe {
@@ -558,12 +567,12 @@ fn test_aarch64_reconstruct_parallel_policy_has_arch_specific_override() {
 #[cfg(all(feature = "std", target_arch = "aarch64"))]
 #[test]
 fn test_aarch64_reconstruct_stage_policies_allow_data_parity_split() {
-    let r = ReedSolomon::new(10, 4).unwrap();
     // SAFETY: tests run in-process and we restore these env vars before returning.
     unsafe {
         std::env::set_var("RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB", "65536");
         std::env::set_var("RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB", "262144");
     }
+    let r = ReedSolomon::new(10, 4).unwrap();
     let (data_policy, parity_policy) = r.reconstruct_stage_policies_for_test(false);
     // SAFETY: cleanup for process-global env vars set above.
     unsafe {
@@ -588,20 +597,14 @@ fn test_reconstruct_parallel_policy_default_arch_stays_on_default_chunk() {
 #[cfg(feature = "std")]
 #[test]
 fn test_effective_parallel_policy_env_overrides() {
-    let r = ReedSolomon::new(10, 4).unwrap();
-    // SAFETY: tests run in-process and we restore these env vars before returning.
-    unsafe {
-        std::env::set_var("RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES", "131072");
-        std::env::set_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536");
-        std::env::set_var("RS_PARALLEL_POLICY_MAX_JOBS", "3");
-    }
-    let policy = r.effective_parallel_policy();
-    // SAFETY: cleanup for process-global env vars set above.
-    unsafe {
-        std::env::remove_var("RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES");
-        std::env::remove_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB");
-        std::env::remove_var("RS_PARALLEL_POLICY_MAX_JOBS");
-    }
+    let policy = with_env_var("RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES", "131072", || {
+        with_env_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536", || {
+            with_env_var("RS_PARALLEL_POLICY_MAX_JOBS", "3", || {
+                let r = ReedSolomon::new(10, 4).unwrap();
+                r.effective_parallel_policy()
+            })
+        })
+    });
 
     assert_eq!(131072, policy.min_parallel_shard_bytes);
     assert_eq!(65536, policy.min_bytes_per_job);
@@ -611,19 +614,24 @@ fn test_effective_parallel_policy_env_overrides() {
 #[cfg(feature = "std")]
 #[test]
 fn test_parallel_policy_respects_env_max_jobs_cap() {
-    let r = ReedSolomon::new(10, 4).unwrap();
-    // SAFETY: tests run in-process and we restore these env vars before returning.
-    unsafe {
-        std::env::set_var("RS_PARALLEL_POLICY_MAX_JOBS", "2");
-    }
-    let decision = r.parallel_policy_with(1024 * 1024, 16, 16);
-    // SAFETY: cleanup for process-global env var set above.
-    unsafe {
-        std::env::remove_var("RS_PARALLEL_POLICY_MAX_JOBS");
-    }
+    let decision = with_env_var("RS_PARALLEL_POLICY_MAX_JOBS", "2", || {
+        let r = ReedSolomon::new(10, 4).unwrap();
+        r.parallel_policy_with(1024 * 1024, 16, 16)
+    });
 
     assert!(decision.use_parallel);
     assert!(decision.jobs <= 2);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_parallel_policy_env_override_is_sampled_at_construction() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let policy = with_env_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536", || {
+        r.effective_parallel_policy()
+    });
+
+    assert_eq!(256 * 1024, policy.min_bytes_per_job);
 }
 
 #[cfg(feature = "std")]
@@ -647,6 +655,7 @@ fn bench_encode_sep_pair(
     shard_size: usize,
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let policy = r.effective_parallel_policy();
     let iterations = 3usize;
     let bytes = (data_shards * shard_size) as f64;
 
@@ -684,8 +693,8 @@ fn bench_encode_sep_pair(
         parity_shards,
         shard_size,
         policy_version: r.parallel_policy_version(),
-        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
-        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
+        policy_min_parallel_shard_bytes: policy.min_parallel_shard_bytes,
+        policy_min_bytes_per_job: policy.min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,
@@ -699,6 +708,7 @@ fn bench_verify_with_buffer_pair(
     shard_size: usize,
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let policy = r.effective_parallel_policy();
     let iterations = 3usize;
     let bytes = (data_shards * shard_size) as f64;
 
@@ -734,8 +744,8 @@ fn bench_verify_with_buffer_pair(
         parity_shards,
         shard_size,
         policy_version: r.parallel_policy_version(),
-        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
-        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
+        policy_min_parallel_shard_bytes: policy.min_parallel_shard_bytes,
+        policy_min_bytes_per_job: policy.min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,
@@ -750,6 +760,7 @@ fn bench_reconstruct_pair(
     data_only: bool,
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let policy = r.effective_parallel_policy();
     let iterations = 3usize;
     let bytes = (data_shards * shard_size) as f64;
 
@@ -800,8 +811,8 @@ fn bench_reconstruct_pair(
         parity_shards,
         shard_size,
         policy_version: r.parallel_policy_version(),
-        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
-        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
+        policy_min_parallel_shard_bytes: policy.min_parallel_shard_bytes,
+        policy_min_bytes_per_job: policy.min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,
@@ -816,6 +827,7 @@ fn bench_reconstruct_some_required_data_pair(
     required_count: usize,
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let policy = r.effective_parallel_policy();
     let iterations = 3usize;
     let bytes = (required_count * shard_size) as f64;
 
@@ -867,8 +879,8 @@ fn bench_reconstruct_some_required_data_pair(
         parity_shards,
         shard_size,
         policy_version: r.parallel_policy_version(),
-        policy_min_parallel_shard_bytes: ParallelPolicy::default().min_parallel_shard_bytes,
-        policy_min_bytes_per_job: ParallelPolicy::default().min_bytes_per_job,
+        policy_min_parallel_shard_bytes: policy.min_parallel_shard_bytes,
+        policy_min_bytes_per_job: policy.min_bytes_per_job,
         serial_mb_s,
         parallel_mb_s,
         speedup: parallel_mb_s / serial_mb_s,

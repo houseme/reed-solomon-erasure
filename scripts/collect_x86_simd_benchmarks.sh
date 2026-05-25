@@ -26,10 +26,12 @@ OUT_JSON="${OUT_DIR}/${DATE_UTC}-${CPU_SLUG}.json"
 BACKENDS=(
   auto
   scalar
+  rust-ssse3
   simd-c
   rust-avx2
   rust-avx512
   rust-gfni-avx2
+  rust-gfni-avx512
 )
 
 mkdir -p "${OUT_DIR}"
@@ -41,6 +43,7 @@ run_smoke() {
   local out_csv="target/benchmark-smoke/smoke-results-release-${backend}.csv"
   echo "==> release smoke: ${backend}"
   RSE_BACKEND_OVERRIDE="${backend}" \
+  RSE_STRICT_BACKEND_OVERRIDE=1 \
     cargo test --release --features 'std simd-accel' --test benchmark_smoke \
       benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
   cp target/benchmark-smoke/smoke-results.csv "${out_csv}"
@@ -50,6 +53,7 @@ run_bench() {
   local backend="$1"
   echo "==> criterion bench: ${backend}"
   RSE_BACKEND_OVERRIDE="${backend}" \
+    RSE_STRICT_BACKEND_OVERRIDE=1 \
     cargo bench --bench galois_backend --features 'std simd-accel' -- \
       --sample-size 10 --warm-up-time 1 --measurement-time 1
 }

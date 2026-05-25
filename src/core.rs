@@ -426,6 +426,15 @@ pub struct ParallelDecision {
 }
 
 #[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeParallelPolicyCache {
+    pub data: ParallelPolicy,
+    pub reconstruct_data: ParallelPolicy,
+    pub reconstruct_full_data: ParallelPolicy,
+    pub reconstruct_full_parity: ParallelPolicy,
+}
+
+#[cfg(feature = "std")]
 impl Default for ParallelPolicy {
     fn default() -> Self {
         Self {
@@ -523,6 +532,37 @@ impl ParallelPolicy {
             policy.max_jobs = value;
         }
         policy
+    }
+}
+
+#[cfg(feature = "std")]
+impl RuntimeParallelPolicyCache {
+    fn new(data: ParallelPolicy) -> Self {
+        Self {
+            data,
+            reconstruct_data: data,
+            reconstruct_full_data: data,
+            reconstruct_full_parity: data,
+        }
+    }
+
+    pub(crate) fn reconstruct_policy(&self, data_only: bool) -> ParallelPolicy {
+        if data_only {
+            self.reconstruct_data
+        } else {
+            self.reconstruct_full_data
+        }
+    }
+
+    pub(crate) fn reconstruct_stage_policies(
+        &self,
+        data_only: bool,
+    ) -> (ParallelPolicy, ParallelPolicy) {
+        if data_only {
+            (self.reconstruct_data, self.reconstruct_data)
+        } else {
+            (self.reconstruct_full_data, self.reconstruct_full_parity)
+        }
     }
 }
 
@@ -836,6 +876,8 @@ pub struct ReedSolomon<F: Field> {
     total_shard_count: usize,
     matrix: Matrix<F>,
     options: CodecOptions,
+    #[cfg(feature = "std")]
+    pub(crate) policy_cache: RuntimeParallelPolicyCache,
     data_decode_matrix_cache: Mutex<LruCache<Vec<usize>, Arc<Matrix<F>>>>,
     #[cfg(feature = "std")]
     reconstruction_cache_metrics: ReconstructionCacheMetrics,
@@ -952,6 +994,16 @@ impl<F: Field> ReedSolomon<F> {
         }
     }
 
+    #[cfg(feature = "std")]
+    fn resolve_policy_cache() -> RuntimeParallelPolicyCache {
+        let data = ParallelPolicy::default().with_env_overrides();
+        if core::any::type_name::<F>() == core::any::type_name::<crate::galois_8::Field>() {
+            crate::galois_8::resolve_runtime_parallel_policy_cache(data)
+        } else {
+            RuntimeParallelPolicyCache::new(data)
+        }
+    }
+
     /// Creates a new instance of Reed-Solomon erasure code encoder/decoder.
     ///
     /// Returns `Error::TooFewDataShards` if `data_shards == 0`.
@@ -986,6 +1038,8 @@ impl<F: Field> ReedSolomon<F> {
         }
 
         let matrix = Self::build_matrix_with_options(data_shards, total_shards, options);
+        #[cfg(feature = "std")]
+        let policy_cache = Self::resolve_policy_cache();
 
         Ok(ReedSolomon {
             data_shard_count: data_shards,
@@ -993,6 +1047,8 @@ impl<F: Field> ReedSolomon<F> {
             total_shard_count: total_shards,
             matrix,
             options,
+            #[cfg(feature = "std")]
+            policy_cache,
             data_decode_matrix_cache: Mutex::new(LruCache::new(options.inversion_cache_capacity)),
             #[cfg(feature = "std")]
             reconstruction_cache_metrics: ReconstructionCacheMetrics::default(),
@@ -1197,7 +1253,7 @@ impl<F: Field> ReedSolomon<F> {
 
     #[cfg(feature = "std")]
     pub fn effective_parallel_policy(&self) -> ParallelPolicy {
-        ParallelPolicy::default().with_env_overrides()
+        self.policy_cache.data
     }
 
     #[cfg(feature = "std")]
@@ -1596,10 +1652,12 @@ impl<F: Field> ReedSolomon<F> {
     where
         F::Elem: Send + Sync,
     {
-        self.reconstruct_internal_option_vec_par_with_policy(
+        let (data_policy, parity_policy) = self.policy_cache.reconstruct_stage_policies(data_only);
+        self.reconstruct_internal_option_vec_par_with_stage_policies(
             shards,
             data_only,
-            ParallelPolicy::default().with_env_overrides(),
+            data_policy,
+            parity_policy,
         )
     }
 

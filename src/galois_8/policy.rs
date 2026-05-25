@@ -1,3 +1,5 @@
+use crate::core::RuntimeParallelPolicyCache;
+
 #[cfg(feature = "std")]
 const RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES: usize = 512 * 1024;
 #[cfg(feature = "std")]
@@ -26,32 +28,6 @@ const RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB_ENV: &str =
     "RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB";
 
 impl crate::ReedSolomon<super::Field> {
-    #[cfg(feature = "std")]
-    fn read_env_usize(name: &str) -> Option<usize> {
-        std::env::var(name)
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-    }
-
-    #[cfg(feature = "std")]
-    fn reconstruct_data_min_parallel_shard_bytes(&self) -> usize {
-        Self::read_env_usize(RS_RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES_ENV)
-            .filter(|value| *value > 0)
-            .unwrap_or(RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES)
-    }
-
-    #[cfg(feature = "std")]
-    fn reconstruct_full_min_parallel_shard_bytes(&self) -> usize {
-        Self::read_env_usize(RS_RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES_ENV)
-            .filter(|value| *value > 0)
-            .unwrap_or(RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES)
-    }
-
-    #[cfg(feature = "std")]
-    fn reconstruct_min_bytes_per_job(&self) -> Option<usize> {
-        Self::read_env_usize(RS_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV).filter(|value| *value > 0)
-    }
-
     #[cfg(feature = "std")]
     fn first_shard_len<T: AsRef<[u8]>>(slices: &[T]) -> usize {
         slices
@@ -82,7 +58,7 @@ impl crate::ReedSolomon<super::Field> {
         data_only: bool,
         available_parallelism: usize,
     ) -> crate::ParallelDecision {
-        let tuned = self.reconstruct_parallel_policy(data_only);
+        let tuned = self.policy_cache.reconstruct_policy(data_only);
         let output_shards = if data_only {
             missing_data
         } else {
@@ -96,69 +72,6 @@ impl crate::ReedSolomon<super::Field> {
         )
     }
 
-    #[cfg(feature = "std")]
-    fn reconstruct_parallel_policy(&self, data_only: bool) -> crate::ParallelPolicy {
-        #[cfg(target_arch = "aarch64")]
-        {
-            self.reconstruct_parallel_policy_aarch64(data_only)
-        }
-
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            return self.reconstruct_parallel_policy_default(data_only);
-        }
-    }
-
-    #[cfg(feature = "std")]
-    fn reconstruct_parallel_policy_default(&self, data_only: bool) -> crate::ParallelPolicy {
-        let base = self.effective_parallel_policy();
-        let data_only_min = self.reconstruct_data_min_parallel_shard_bytes();
-        let full_min = self.reconstruct_full_min_parallel_shard_bytes();
-        let min_bytes_per_job = self
-            .reconstruct_min_bytes_per_job()
-            .unwrap_or(base.min_bytes_per_job);
-        if data_only {
-            crate::ParallelPolicy {
-                min_parallel_shard_bytes: core::cmp::max(
-                    base.min_parallel_shard_bytes,
-                    data_only_min,
-                ),
-                min_bytes_per_job,
-                max_jobs: base.max_jobs,
-            }
-        } else {
-            crate::ParallelPolicy {
-                min_parallel_shard_bytes: core::cmp::max(
-                    base.min_parallel_shard_bytes / 2,
-                    full_min,
-                ),
-                min_bytes_per_job,
-                max_jobs: base.max_jobs,
-            }
-        }
-    }
-
-    #[cfg(all(feature = "std", target_arch = "aarch64"))]
-    fn reconstruct_parallel_policy_aarch64(&self, data_only: bool) -> crate::ParallelPolicy {
-        let mut policy = self.reconstruct_parallel_policy_default(data_only);
-        if let Some(value) =
-            Self::read_env_usize(RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES_ENV)
-            && value > 0
-        {
-            policy.min_parallel_shard_bytes = value;
-        }
-        if let Some(value) = Self::read_env_usize(RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV)
-            && value > 0
-        {
-            policy.min_bytes_per_job = value;
-        }
-        if let Some(value) = Self::read_env_usize(RS_AARCH64_RECONSTRUCT_MAX_JOBS_ENV) {
-            policy.max_jobs = value;
-        }
-        policy
-    }
-
-    #[cfg(feature = "std")]
     fn reconstruct_parallel_decision(
         &self,
         shard_len: usize,
@@ -182,16 +95,7 @@ impl crate::ReedSolomon<super::Field> {
         &self,
         data_only: bool,
     ) -> (crate::ParallelPolicy, crate::ParallelPolicy) {
-        #[cfg(target_arch = "aarch64")]
-        {
-            self.reconstruct_stage_policies_aarch64(data_only)
-        }
-
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            let policy = self.reconstruct_parallel_policy_default(data_only);
-            (policy, policy)
-        }
+        self.policy_cache.reconstruct_stage_policies(data_only)
     }
 
     #[cfg(test)]
@@ -202,28 +106,6 @@ impl crate::ReedSolomon<super::Field> {
     ) -> (crate::ParallelPolicy, crate::ParallelPolicy) {
         self.reconstruct_stage_policies(data_only)
     }
-
-    #[cfg(all(feature = "std", target_arch = "aarch64"))]
-    fn reconstruct_stage_policies_aarch64(
-        &self,
-        data_only: bool,
-    ) -> (crate::ParallelPolicy, crate::ParallelPolicy) {
-        let mut data_policy = self.reconstruct_parallel_policy_aarch64(data_only);
-        let mut parity_policy = self.reconstruct_parallel_policy_default(data_only);
-        if let Some(value) = Self::read_env_usize(RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB_ENV)
-            && value > 0
-        {
-            data_policy.min_bytes_per_job = value;
-        }
-        if let Some(value) =
-            Self::read_env_usize(RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB_ENV)
-            && value > 0
-        {
-            parity_policy.min_bytes_per_job = value;
-        }
-        (data_policy, parity_policy)
-    }
-
     #[cfg(feature = "std")]
     pub fn encode_opt<T, U>(&self, shards: T) -> Result<(), crate::Error>
     where
@@ -422,4 +304,98 @@ impl crate::ReedSolomon<super::Field> {
         self.reconstruct_opt(shards)?;
         Ok(())
     }
+}
+
+#[cfg(feature = "std")]
+fn reconstruct_parallel_policy_default(base: crate::ParallelPolicy, data_only: bool) -> crate::ParallelPolicy {
+    let data_only_min = parse_positive_env_usize(RS_RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES_ENV)
+        .unwrap_or(RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES);
+    let full_min = parse_positive_env_usize(RS_RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES_ENV)
+        .unwrap_or(RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES);
+    let min_bytes_per_job = parse_positive_env_usize(RS_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV)
+        .unwrap_or(base.min_bytes_per_job);
+    if data_only {
+        crate::ParallelPolicy {
+            min_parallel_shard_bytes: core::cmp::max(base.min_parallel_shard_bytes, data_only_min),
+            min_bytes_per_job,
+            max_jobs: base.max_jobs,
+        }
+    } else {
+        crate::ParallelPolicy {
+            min_parallel_shard_bytes: core::cmp::max(base.min_parallel_shard_bytes / 2, full_min),
+            min_bytes_per_job,
+            max_jobs: base.max_jobs,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+fn parse_positive_env_usize(name: &str) -> Option<usize> {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+}
+
+#[cfg(all(feature = "std", target_arch = "aarch64"))]
+fn reconstruct_policy_cache_aarch64(
+    base: crate::ParallelPolicy,
+) -> RuntimeParallelPolicyCache {
+    let mut reconstruct_full_data = reconstruct_parallel_policy_default(base, false);
+    if let Some(value) =
+        parse_positive_env_usize(RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES_ENV)
+    {
+        reconstruct_full_data.min_parallel_shard_bytes = value;
+    }
+    if let Some(value) = parse_positive_env_usize(RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB_ENV) {
+        reconstruct_full_data.min_bytes_per_job = value;
+    }
+    if let Some(value) = crate::core::parse_env_usize(RS_AARCH64_RECONSTRUCT_MAX_JOBS_ENV) {
+        reconstruct_full_data.max_jobs = value;
+    }
+
+    let mut reconstruct_data = reconstruct_parallel_policy_default(base, true);
+    reconstruct_data.min_parallel_shard_bytes = reconstruct_full_data.min_parallel_shard_bytes;
+    reconstruct_data.min_bytes_per_job = reconstruct_full_data.min_bytes_per_job;
+    reconstruct_data.max_jobs = reconstruct_full_data.max_jobs;
+
+    let mut reconstruct_full_parity = reconstruct_parallel_policy_default(base, false);
+    if let Some(value) =
+        parse_positive_env_usize(RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB_ENV)
+    {
+        reconstruct_full_parity.min_bytes_per_job = value;
+    }
+
+    if let Some(value) = parse_positive_env_usize(RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB_ENV)
+    {
+        reconstruct_data.min_bytes_per_job = value;
+    }
+
+    RuntimeParallelPolicyCache {
+        data: base,
+        reconstruct_data,
+        reconstruct_full_data,
+        reconstruct_full_parity,
+    }
+}
+
+#[cfg(all(feature = "std", not(target_arch = "aarch64")))]
+pub(crate) fn resolve_runtime_parallel_policy_cache(
+    base: crate::ParallelPolicy,
+) -> RuntimeParallelPolicyCache {
+    let reconstruct_data = reconstruct_parallel_policy_default(base, true);
+    let reconstruct_full = reconstruct_parallel_policy_default(base, false);
+    RuntimeParallelPolicyCache {
+        data: base,
+        reconstruct_data,
+        reconstruct_full_data: reconstruct_full,
+        reconstruct_full_parity: reconstruct_full,
+    }
+}
+
+#[cfg(all(feature = "std", target_arch = "aarch64"))]
+pub(crate) fn resolve_runtime_parallel_policy_cache(
+    base: crate::ParallelPolicy,
+) -> RuntimeParallelPolicyCache {
+    reconstruct_policy_cache_aarch64(base)
 }
