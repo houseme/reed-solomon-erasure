@@ -15,6 +15,7 @@ pub enum BackendId {
     ScalarRust,
     SimdC,
     RustNeon,
+    RustSsse3,
     RustAvx2,
 }
 
@@ -63,6 +64,20 @@ const RUST_AVX2_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+const RUST_SSSE3_BACKEND: GaloisBackend = GaloisBackend {
+    id: BackendId::RustSsse3,
+    mul_slice: super::x86::ssse3::rust_ssse3_mul_slice,
+    mul_slice_xor: super::x86::ssse3::rust_ssse3_mul_slice_xor,
+    name: "rust-ssse3",
+    kind: BackendKind::RustSimd,
+};
+
 static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
 
 #[cfg(all(
@@ -86,6 +101,7 @@ enum BackendOverride {
     Scalar,
     SimdC,
     RustNeon,
+    RustSsse3,
     RustAvx2,
 }
 
@@ -140,6 +156,7 @@ fn parse_backend_override(value: &str) -> Option<BackendOverride> {
         "scalar" | "scalar-rust" => Some(BackendOverride::Scalar),
         "simd-c" => Some(BackendOverride::SimdC),
         "rust-neon" => Some(BackendOverride::RustNeon),
+        "rust-ssse3" => Some(BackendOverride::RustSsse3),
         "rust-avx2" => Some(BackendOverride::RustAvx2),
         _ => None,
     }
@@ -153,6 +170,7 @@ fn runtime_override_backend() -> Option<GaloisBackend> {
         BackendOverride::Scalar => Some(SCALAR_BACKEND),
         BackendOverride::SimdC => simd_c_override_backend(),
         BackendOverride::RustNeon => rust_neon_override_backend(),
+        BackendOverride::RustSsse3 => rust_ssse3_override_backend(),
         BackendOverride::RustAvx2 => rust_avx2_override_backend(),
     }
 }
@@ -226,6 +244,17 @@ fn supports_rust_avx2(features: X86FeatureSet) -> bool {
     not(any(target_os = "android", target_os = "ios")),
     feature = "std"
 ))]
+fn supports_rust_ssse3(features: X86FeatureSet) -> bool {
+    features.ssse3
+}
+
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
 fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
     if cfg!(rse_simd_c_build_haswell) {
         return features.avx2;
@@ -246,6 +275,9 @@ fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
 fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
     if supports_rust_avx2(features) {
         return RUST_AVX2_BACKEND;
+    }
+    if supports_rust_ssse3(features) {
+        return RUST_SSSE3_BACKEND;
     }
     if supports_simd_c_x86(features) {
         return SIMD_C_BACKEND;
@@ -376,6 +408,28 @@ fn rust_neon_override_backend() -> Option<GaloisBackend> {
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
+fn rust_ssse3_override_backend() -> Option<GaloisBackend> {
+    supports_rust_ssse3(detect_x86_features()).then_some(RUST_SSSE3_BACKEND)
+}
+
+#[cfg(feature = "std")]
+#[cfg(not(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+)))]
+fn rust_ssse3_override_backend() -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(feature = "std")]
+#[cfg(all(
+    feature = "simd-accel",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 fn rust_avx2_override_backend() -> Option<GaloisBackend> {
     supports_rust_avx2(detect_x86_features()).then_some(RUST_AVX2_BACKEND)
 }
@@ -444,6 +498,10 @@ mod tests {
             Some(BackendOverride::RustNeon)
         ));
         assert!(matches!(
+            parse_backend_override("rust-ssse3"),
+            Some(BackendOverride::RustSsse3)
+        ));
+        assert!(matches!(
             parse_backend_override("rust-avx2"),
             Some(BackendOverride::RustAvx2)
         ));
@@ -470,8 +528,9 @@ mod tests {
 
         if cfg!(rse_simd_c_build_baseline) {
             assert_eq!(
-                BackendId::SimdC,
+                BackendId::RustSsse3,
                 select_x86_backend(X86FeatureSet {
+                    ssse3: true,
                     sse2: true,
                     ..X86FeatureSet::default()
                 })
@@ -482,6 +541,15 @@ mod tests {
         assert_eq!(
             BackendId::ScalarRust,
             select_x86_backend(X86FeatureSet::default()).id
+        );
+
+        assert_eq!(
+            BackendId::SimdC,
+            select_x86_backend(X86FeatureSet {
+                sse2: true,
+                ..X86FeatureSet::default()
+            })
+            .id
         );
     }
 
