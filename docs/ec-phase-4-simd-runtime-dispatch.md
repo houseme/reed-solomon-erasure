@@ -1676,3 +1676,33 @@ clean-build 结果相对上一版 `small-output-fastpath`：
 - 这版“真正下沉到 neon helper”的实现比上一版通用 `1/2-output` fast path 明显更差；
 - 因此同样没有保留，代码已回退；
 - 进一步说明：当前最优结果并不是“越下沉越好”，而是“在 `core` 的 `1/2-output` fast path 形态下，让 policy 计算出的 chunk 并行度真正落地”。
+
+### 31.11 `vqtbl1q_u8` 主循环表达式收紧试验
+
+为进一步压缩寄存器活跃区间，本轮尝试把 `rust_neon_mul_slice_xor_impl` 的 `unroll4` 主循环从：
+
+- 先生成 `product0..3`
+- 再统一做 `veorq(outs, product)`
+
+改成更紧的表达式组织：
+
+- 先装载 `outs`
+- 再直接在每个 lane 上构造 `veorq(outs.N, veorq(vqtbl(low), vqtbl(high)))`
+
+目标是：
+
+- 缩短 `product0..3` 的活跃区间；
+- 看 LLVM 是否会生成更紧凑的寄存器分配与调度。
+
+clean-build 结果相对当前最强的 `small-output-fastpath`：
+
+- `reconstruct_10x4_1m`: `19.029 -> 18.695`
+- `reconstruct_data_10x4_1m`: `25.144 -> 25.162`
+- `reconstruct_32x16_1m`: `24.936 -> 24.893`
+- `reconstruct_data_32x16_1m`: `26.911 -> 27.033`
+
+结论：
+
+- 这次主循环表达式收紧只表现为混合收益，没有形成足够稳定的正向结果；
+- 因此没有保留，代码已回退到上一版更稳的实现；
+- 说明当前 `vqtbl1q_u8` 主路径若继续深挖，更值得试的不是“单纯缩短表达式”，而是更成体系的 load/store 组织变化。
