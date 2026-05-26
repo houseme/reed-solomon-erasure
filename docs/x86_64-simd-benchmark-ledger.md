@@ -71,3 +71,98 @@
 
 1. [x86_64-simd-second-gfni-machine-template.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-second-gfni-machine-template.md)
 2. [x86_64-simd-second-gfni-machine-checklist.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-second-gfni-machine-checklist.md)
+
+## 2026-05-26 Auto Priority Recheck After Conservative Rollback
+
+### 背景
+
+在提交 `51d6e44 fix: restore conservative x86 dispatch policy` 之后，需要回答一个更具体的问题：
+
+1. 是否应该恢复 `GFNI` 自动优先？
+2. 是否应该把 `rust-avx512` 提升到 `rust-avx2` 之前？
+
+本轮目标不是重新追求单点峰值，而是确认在当前 `AMD EPYC 9V45` 主机上，哪些 backend 已经拥有足够稳定的证据进入自动默认路径。
+
+### 已执行命令
+
+Release smoke：
+
+1. `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=rust-avx2 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+2. `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=rust-avx512 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+3. `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=rust-gfni-avx2 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+4. `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=rust-gfni-avx512 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+
+Microbenchmark：
+
+1. `RSE_BACKEND_OVERRIDE=rust-avx2 cargo bench --bench galois_backend --features 'std simd-accel' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+2. `RSE_BACKEND_OVERRIDE=rust-avx512 cargo bench --bench galois_backend --features 'std simd-accel' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+3. `RSE_BACKEND_OVERRIDE=rust-gfni-avx2 cargo bench --bench galois_backend --features 'std simd-accel' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+4. `RSE_BACKEND_OVERRIDE=rust-gfni-avx512 cargo bench --bench galois_backend --features 'std simd-accel' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+
+### Release Smoke 结论
+
+关注案例：`10x4_1m`
+
+`encode`
+
+1. `rust-avx512`: `681.4085 MB/s`
+2. `rust-avx2`: `677.1211 MB/s`
+3. `rust-gfni-avx512`: `668.6751 MB/s`
+4. `rust-gfni-avx2`: `667.4278 MB/s`
+
+`verify`
+
+1. `rust-avx2`: `727.4593 MB/s`
+2. `rust-avx512`: `725.9077 MB/s`
+3. `rust-gfni-avx512`: `705.9474 MB/s`
+4. `rust-gfni-avx2`: `692.6624 MB/s`
+
+`reconstruct`
+
+1. `rust-avx512`: `801.0335 MB/s`
+2. `rust-avx2`: `794.5096 MB/s`
+3. `rust-gfni-avx512`: `774.9127 MB/s`
+4. `rust-gfni-avx2`: `741.6540 MB/s`
+
+`reconstruct_data`
+
+1. `rust-avx512`: `812.2612 MB/s`
+2. `rust-avx2`: `807.2315 MB/s`
+3. `rust-gfni-avx512`: `779.7315 MB/s`
+4. `rust-gfni-avx2`: `764.1924 MB/s`
+
+解释：
+
+1. `rust-avx512` 在 `encode / reconstruct / reconstruct_data` 上小幅领先
+2. `rust-avx2` 在 `verify` 上仍然最好
+3. 两条 `GFNI` 路径都未在当前 smoke workload 上拿到综合第一
+
+### Microbenchmark 观察
+
+基于 `galois_backend`：
+
+1. `rust-avx512` 的 `mul_slice` 短长度吞吐很强，但中大长度和 `mul_slice_xor` 并未稳定优于 `rust-avx2`
+2. `rust-gfni-avx512` 在个别 `mul_slice` 大长度点位表现亮眼，但 `mul_slice_xor` 多个长度不稳定，不能支持直接进入自动优先
+3. `rust-gfni-avx2` 更不像默认候选，尤其 `xor` 路径没有形成优势
+4. 当前主机上，microbench 没有给出“`GFNI` 综合稳定优于 `AVX2/AVX512`”的证据
+
+### 本轮策略结论
+
+1. 当前证据不支持恢复 `GFNI` 自动优先
+2. 当前证据也还不足以把 `rust-avx512` 提升到 `rust-avx2` 之前
+3. 更稳妥的默认顺序仍应保持：
+   - `rust-avx2`
+   - `rust-avx512`
+   - `rust-ssse3`
+   - `simd-c`
+   - `scalar-rust`
+4. `GFNI` 继续保持 `override-only`
+
+### 恢复自动优先所需的额外证据
+
+若未来要重新讨论恢复 `GFNI / AVX512` 自动优先，至少应补齐：
+
+1. 不止 `10x4_1m` 的更多 release smoke workload
+2. 多轮重复采样，降低当前主机上的测量噪声
+3. 第二台支持 `GFNI` 的 x86_64 主机结果
+4. `mul_slice` 与 `mul_slice_xor` 两条 microbench 主线都具备更稳定的优势证据
