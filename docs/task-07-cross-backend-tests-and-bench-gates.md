@@ -21,7 +21,7 @@
 残余风险：
 
 1. cross-backend conformance matrix 已在运行前做 CPU feature gating，但覆盖范围仍以 `mul_slice` 为主
-2. 尚未把同等粒度的矩阵覆盖扩展到 `mul_slice_xor`
+2. `mul_slice_xor` 已纳入同一套 x86 cross-backend conformance matrix，但更高层集成用例仍可继续扩展
 3. benchmark 门禁仍缺少多机型、可复现实测基线
 
 ## 1. 子任务目标

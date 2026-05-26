@@ -89,8 +89,8 @@ JSON 中的综合打分结果为：
 1. `rust-avx2`
 2. `rust-avx512`
 3. `rust-ssse3`
-4. `scalar`
-5. `simd-c`
+4. `simd-c`
+5. `scalar-rust`
 
 这比单纯看分数更适合直接指导当前代码里的自动选路策略。
 

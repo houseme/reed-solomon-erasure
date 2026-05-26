@@ -49,16 +49,16 @@
 3. 先把 `x86_64` 架构治理做完整，再推进 `GFNI` 等高复杂度路径。
 4. 文档本身不参与 commit；代码子任务完成后再逐阶段提交 commit。
 
-## 2. 现状核实
+## 2. 当前代码状态核实
 
 结合当前仓库代码，现状如下：
 
 1. 仓库已经存在第一版 runtime dispatch，而非纯编译期开关。
 2. `galois_8` 的公开入口已经通过 backend 层间接调用具体实现。
-3. `aarch64` NEON、`x86_64` AVX2、`simd_c` fallback 逻辑仍大量混放在同一实现文件中。
-4. `build.rs` 仍保留 `simd_c` 的 `-march=haswell` 默认构建逻辑。
-5. `x86_64` 平台缺少分层 ISA 策略，未形成 `SSSE3 -> AVX2 -> AVX512 -> GFNI` 的清晰治理路径。
-6. 现有测试已具备一定基础，但还没有形成跨 backend、跨 ISA、跨平台层次的完整门禁。
+3. `scalar / legacy / x86 / aarch64` 已完成目录拆分，`x86_64` ISA 实现已分别落在独立模块中。
+4. `build.rs` 当前对 `simd_c` 采用 baseline 构建，不再默认强绑 `-march=haswell`。
+5. `x86_64` 当前已形成 `rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust` 的保守自动策略，`GFNI` 保持 override-only。
+6. 现有测试已具备跨 backend 一致性矩阵，并已覆盖 `mul_slice / mul_slice_xor`，但多机型 benchmark 门禁仍需继续补齐。
 
 ## 3. 本次改造的核心目标
 
@@ -218,23 +218,28 @@ pub fn active_backend_debug_summary() -> &'static str
 
 ### 7.2 推荐优先级
 
-推荐 `x86_64` backend 选择优先级如下：
+当前代码中实际采用的 `x86_64` 自动选择优先级如下：
 
-1. `rust-gfni-avx512`
-2. `rust-gfni-avx2`
-3. `rust-avx512`
-4. `rust-avx2`
-5. `rust-ssse3`
-6. `simd-c-sse2`
-7. `scalar-rust`
+1. `rust-avx2`
+2. `rust-avx512`
+3. `rust-ssse3`
+4. `simd-c`
+5. `scalar-rust`
+
+补充说明：
+
+1. `rust-gfni-avx2`
+2. `rust-gfni-avx512`
+
+两条 `GFNI` 路径当前只作为实验性 override，不参与自动优先级。
 
 ### 7.3 为什么采用此优先级
 
-1. `GFNI` 理论上潜力最高，但仅在正确性与基变换成本证明后启用。
-2. `AVX512` 带来 64B 宽度优势，但不同 CPU 上频率降档风险需 benchmark 确认。
-3. `AVX2` 是当前最稳的现代 `x86_64` 主线。
-4. `SSSE3` 用于补齐老机器中间档。
-5. `simd_c` 保留为过渡 fallback，而非主线。
+1. `AVX2` 是当前最稳、且已有单机实测支持的现代 `x86_64` 主线。
+2. `AVX512` 带来 64B 宽度优势，但不同 CPU 上仍存在频率降档与收益不稳定风险。
+3. `SSSE3` 用于补齐老机器中间档。
+4. `simd_c` 保留为 legacy fallback，而非主线。
+5. `GFNI` 理论上有潜力，但在跨机器收益与更正式设计材料补齐前仍保持实验状态。
 
 ### 7.4 特性探测建议
 
@@ -653,8 +658,8 @@ bench(simd): add backend-gated performance smoke checks
 ### 18.1 当前最重要的残余风险
 
 1. `AVX512` 虽已实现并可 override，但是否应重新升到 `AVX2` 之前仍缺少 benchmark 证据。
-2. 当前 cross-backend matrix 主要覆盖 `mul_slice`，`mul_slice_xor` 仍缺少同等粒度的跨 backend 门禁。
-3. `GFNI` 当前虽然完成了域同构验证和实验性接线，但仍缺少系统化性能数据和更完整的设计文档。
+2. 当前 cross-backend matrix 已覆盖 `mul_slice / mul_slice_xor`，但 benchmark 门禁仍缺少多机型、可复现实测基线。
+3. `GFNI` 当前虽然完成了域同构验证和实验性接线，也已有设计说明草案，但仍缺少系统化性能数据和更正式的推导材料。
 
 ### 18.2 推荐的默认优先级调整
 
@@ -674,7 +679,7 @@ bench(simd): add backend-gated performance smoke checks
 
 ### 18.3 推荐的后续修复顺序
 
-1. 先把所有 ISA 定向测试改为“仅在 CPU 特性可用时执行”
-2. 补真实 benchmark 数据后，再决定是否让 `AVX512` 重回 `AVX2` 之前
-3. 为 `mul_slice_xor` 增加 cross-backend conformance matrix
-4. 给 `GFNI` 补更完整的数学说明与性能报告后，再考虑自动启用
+1. 先补更多跨机器、同口径的 `AVX2 / AVX512 / GFNI` benchmark 数据
+2. 在更多真实 CPU 上复核后，再决定是否让 `AVX512` 重回 `AVX2` 之前
+3. 给 `GFNI` 补更正式的数学推导、准入说明与系统化性能报告
+4. 后续若再调整 selector 或 benchmark 策略，应先同步 ledger 与摘要文档

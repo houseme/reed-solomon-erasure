@@ -7,6 +7,7 @@
 3. `rust-ssse3`、`rust-avx2`、`rust-avx512`、实验性 `rust-gfni-avx2` / `rust-gfni-avx512` 已接入
 4. `simd_c` 已明确降级为 legacy fallback
 5. `benchmark_smoke` 与 `galois_backend` benchmark 已输出 backend 元数据
+6. x86 cross-backend conformance matrix 已覆盖 `mul_slice` 与 `mul_slice_xor`
 
 ## 当前默认策略
 
@@ -27,7 +28,7 @@
 
 1. 仍缺跨机器、多轮次的 `AVX2 vs AVX512` 实测性能报告
 2. 缺少 `GFNI` 的系统化性能报告
-3. `GFNI` 仍缺少更完整的设计文档沉淀
+3. `GFNI` 虽已有设计说明草案，但仍缺少更正式的数学推导与准入材料沉淀
 
 ## 结论
 

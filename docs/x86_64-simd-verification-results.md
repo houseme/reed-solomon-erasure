@@ -6,7 +6,7 @@
 
 1. 默认自动优先级为 `rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust`
 2. `GFNI` 保持实验性 backend，仅通过 `RSE_BACKEND_OVERRIDE` 暴露
-3. cross-backend conformance matrix 已对 `mul_slice` 做运行时 CPU feature gating
+3. cross-backend conformance matrix 已对 `mul_slice / mul_slice_xor` 做运行时 CPU feature gating
 4. 在 `AMD EPYC 9V45` 上，release smoke 的 `encode / verify / reconstruct / reconstruct_data` 都显示 `rust-avx2` 是当前综合最优默认路径
 
 ## 已核实项
