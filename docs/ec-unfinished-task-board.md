@@ -312,7 +312,7 @@
 
 ## 7.8 SIMD-02 Rust backend 默认切换门槛文档化
 
-状态：`TODO`
+状态：`DONE`
 
 目标：
 明确在何种条件下，允许把 Rust SIMD backend 设为默认优先路径。
@@ -338,6 +338,14 @@
 2. `docs/benchmark-methodology.md`
 3. `docs/x86_64-simd-benchmark-ledger.md`
 4. `docs/x86_64-simd-benchmark-summary-2026-05-26.md`
+
+2026-05-26 远程实机验证补充结论：
+
+1. `benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45-96-core-processor.json` 与对应 `benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45-96-core-processor.run-meta.json` 已齐备，可作为同机证据归档。
+2. machine json 中 `adoption_decision_stub.override_mismatch_count = 0`，说明本轮 release smoke 的 override 记录没有失配。
+3. machine json 中 `adoption_decision_stub.status = manual-review-required`，且 `recommended_default_priority` / `policy_eligible_default_priority` 都与当前 runtime policy 不一致。
+4. 当前 runtime policy 仍以 `src/galois_8/backend.rs` 为准，`x86_64` 自动选路保持现有顺序：`rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust`。
+5. 因 benchmark 推荐顺序与当前 runtime policy 存在差异，本次只回填文档和验证结论，不自动切换默认优先级，也不修改 runtime dispatch 逻辑。
 
 验收标准：
 

@@ -331,9 +331,9 @@ def write_machine_json(root: pathlib.Path, out_json: pathlib.Path, machine_slug:
 def print_summary(root: pathlib.Path):
     bench_dir = root / "benchmarks" / "x86_64-simd"
     rows = []
-    for path in sorted(bench_dir.glob("*.json")):
-        if path.name.endswith(".run-meta.json"):
-            continue
+    for path in sorted(
+        path for path in bench_dir.glob("*.json") if not path.name.endswith(".run-meta.json")
+    ):
         data = load_json(path)
         rankings = data.get("rankings_10x4_1m", {})
         recommendation = data.get("recommended_default_priority", {})

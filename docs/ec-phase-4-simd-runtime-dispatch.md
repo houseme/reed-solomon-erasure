@@ -276,6 +276,14 @@ pub fn active_backend_kind() -> BackendKind
 - [x] ARM64 路径的治理收口与 SVE 预留结构已完成，包括目录边界、feature-detect 插槽、override/metadata 验证与 profiling 契约
 - [ ] ARM64 更深度的性能治理与可用 SVE backend 仍属后续实现任务
 
+补充核查（2026-05-26，远程 `AMD EPYC 9V45` `x86_64` 主机）：
+
+- [x] `benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45-96-core-processor.json` 与配套 `*.run-meta.json` 已齐备，远程实机结果和运行元数据都已归档。
+- [x] machine json 中 `adoption_decision_stub.override_mismatch_count = 0`，说明同机 release smoke override 没有漂移。
+- [x] machine json 中 `adoption_decision_stub.status = manual-review-required`，符合“推荐顺序与默认策略有差异时必须人工评审”的治理规则。
+- [x] benchmark 推荐顺序高于当前 runtime policy 的候选 backend 仅作为文档结论记录；当前 `src/galois_8/backend.rs` 的 `x86_64` 自动选路顺序仍保持 `rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust`。
+- [x] 因 benchmark 推荐与当前 runtime policy 存在差异，本轮不自动切换默认优先级，只完成远程实机验证收口与文档回填。
+
 补充核查（2026-05-26，aarch64-apple-darwin 本机）：
 
 - [x] `rust-neon` / `scalar` override 在 `RSE_STRICT_BACKEND_OVERRIDE=1` 下均可严格命中；
