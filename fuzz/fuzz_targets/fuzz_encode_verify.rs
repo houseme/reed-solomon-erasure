@@ -1,14 +1,13 @@
 #![no_main]
-#[macro_use] extern crate libfuzzer_sys;
-extern crate reed_solomon_erasure;
 
-use reed_solomon_erasure::ReedSolomon;
+use libfuzzer_sys::fuzz_target;
+use reed_solomon_erasure::galois_8::ReedSolomon;
 
 fuzz_target!(|data: &[u8]| {
     if data.len() >= 4 {
         let data_shards = data[0] as usize;
         let parity_shards = data[1] as usize;
-        let shard_size= data[2] as usize;
+        let shard_size = data[2] as usize;
         let run_count = data[3] as usize;
 
         let data = &data[4..];
@@ -29,7 +28,8 @@ fuzz_target!(|data: &[u8]| {
                 let data_slices: Vec<&[u8]> = data.chunks(shard_size).collect();
                 let mut parity_buffer: Vec<u8> = vec![0u8; shard_size * parity_shards];
                 {
-                    let mut parity_slices: Vec<&mut [u8]> = parity_buffer.chunks_mut(shard_size).collect();
+                    let mut parity_slices: Vec<&mut [u8]> =
+                        parity_buffer.chunks_mut(shard_size).collect();
 
                     codec.encode_sep(&data_slices, &mut parity_slices).unwrap();
                 }

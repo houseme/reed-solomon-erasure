@@ -1,28 +1,50 @@
+[workspace]
+members = [".", "wasm", "fuzz"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+repository = "https://github.com/darrenldl/reed-solomon-erasure"
+
+[workspace.dependencies]
+cc = "1.2"
+criterion = { version = "0.8.2", features = ["html_reports"] }
+hashlink = { version = "0.11", default-features = false }
+libc = "0.2"
+libfuzzer-sys = "0.4"
+libm = "0.2.16"
+parking_lot = "0.12.5"
+quickcheck = "1.1.0"
+rand = "0.10.1"
+rayon = "1.12"
+reed-solomon-erasure = { version = "6.0.0", path = "." }
+smallvec = "1.15"
+spin = { version = "0.12.0", default-features = false, features = ["once", "spin_mutex"] }
+wasm-bindgen = "0.2.105"
+wee_alloc = "0.4"
+
+
 [package]
 name = "reed-solomon-erasure"
 version = "6.0.0"
 authors = ["Darren Ldl <darrenldldev@gmail.com>"]
-edition = "2024"
+edition.workspace = true
 build = "build.rs"
 exclude = [
     "appveyor.yml",
     ".travis.yml"
 ]
-rust-version = "1.95"
-
+rust-version.workspace = true
 description = "Rust implementation of Reed-Solomon erasure coding"
-
 documentation = "https://docs.rs/reed-solomon-erasure"
 homepage = "https://github.com/darrenldl/reed-solomon-erasure"
-repository = "https://github.com/darrenldl/reed-solomon-erasure"
-
+repository.workspace = true
 readme = "README.md"
-
 keywords = ["reed-solomon", "erasure"]
-
 categories = ["encoding"]
-
-license = "MIT"
+license.workspace = true
 
 [features]
 default = ["std"] # simd off by default
@@ -36,26 +58,25 @@ codecov = { repository = "darrenldl/reed-solomon-erasure" }
 coveralls = { repository = "darrenldl/reed-solomon-erasure" }
 
 [dependencies]
-libc = { version = "0.2", optional = true }
+libc = { workspace = true, optional = true }
 # `log2()` impl for `no_std`
-libm = "0.2.16"
-hashlink = { version = "0.11", default-features = false }
+libm.workspace = true
+hashlink.workspace = true
 # Efficient `Mutex` implementation for `std` environment
-parking_lot = { version = "0.12.5", optional = true }
-rayon = { version = "1.12", optional = true }
-smallvec = "1.15"
+parking_lot = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+smallvec.workspace = true
 # `Mutex` implementation for `no_std` environment with the same high-level API as `parking_lot`
-spin = { version = "0.12.0", default-features = false, features = ["once", "spin_mutex"] }
+spin.workspace = true
 
 [dev-dependencies]
-rand = { version = "0.10.1" }
-quickcheck = "1.1.0"
-
+rand.workspace = true
+quickcheck.workspace = true
 # Scientific benchmarking
-criterion = { version = "0.8.2", features = ["html_reports"] }
+criterion.workspace = true
 
 [build-dependencies]
-cc = { version = "1.2", optional = true }
+cc = { workspace = true, optional = true }
 
 [[bench]]
 name = "bandwidth"

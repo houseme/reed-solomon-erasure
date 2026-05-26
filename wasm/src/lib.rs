@@ -1,8 +1,4 @@
-extern crate reed_solomon_erasure;
-extern crate wasm_bindgen;
-
-use reed_solomon_erasure::galois_8::ReedSolomon;
-use reed_solomon_erasure::*;
+use reed_solomon_erasure::{Error, galois_8::ReedSolomon};
 use wasm_bindgen::prelude::*;
 
 #[global_allocator]
@@ -24,7 +20,7 @@ pub const RESULT_ERROR_INVALID_SHARD_FLAGS: u8 = 12;
 pub const RESULT_ERROR_INVALID_INDEX: u8 = 13;
 
 fn result_to_number(result: Result<(), Error>) -> u8 {
-    return match result {
+    match result {
         Ok(()) => RESULT_OK,
         Err(Error::TooFewShards) => RESULT_ERROR_TOO_FEW_SHARDS,
         Err(Error::TooManyShards) => RESULT_ERROR_TOO_MANY_SHARDS,
@@ -39,7 +35,7 @@ fn result_to_number(result: Result<(), Error>) -> u8 {
         Err(Error::EmptyShard) => RESULT_ERROR_EMPTY_SHARD,
         Err(Error::InvalidShardFlags) => RESULT_ERROR_INVALID_SHARD_FLAGS,
         Err(Error::InvalidIndex) => RESULT_ERROR_INVALID_INDEX,
-    };
+    }
 }
 
 #[wasm_bindgen]
@@ -49,7 +45,7 @@ pub fn encode(shards: &mut [u8], data_shards: usize, parity_shards: usize) -> u8
 
     let mut separate_slice_shards: Vec<_> = shards.chunks_exact_mut(shard_size).collect();
 
-    return result_to_number(reed_solomon.encode((&mut separate_slice_shards).as_mut_slice()));
+    result_to_number(reed_solomon.encode((&mut separate_slice_shards).as_mut_slice()))
 }
 
 #[wasm_bindgen]
@@ -69,5 +65,5 @@ pub fn reconstruct(
         .zip(shards_available_slice_iter)
         .collect();
 
-    return result_to_number(reed_solomon.reconstruct_data(&mut separate_slice_shards));
+    result_to_number(reed_solomon.reconstruct_data(&mut separate_slice_shards))
 }
