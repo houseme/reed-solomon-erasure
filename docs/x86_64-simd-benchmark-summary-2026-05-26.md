@@ -5,7 +5,7 @@
 本摘要对应以下实测产物：
 
 1. [benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.json](/data/rustfs/reed-solomon-erasure/benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.json)
-2. `target/benchmark-smoke/smoke-results-release-*.csv`
+2. `target/benchmark-smoke/smoke-results.csv`（按不同 `RSE_BACKEND_OVERRIDE` 逐次覆盖采集）
 3. `cargo bench --bench galois_backend --features 'std simd-accel'` 的当前 Criterion 输出
 
 机器环境：

@@ -12,7 +12,7 @@
 
 1. 运行 `./scripts/run_x86_backend_smoke_matrix.sh <date> <machine-slug>`
 2. 运行 `rust-avx2 / rust-avx512 / rust-gfni-avx2 / rust-gfni-avx512` 的 `galois_backend` 微基准
-3. 保留生成的 JSON 与 `target/benchmark-smoke/smoke-results-release-*.csv`
+3. 保留生成的 JSON 与 `target/benchmark-smoke/smoke-results.csv` / `smoke-results.json`
 
 ## 归档要求
 

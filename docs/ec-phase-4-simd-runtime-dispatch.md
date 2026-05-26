@@ -281,6 +281,7 @@ pub fn active_backend_kind() -> BackendKind
 - [x] `rust-neon` / `scalar` override 在 `RSE_STRICT_BACKEND_OVERRIDE=1` 下均可严格命中；
 - [x] `test_active_backend_metadata` 与 `test_backend_override_affects_active_backend` 在 `std + simd-accel` 下通过；
 - [x] `benchmark_smoke` 结果文件包含 backend 元数据字段（`backend/backend_id/backend_kind/backend_override/override_honored`）并与 override 行为一致。
+- [x] 当前机器为 `arm64` Darwin，Rust host triple 为 `aarch64-apple-darwin`，现有核查结论与本机真实架构一致。
 
 ## 12. 执行待办（按优先级）
 
