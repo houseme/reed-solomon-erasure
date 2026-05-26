@@ -255,7 +255,6 @@ impl crate::ReedSolomon<super::Field> {
                 smallvec::SmallVec::<[usize; 32]>::with_capacity(self.data_shard_count());
             let mut invalid_indices =
                 smallvec::SmallVec::<[usize; 32]>::with_capacity(self.total_shard_count());
-
             for (idx, shard) in shards.iter().enumerate() {
                 if shard.is_some() {
                     if valid_indices.len() < self.data_shard_count() {

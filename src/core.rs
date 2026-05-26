@@ -2211,17 +2211,30 @@ impl<F: Field> ReedSolomon<F> {
                 SmallVec::with_capacity(self.data_shard_count);
             let mut invalid_indices: SmallVec<[usize; 32]> =
                 SmallVec::with_capacity(self.total_shard_count);
-            for (index, shard) in shards.iter_mut().enumerate() {
-                if shard.get().is_some() {
-                    if valid_indices.len() < self.data_shard_count {
-                        valid_indices.push(index);
-                    }
-                } else {
+            let mut required_missing_data_indices: SmallVec<[usize; 32]> = SmallVec::new();
+
+            for (index, is_missing) in originally_missing.iter().copied().enumerate() {
+                if is_missing {
                     invalid_indices.push(index);
+                    if index < self.data_shard_count && required[index] {
+                        required_missing_data_indices.push(index);
+                    }
+                } else if valid_indices.len() < self.data_shard_count {
+                    valid_indices.push(index);
                 }
             }
 
+            if required_missing_data_indices.is_empty() {
+                return Ok(());
+            }
+
             let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+            let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+                SmallVec::with_capacity(required_missing_data_indices.len());
+            for &idx in &required_missing_data_indices {
+                matrix_rows.push(data_decode_matrix.get_row(idx));
+            }
+
             let sub_shards_snapshot: Vec<Vec<F::Elem>> = valid_indices
                 .iter()
                 .map(|&idx| {
@@ -2235,19 +2248,6 @@ impl<F: Field> ReedSolomon<F> {
                 .iter()
                 .map(|shard| shard.as_slice())
                 .collect();
-            let required_missing_data_indices: SmallVec<[usize; 32]> = (0..self.data_shard_count)
-                .filter(|&i| required[i] && originally_missing[i])
-                .collect();
-
-            if required_missing_data_indices.is_empty() {
-                return Ok(());
-            }
-
-            let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
-                SmallVec::with_capacity(required_missing_data_indices.len());
-            for &idx in &required_missing_data_indices {
-                matrix_rows.push(data_decode_matrix.get_row(idx));
-            }
 
             let mut recovered_data: Vec<Vec<F::Elem>> = required_missing_data_indices
                 .iter()
