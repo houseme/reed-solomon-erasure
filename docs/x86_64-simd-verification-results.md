@@ -53,6 +53,46 @@
 3. `Refactor SIMD mul slice backends` 这轮 ISA 内核重构本身以去重为主，没有发现新的性能退化证据，当前可以保留
 4. `reconstruct_data` 的 1/2 输出并行恢复路径没有发现算法性错误，但测试口径中存在旧的 metrics 假设；本轮已把测试预期收敛到 `benchmark-metrics` feature gate 的真实行为，避免后续把“统计未开启”误判为功能回归
 
+## 2026-05-26 再次压测复核
+
+本轮追加目标：
+
+1. 确认提交 `5b3cf9c` 当前默认行为是否相对 `253ff40` 出现性能回退
+2. 区分“默认 backend 策略切换导致的回退”和“同 backend 实现本身回退”
+
+本轮额外执行：
+
+1. 在当前 `HEAD`（`5b3cf9c`）执行：
+   - `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=auto RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+   - `cargo test --release --features 'std simd-accel' benchmark_reconstruction_hotspots -- --nocapture`
+2. 在基线 worktree `253ff40` 上执行同样两条命令
+3. 对 `rust-avx2` 做同 backend 公平对比：
+   - `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=rust-avx2 RSE_STRICT_BACKEND_OVERRIDE=1 ... benchmark_smoke ...`
+   - `RSE_BACKEND_OVERRIDE=rust-avx2 cargo bench --bench galois_backend --features 'std simd-accel' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+
+结论：
+
+1. 若按“默认 auto 行为”对比，当前 `HEAD` 相对 `253ff40` 的确存在明显性能回退
+   - 原因不是 SIMD 内核实现突然退化，而是 `253ff40` 的 `auto` 在当前机器上实际命中 `rust-gfni-avx512`
+   - 当前 `HEAD` 的 `auto` 已被收敛回保守策略，实际命中 `rust-avx2`
+2. `benchmark_smoke` 的默认 `auto` 回归门对比失败，主要集中在 `encode / verify`
+   - `encode` 回退约 `13.2% ~ 41.7%`
+   - `verify` 回退约 `14.3% ~ 33.0%`
+   - `reconstruct / reconstruct_data` 虽有下降，但仍在脚本阈值内
+3. `reconstruction_hotspot` 对比同样显示当前默认路径相对 `253ff40` 下降
+   - `reconstruct_data_missing_1_data`: `-25.96%`
+   - `reconstruct_data_missing_2_data`: `-19.31%`
+   - `reconstruct_data_missing_data_plus_parity`: `-20.60%`
+   - `reconstruct_data_32x16_missing_2_data`: `-29.63%`
+4. 但在“同 backend = rust-avx2” 的公平对比下，没有观察到同等级别的实现回退
+   - `benchmark_smoke` 的 `rust-avx2` 对 `253ff40` 基线全部通过回归阈值
+   - 多数 case 波动在约 `0.1% ~ 4.6%` 之间，属于同机基准常见抖动范围
+   - 其中 `verify 32x16 1MiB` 反而提升约 `29.45%`
+5. 因此，本轮可确认的事实是：
+   - “当前默认性能”相对 `253ff40` 有回退
+   - 这份回退主要来自默认 backend 从 `rust-gfni-avx512` 切回 `rust-avx2`
+   - 不能把它简单归因于这次代码收敛引入了 `rust-avx2` 内核退化
+
 ## 仍待完成
 
 1. 仍缺多轮、跨机器的 `AVX2 vs AVX512` 对比数据
