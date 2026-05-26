@@ -160,6 +160,15 @@ mod tests {
     use crate::tests::fill_random;
     use rand;
 
+    #[cfg(all(
+        feature = "std",
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
+    static NEON_PROFILE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[cfg(feature = "std")]
     fn with_env_var<R>(key: &str, value: &str, f: impl FnOnce() -> R) -> R {
         // SAFETY: test-only scoped env var override, restored immediately after use.
@@ -522,6 +531,7 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_matches_scalar_mul_slice() {
+        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
         for &len in &lengths {
             for _ in 0..16 {
@@ -548,6 +558,7 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_matches_scalar_mul_slice_xor() {
+        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
         for &len in &lengths {
             for _ in 0..16 {
@@ -576,6 +587,7 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_matches_simd_c() {
+        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
         for &len in &lengths {
             for _ in 0..16 {
@@ -602,6 +614,7 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_profile_stats_track_vector_vs_tail() {
+        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         reset_rust_neon_profile_stats();
 
         let c = 25u8;
@@ -655,13 +668,22 @@ mod tests {
         {
             #[cfg(all(feature = "std", target_arch = "x86_64"))]
             {
-                if std::is_x86_feature_detected!("avx2") {
-                    assert_eq!(active_backend_name(), "rust-avx2");
+                let has_gfni = std::is_x86_feature_detected!("gfni");
+                let has_avx512 = std::is_x86_feature_detected!("avx512f")
+                    && std::is_x86_feature_detected!("avx512bw");
+                let has_avx2 = std::is_x86_feature_detected!("avx2");
+
+                if has_gfni && has_avx512 {
+                    assert_eq!(active_backend_name(), "rust-gfni-avx512");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
-                } else if std::is_x86_feature_detected!("avx512f")
-                    && std::is_x86_feature_detected!("avx512bw")
-                {
+                } else if has_gfni && has_avx2 {
+                    assert_eq!(active_backend_name(), "rust-gfni-avx2");
+                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+                } else if has_avx512 {
                     assert_eq!(active_backend_name(), "rust-avx512");
+                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+                } else if has_avx2 {
+                    assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("ssse3") {
                     assert_eq!(active_backend_name(), "rust-ssse3");
