@@ -654,6 +654,26 @@ fn test_reconstruct_data_two_missing_skips_small_output_chunk_parallel_path() {
 
 #[cfg(feature = "std")]
 #[test]
+fn test_reconstruct_data_one_missing_skips_small_output_chunk_parallel_path() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(1024 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut shards: Vec<Option<Vec<u8>>> = shards.into_iter().map(Some).collect();
+    shards[0] = None;
+
+    r.reset_runtime_profile_stats();
+    r.reconstruct_data_opt(&mut shards).unwrap();
+    let stats = r.runtime_profile_stats();
+
+    assert_eq!(1, stats.reconstruct_data_only_calls);
+    assert_eq!(1, stats.reconstruct_data_stage_calls);
+    assert!(stats.code_some_parallel_calls >= 1);
+    assert_eq!(0, stats.code_some_small_output_chunk_parallel_calls);
+}
+
+#[cfg(feature = "std")]
+#[test]
 fn test_effective_parallel_policy_env_overrides() {
     let policy = with_env_var("RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES", "131072", || {
         with_env_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536", || {
