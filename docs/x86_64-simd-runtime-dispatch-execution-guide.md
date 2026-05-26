@@ -15,7 +15,7 @@
 
 当前实现状态总结：
 
-1. `x86_64` 已具备 `scalar / simd-c / rust-ssse3 / rust-avx2 / rust-avx512 / rust-gfni-avx2`
+1. `x86_64` 已具备 `scalar / simd-c / rust-ssse3 / rust-avx2 / rust-avx512 / rust-gfni-avx2 / rust-gfni-avx512`
 2. `GFNI` 当前为实验性 backend，且仅通过 override 接入
 3. `simd_c` 已降级为 legacy fallback
 4. `docs/` 文档未进入上述任何 commit

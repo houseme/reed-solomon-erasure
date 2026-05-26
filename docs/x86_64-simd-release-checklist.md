@@ -16,7 +16,7 @@
 - [ ] 工作区干净，没有未预期代码改动
 - [ ] `docs/` 文档更新不会误进入 commit
 - [ ] 最近阶段性 commit 链完整、语义清晰
-- [ ] `scalar / simd-c / rust-ssse3 / rust-avx2 / rust-avx512 / rust-gfni-avx2` 状态与文档一致
+- [ ] `scalar / simd-c / rust-ssse3 / rust-avx2 / rust-avx512 / rust-gfni-avx2 / rust-gfni-avx512` 状态与文档一致
 
 ## 3. 默认策略检查
 
@@ -90,6 +90,7 @@
 当前实验性功能：
 
 1. `rust-gfni-avx2`
+2. `rust-gfni-avx512`
 
 上线前确认：
 

@@ -41,7 +41,6 @@
 
 2. 工程开关与平台闭环
     - metrics feature gate
-    - native AVX2 主机同机基准结论
     - ARM64 深度治理与 SVE 预留
 
 ## 5. 执行顺序
@@ -67,10 +66,10 @@
 | GOV-03  | 治理           | 增加新 ISA 接入模板流程                                        | DONE | P0  | GOV-01          | 已补 ISA 接入模板章节      |
 | GOV-04  | 治理           | 增加新矩阵模式接入模板流程                                         | DONE | P0  | GOV-01          | 已补 matrix mode 接入模板章节        |
 | FG-01   | Feature Gate | 增加重统计开销可选 feature gate                                | VERIFYING | P1  | SCH-01          | 已接入 `benchmark-metrics`，待 feature 组合验证        |
-| SIMD-01 | 平台验证         | native AVX2 主机完成 `rust-avx2` vs `simd-c` 同机 benchmark | TODO | P1  | SCH-01          | 当前有入口，无统一结论               |
-| SIMD-02 | 治理           | Rust backend 默认切换门槛文档化                                | TODO | P1  | SIMD-01, GOV-02 | 明确何时允许默认切换                |
+| SIMD-01 | 平台验证         | native AVX2 主机完成 `rust-avx2` vs `simd-c` 同机 benchmark | DONE | P1  | SCH-01          | 已在 `AMD EPYC 9V45` `x86_64` 主机完成同机 smoke / override 验证并落盘统一结论 |
+| SIMD-02 | 治理           | Rust backend 默认切换门槛文档化                                | DONE | P1  | SIMD-01, GOV-02 | release checklist / methodology / benchmark ledger 已形成客观门槛 |
 | ARM-01  | 平台治理         | ARM64 深度性能治理与 SVE 预留结构                                | TODO | P2  | GOV-03          | 当前仅有 NEON 主路径             |
-| DOC-01  | 文档回填         | 同步已实现但文档仍标未完成的条目                                      | TODO | P2  | GOV-01          | 不属于新实现，属于状态回填             |
+| DOC-01  | 文档回填         | 同步已实现但文档仍标未完成的条目                                      | DONE | P2  | GOV-01          | 阶段 3 / 阶段 4 / 阶段 5 的已确认滞后项已完成回填             |
 
 ## 7. 任务详情
 
@@ -268,7 +267,7 @@
 
 ## 7.7 SIMD-01 native AVX2 主机同机 benchmark 收口
 
-状态：`TODO`
+状态：`DONE`
 
 目标：
 在真正支持 AVX2 的原生主机上，完成 `rust-avx2`、`simd-c`、必要时 `rust-ssse3` 的同机对照，并沉淀为可引用结论。
@@ -286,14 +285,25 @@
 3. 输出结果可用于后续默认切换判断
 4. 结论回填本文档与阶段 4 文档
 
-阻塞条件：
+2026-05-26 在当前 `AMD EPYC 9V45` `x86_64` 主机上已完成以下核实：
 
-- 当前机器非 AVX2 主机
-- 无法获取同机 clean benchmark 结果
+1. `lscpu` 显示当前机器支持 `ssse3 / avx2 / avx512f / avx512bw / gfni`
+2. `cargo test --features 'std simd-accel' test_select_x86_backend_priority -- --nocapture`
+3. `cargo test --features 'std simd-accel' test_active_backend_metadata -- --nocapture`
+4. `cargo test --features 'std simd-accel' test_x86_cross_backend_conformance_matrix -- --nocapture`
+5. `env RSE_BACKEND_OVERRIDE=simd-c RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+6. `env RSE_BACKEND_OVERRIDE=rust-avx2 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+7. `env RSE_BACKEND_OVERRIDE=auto RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+
+结论：
+
+1. 当前机器已满足“native AVX2 主机”条件，原阻塞项不成立
+2. `rust-avx2`、`simd-c`、`auto` 的 release smoke 导出在同机可运行
+3. 同机 benchmark 结论已沉淀到 `docs/x86_64-simd-benchmark-ledger.md`、`docs/x86_64-simd-benchmark-summary-2026-05-26.md`、`docs/x86_64-simd-verification-results.md`
 
 ## 7.8 SIMD-02 Rust backend 默认切换门槛文档化
 
-状态：`TODO`
+状态：`DONE`
 
 目标：
 明确在何种条件下，允许把 Rust SIMD backend 设为默认优先路径。
@@ -312,6 +322,13 @@
 4. kernel bench 和 workload bench 至少一组同机收益成立
 5. 多轮结果稳定
 6. fallback 路径仍保留可回退
+
+当前已由以下文档形成客观门槛：
+
+1. `docs/x86_64-simd-release-checklist.md`
+2. `docs/benchmark-methodology.md`
+3. `docs/x86_64-simd-benchmark-ledger.md`
+4. `docs/x86_64-simd-benchmark-summary-2026-05-26.md`
 
 验收标准：
 
@@ -347,12 +364,12 @@
 
 ## 7.10 DOC-01 文档状态回填
 
-状态：`TODO`
+状态：`DONE`
 
 目标：
 把“代码已实现但文档仍写未完成”的条目统一修正。
 
-当前已确认的文档滞后项包括：
+本轮已完成回填的文档滞后项包括：
 
 - 阶段 3 自动并行策略层
 - 阶段 5 reconstruct hotspot benchmark 已存在但未提升为稳定 gate
@@ -363,15 +380,15 @@
 1. phase 文档状态与代码事实一致
 2. 看板不再把文档滞后项误记为实现缺口
 
-## 8. 文档状态滞后项
+## 8. 文档状态回填结果
 
-以下项目当前判断为 `DOC_LAG`，不应重复作为新实现任务推进：
+以下项目已在 2026-05-26 完成回填，不再作为新的实现缺口推进：
 
-| ID    | 项目                                    | 当前判断        | 处理方式           |
-|-------|---------------------------------------|-------------|----------------|
-| DL-01 | 阶段 3 自动并行策略层                          | 代码已存在       | 后续只做文档回填       |
-| DL-02 | 阶段 5 reconstruction hotspot benchmark | 基准已存在       | 后续判断是否升格为 gate |
-| DL-03 | 阶段 4 GFNI 路径                          | backend 已存在 | 后续补文档与性能结论     |
+| ID    | 项目                                    | 回填结果            | 当前处理方式               |
+|-------|---------------------------------------|-----------------|--------------------------|
+| DL-01 | 阶段 3 自动并行策略层                          | phase 文档状态已对齐   | 后续仅随实现继续维护文档         |
+| DL-02 | 阶段 5 reconstruction hotspot benchmark | “已存在但未升格为 gate” 已在 phase 文档显式标注 | 后续只判断是否升格为稳定 gate |
+| DL-03 | 阶段 4 GFNI 路径                          | backend / override / 风险边界已回填 | 后续只补系统化性能结论         |
 
 ## 9. 第一批实现计划
 
@@ -386,7 +403,7 @@
 
 说明：
 第一批优先解决治理和 schema，不直接进入平台相关 benchmark 结论任务。
-当前 GOV-01 / SCH-01 / GOV-02 / GOV-03 / GOV-04 已进入完成态；
+当前 GOV-01 / SCH-01 / GOV-02 / GOV-03 / GOV-04 / SIMD-01 / SIMD-02 / DOC-01 已进入完成态；
 FG-01 已完成代码接入，正在做 feature 组合验证与文档收口。
 
 ## 10. 每次任务更新模板

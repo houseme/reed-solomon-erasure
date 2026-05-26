@@ -11,15 +11,16 @@
 实际落地结果：
 
 1. 已实现 `rust-gfni-avx2`
-2. 已支持 `RSE_BACKEND_OVERRIDE=rust-gfni-avx2`
-3. 当前仍保持 override-only，没有进入自动优先级
-4. 已完成本地域同构验证，确认当前 `0x11d` 域与 GFNI 常见 `0x11b` 域之间存在可逆线性同构
+2. 已实现 `rust-gfni-avx512`
+3. 已支持 `RSE_BACKEND_OVERRIDE=rust-gfni-avx2` 与 `RSE_BACKEND_OVERRIDE=rust-gfni-avx512`
+4. 当前仍保持 override-only，没有进入自动优先级
+5. 已完成本地域同构验证，确认当前 `0x11d` 域与 GFNI 常见 `0x11b` 域之间存在可逆线性同构
 
 残余风险：
 
 1. 数学说明已补入代码注释，但仍缺少更完整的设计文档与推导记录
-2. benchmark 数据尚未补齐
-3. 仍需补更多 golden vector 与性能回归验证
+2. benchmark 数据尚未系统化补齐
+3. 仍需补更多跨机器结果与性能回归验证
 
 ## 1. 子任务目标
 

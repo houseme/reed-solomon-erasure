@@ -271,8 +271,8 @@ pub fn active_backend_kind() -> BackendKind
 
 - [x] `rust-neon` 当前 correctness 已通过，并在 release 内核 benchmark / throughput bench 上显示出优于当前 `simd-c` 的趋势
 - [ ] 仍需继续观察更广泛 case 与更稳定基准，以确认是否长期保持默认优先级
-- [ ] `rust-avx2` 已完成 target 级 correctness，但 native AVX2 主机上的 runtime benchmark 与默认替换资格仍待评估
-- [ ] GFNI 路径尚未引入
+- [x] `rust-avx2` 已在 native `x86_64` 主机（`AMD EPYC 9V45`）完成 runtime benchmark 与 release smoke 复核，当前结论支持继续作为默认首选
+- [x] GFNI 路径已实验性引入，当前同时具备 `rust-gfni-avx2` 与 `rust-gfni-avx512`，并保持 override-only
 - [ ] ARM64 路径尚未完成更深度的性能治理与 SVE 扩展预留验证
 
 ## 12. 执行待办（按优先级）
@@ -296,15 +296,15 @@ pub fn active_backend_kind() -> BackendKind
 - [x] 引入首批 Rust SIMD backend（当前已接入 `neon` pilot，`avx2` pilot 也已接线）
 - [x] 建立 C backend 与 Rust backend 对照测试框架（固定长度 + 随机输入基础对照已具备）
 - [x] 调整 `build.rs`，已显式暴露 SIMD-C 构建级别，runtime 可据此安全判定
-- [ ] 在 native AVX2 主机上补齐 `rust-avx2` benchmark，并与 `simd-c` 做同机对照
+- [x] 在 native AVX2 主机上补齐 `rust-avx2` benchmark，并与 `simd-c` 做同机对照
 - [x] 已对 `rust-neon` 做进一步 profiling，当前结论更接近“debug smoke 低估性能，release bench 更能反映真实上限”
 - [x] 已为 `encode/verify/reconstruct` 增加矩阵/调度层 profiling 观测（`RuntimeProfileStats` + `throughput_matrix` profile 导出）
 
 ### P2（高级优化）
 
-- [ ] GFNI 路径引入与性能验证
+- [x] GFNI 路径已完成实验性引入与本机正确性验证
 - [ ] ARM64 路径稳定性治理与 SVE 预留扩展位
-- [ ] Rust backend 成为默认路径前的退役门槛文档化
+- [x] Rust backend 成为默认路径前的退役门槛文档化
 
 ## 13. 建议 PR 拆分
 
