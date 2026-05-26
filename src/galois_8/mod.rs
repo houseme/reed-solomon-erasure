@@ -653,24 +653,13 @@ mod tests {
         {
             #[cfg(all(feature = "std", target_arch = "x86_64"))]
             {
-                if std::is_x86_feature_detected!("gfni")
-                    && std::is_x86_feature_detected!("avx512f")
-                    && std::is_x86_feature_detected!("avx512bw")
-                {
-                    assert_eq!(active_backend_name(), "rust-gfni-avx512");
-                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
-                } else if std::is_x86_feature_detected!("gfni")
-                    && std::is_x86_feature_detected!("avx2")
-                {
-                    assert_eq!(active_backend_name(), "rust-gfni-avx2");
+                if std::is_x86_feature_detected!("avx2") {
+                    assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("avx512f")
                     && std::is_x86_feature_detected!("avx512bw")
                 {
                     assert_eq!(active_backend_name(), "rust-avx512");
-                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
-                } else if std::is_x86_feature_detected!("avx2") {
-                    assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("ssse3") {
                     assert_eq!(active_backend_name(), "rust-ssse3");

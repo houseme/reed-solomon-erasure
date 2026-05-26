@@ -357,17 +357,11 @@ fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
     feature = "std"
 ))]
 fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
-    if supports_rust_gfni_avx512(features) {
-        return RUST_GFNI_AVX512_BACKEND;
-    }
-    if supports_rust_gfni_avx2(features) {
-        return RUST_GFNI_AVX2_BACKEND;
+    if supports_rust_avx2(features) {
+        return RUST_AVX2_BACKEND;
     }
     if supports_rust_avx512(features) {
         return RUST_AVX512_BACKEND;
-    }
-    if supports_rust_avx2(features) {
-        return RUST_AVX2_BACKEND;
     }
     if supports_rust_ssse3(features) {
         return RUST_SSSE3_BACKEND;
@@ -689,7 +683,7 @@ mod tests {
     #[test]
     fn test_select_x86_backend_priority() {
         assert_eq!(
-            BackendId::RustGfniAvx512,
+            BackendId::RustAvx2,
             select_x86_backend(X86FeatureSet {
                 gfni: true,
                 avx512f: true,
@@ -701,7 +695,7 @@ mod tests {
         );
 
         assert_eq!(
-            BackendId::RustGfniAvx2,
+            BackendId::RustAvx2,
             select_x86_backend(X86FeatureSet {
                 gfni: true,
                 avx2: true,
@@ -711,7 +705,7 @@ mod tests {
         );
 
         assert_eq!(
-            BackendId::RustAvx512,
+            BackendId::RustAvx2,
             select_x86_backend(X86FeatureSet {
                 avx512f: true,
                 avx512bw: true,

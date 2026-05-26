@@ -28,6 +28,8 @@ fn gfni_isomorphism_bytes() -> [u8; 16] {
         GFNI_ISOMORPHISM_ROWS[0],
     ];
     let mut bytes = [0u8; 16];
+    // The affine rows describe a reversible basis change from this crate's
+    // GF(2^8, 0x11d) representation into the GFNI-friendly basis and back.
     // GF2P8AFFINE interprets each 64-bit word in byte-reversed row order.
     bytes[..8].copy_from_slice(&word);
     bytes[8..].copy_from_slice(&word);

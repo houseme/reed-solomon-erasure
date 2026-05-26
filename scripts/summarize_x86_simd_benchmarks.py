@@ -31,10 +31,8 @@ SUPPORTED_RELEASE_SMOKE_FILES = {
 }
 
 CURRENT_RUNTIME_PRIORITY_X86 = [
-    "rust-gfni-avx512",
-    "rust-gfni-avx2",
-    "rust-avx512",
     "rust-avx2",
+    "rust-avx512",
     "rust-ssse3",
     "simd-c",
     "scalar",
