@@ -1735,6 +1735,62 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     #[cfg(feature = "std")]
+    pub(crate) fn code_some_slices_two_outputs_reconstruct_data_par_raw(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[&[F::Elem]],
+        outputs: &mut [&mut [F::Elem]],
+    ) where
+        F::Elem: Send + Sync,
+    {
+        debug_assert_eq!(2, matrix_rows.len());
+        debug_assert_eq!(2, outputs.len());
+
+        let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
+        if shard_len == 0 {
+            return;
+        }
+
+        let decision = self.parallel_policy(shard_len, outputs.len());
+        self.runtime_profile_metrics
+            .record_parallel_policy(decision);
+        if !decision.use_parallel {
+            self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+            return;
+        }
+
+        self.runtime_profile_metrics.record_code_some(
+            true,
+            shard_len,
+            inputs.len(),
+            outputs.len(),
+            decision.chunk_len,
+        );
+
+        let data_shard_count = self.data_shard_count;
+        outputs
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i_row, output)| {
+                let matrix_row = matrix_rows[i_row];
+                let output = output.as_mut();
+
+                let mut start = 0;
+                while start < shard_len {
+                    let end = core::cmp::min(start + decision.chunk_len, shard_len);
+                    let output_chunk = &mut output[start..end];
+
+                    F::mul_slice(matrix_row[0], &inputs[0][start..end], output_chunk);
+                    for i_input in 1..data_shard_count {
+                        F::mul_slice_add(matrix_row[i_input], &inputs[i_input][start..end], output_chunk);
+                    }
+
+                    start = end;
+                }
+            });
+    }
+
+    #[cfg(feature = "std")]
     pub(crate) fn reconstruct_internal_option_vec_par(
         &self,
         shards: &mut [Option<Vec<F::Elem>>],
@@ -1857,12 +1913,20 @@ impl<F: Field> ReedSolomon<F> {
                     .map(|shard| shard.as_mut_slice())
                     .collect();
 
-                self.code_some_slices_with_policy_raw(
-                    &matrix_rows,
-                    &sub_shards,
-                    &mut outputs,
-                    data_policy,
-                );
+                if data_only && outputs.len() == 2 {
+                    self.code_some_slices_two_outputs_reconstruct_data_par_raw(
+                        &matrix_rows,
+                        &sub_shards,
+                        &mut outputs,
+                    );
+                } else {
+                    self.code_some_slices_with_policy_raw(
+                        &matrix_rows,
+                        &sub_shards,
+                        &mut outputs,
+                        data_policy,
+                    );
+                }
             }
 
             for (idx, recovered) in missing_data_indices.into_iter().zip(recovered_data) {
