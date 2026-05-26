@@ -810,34 +810,59 @@ mod tests {
                 let mut scalar = vec![0; len];
                 mul_slice_scalar_for_test(c, &input, &mut scalar);
 
+                let mut scalar_xor = vec![0; len];
+                fill_random(&mut scalar_xor);
+                let xor_seed = scalar_xor.clone();
+                mul_slice_xor_scalar_for_test(c, &input, &mut scalar_xor);
+
                 if cfg!(rse_simd_c_build_baseline) && has_sse2 {
                     let mut simd_c = vec![0; len];
                     legacy::simd_c::simd_c_mul_slice(c, &input, &mut simd_c);
                     assert_eq!(scalar, simd_c, "simd-c mismatch len={len} coeff={c}");
+
+                    let mut simd_c_xor = xor_seed.clone();
+                    legacy::simd_c::simd_c_mul_slice_xor(c, &input, &mut simd_c_xor);
+                    assert_eq!(scalar_xor, simd_c_xor, "simd-c xor mismatch len={len} coeff={c}");
                 }
 
                 if has_ssse3 {
                     let mut ssse3 = vec![0; len];
                     x86::ssse3::rust_ssse3_mul_slice(c, &input, &mut ssse3);
                     assert_eq!(scalar, ssse3, "ssse3 mismatch len={len} coeff={c}");
+
+                    let mut ssse3_xor = xor_seed.clone();
+                    x86::ssse3::rust_ssse3_mul_slice_xor(c, &input, &mut ssse3_xor);
+                    assert_eq!(scalar_xor, ssse3_xor, "ssse3 xor mismatch len={len} coeff={c}");
                 }
 
                 if has_avx2 {
                     let mut avx2 = vec![0; len];
                     x86::avx2::rust_avx2_mul_slice(c, &input, &mut avx2);
                     assert_eq!(scalar, avx2, "avx2 mismatch len={len} coeff={c}");
+
+                    let mut avx2_xor = xor_seed.clone();
+                    x86::avx2::rust_avx2_mul_slice_xor(c, &input, &mut avx2_xor);
+                    assert_eq!(scalar_xor, avx2_xor, "avx2 xor mismatch len={len} coeff={c}");
                 }
 
                 if has_avx512 {
                     let mut avx512 = vec![0; len];
                     x86::avx512::rust_avx512_mul_slice(c, &input, &mut avx512);
                     assert_eq!(scalar, avx512, "avx512 mismatch len={len} coeff={c}");
+
+                    let mut avx512_xor = xor_seed.clone();
+                    x86::avx512::rust_avx512_mul_slice_xor(c, &input, &mut avx512_xor);
+                    assert_eq!(scalar_xor, avx512_xor, "avx512 xor mismatch len={len} coeff={c}");
                 }
 
                 if has_gfni {
                     let mut gfni = vec![0; len];
                     x86::gfni::rust_gfni_avx2_mul_slice(c, &input, &mut gfni);
                     assert_eq!(scalar, gfni, "gfni mismatch len={len} coeff={c}");
+
+                    let mut gfni_xor = xor_seed.clone();
+                    x86::gfni::rust_gfni_avx2_mul_slice_xor(c, &input, &mut gfni_xor);
+                    assert_eq!(scalar_xor, gfni_xor, "gfni xor mismatch len={len} coeff={c}");
                 }
             }
         }

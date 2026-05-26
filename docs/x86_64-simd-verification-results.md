@@ -37,11 +37,10 @@
 
 1. 仍缺多轮、跨机器的 `AVX2 vs AVX512` 对比数据
 2. `GFNI` 的系统化性能验证仍未补齐
-3. `mul_slice_xor` 仍缺少与 `mul_slice` 同等粒度的 cross-backend matrix
-4. 若要提升 `AVX512` 或 `GFNI` 默认优先级，仍需先补多轮 benchmark 证据
+3. 若要提升 `AVX512` 或 `GFNI` 默认优先级，仍需先补多轮 benchmark 证据
 
 ## 收官建议
 
 1. 在当前已采样的 `AMD EPYC 9V45` 机器上，继续保持 `AVX2 -> AVX512` 的默认顺序
 2. 继续保持 `GFNI` 为 override-only 实验路径
-3. 下一步优先补 `mul_slice_xor` cross-backend conformance matrix 与更多 benchmark 结果归档
+3. 下一步优先补更多跨机器 benchmark 结果归档，并继续完善 `GFNI` 设计与性能说明

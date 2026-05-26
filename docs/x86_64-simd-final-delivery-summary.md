@@ -27,8 +27,7 @@
 
 1. 仍缺跨机器、多轮次的 `AVX2 vs AVX512` 实测性能报告
 2. 缺少 `GFNI` 的系统化性能报告
-3. `mul_slice_xor` 尚未拥有与 `mul_slice` 对等的 cross-backend matrix
-4. `GFNI` 仍缺少更完整的设计文档沉淀
+3. `GFNI` 仍缺少更完整的设计文档沉淀
 
 ## 结论
 
@@ -36,6 +35,6 @@
 
 如果后续要宣告完全收官，建议以以下顺序补齐：
 
-1. 先补 `mul_slice_xor` matrix
-2. 再补 `AVX2 / AVX512 / GFNI` benchmark 证据
+1. 先补更多 `AVX2 / AVX512 / GFNI` benchmark 证据
+2. 再补 `GFNI` 设计与性能文档
 3. 最后再决定是否调整默认优先级
