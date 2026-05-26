@@ -47,7 +47,7 @@ categories = ["encoding"]
 license.workspace = true
 
 [features]
-default = ["std", "benchmark-metrics"] # simd off by default
+default = ["std"] # simd and metrics off by default
 std = ["parking_lot", "rayon"]
 simd-accel = ["cc", "libc"]
 benchmark-metrics = []

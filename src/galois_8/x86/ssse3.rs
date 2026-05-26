@@ -7,31 +7,12 @@ extern crate alloc;
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
-#[inline]
-fn load_tables(c: u8) -> (core::arch::x86_64::__m128i, core::arch::x86_64::__m128i) {
-    use core::arch::x86_64::{__m128i, _mm_loadu_si128};
-
-    let low_tbl: __m128i =
-        unsafe { _mm_loadu_si128(super::super::MUL_TABLE_LOW[c as usize].as_ptr().cast()) };
-    let high_tbl: __m128i =
-        unsafe { _mm_loadu_si128(super::super::MUL_TABLE_HIGH[c as usize].as_ptr().cast()) };
-
-    (low_tbl, high_tbl)
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
 pub(crate) fn rust_ssse3_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     assert_eq!(input.len(), out.len());
     if input.is_empty() {
         return;
     }
-
-    unsafe { rust_ssse3_mul_slice_impl(c, input, out) }
+    unsafe { rust_ssse3_mul_impl::<false>(c, input, out) }
 }
 
 #[cfg(all(
@@ -45,8 +26,7 @@ pub(crate) fn rust_ssse3_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     if input.is_empty() {
         return;
     }
-
-    unsafe { rust_ssse3_mul_slice_xor_impl(c, input, out) }
+    unsafe { rust_ssse3_mul_impl::<true>(c, input, out) }
 }
 
 #[cfg(all(
@@ -56,69 +36,45 @@ pub(crate) fn rust_ssse3_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     not(any(target_os = "android", target_os = "ios"))
 ))]
 #[target_feature(enable = "ssse3")]
-unsafe fn rust_ssse3_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
+unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
         __m128i, _mm_and_si128, _mm_loadu_si128, _mm_set1_epi8, _mm_shuffle_epi8, _mm_srli_epi64,
         _mm_storeu_si128, _mm_xor_si128,
     };
 
-    let (low_tbl, high_tbl): (__m128i, __m128i) = load_tables(c);
+    let (low_half, high_half) = super::load_table_halves(c);
+    let low_tbl: __m128i = unsafe { _mm_loadu_si128(low_half.as_ptr().cast()) };
+    let high_tbl: __m128i = unsafe { _mm_loadu_si128(high_half.as_ptr().cast()) };
     let nibble_mask: __m128i = _mm_set1_epi8(0x0f);
 
     let bytes_done = input.len() & !15usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm_loadu_si128(input.as_ptr().add(offset).cast()) };
-        let low = _mm_and_si128(input_vec, nibble_mask);
-        let high = _mm_and_si128(_mm_srli_epi64::<4>(input_vec), nibble_mask);
-        let result = _mm_xor_si128(
-            _mm_shuffle_epi8(low_tbl, low),
-            _mm_shuffle_epi8(high_tbl, high),
-        );
-        unsafe { _mm_storeu_si128(out.as_mut_ptr().add(offset).cast(), result) };
-        offset += 16;
-    }
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
 
-    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[target_feature(enable = "ssse3")]
-unsafe fn rust_ssse3_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
-    use core::arch::x86_64::{
-        __m128i, _mm_and_si128, _mm_loadu_si128, _mm_set1_epi8, _mm_shuffle_epi8, _mm_srli_epi64,
-        _mm_storeu_si128, _mm_xor_si128,
-    };
-
-    let (low_tbl, high_tbl): (__m128i, __m128i) = load_tables(c);
-    let nibble_mask: __m128i = _mm_set1_epi8(0x0f);
-
-    let bytes_done = input.len() & !15usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm_loadu_si128(input.as_ptr().add(offset).cast()) };
+    for (input_chunk, out_chunk) in simd_input
+        .chunks_exact(16)
+        .zip(simd_out.chunks_exact_mut(16))
+    {
+        let input_vec = unsafe { _mm_loadu_si128(input_chunk.as_ptr().cast()) };
         let low = _mm_and_si128(input_vec, nibble_mask);
         let high = _mm_and_si128(_mm_srli_epi64::<4>(input_vec), nibble_mask);
         let product = _mm_xor_si128(
             _mm_shuffle_epi8(low_tbl, low),
             _mm_shuffle_epi8(high_tbl, high),
         );
-        let out_vec = unsafe { _mm_loadu_si128(out.as_ptr().add(offset).cast()) };
-        unsafe {
-            _mm_storeu_si128(
-                out.as_mut_ptr().add(offset).cast(),
-                _mm_xor_si128(out_vec, product),
-            )
-        };
-        offset += 16;
+        if XOR {
+            let out_vec = unsafe { _mm_loadu_si128(out_chunk.as_ptr().cast()) };
+            unsafe { _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), _mm_xor_si128(out_vec, product)) };
+        } else {
+            unsafe { _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), product) };
+        }
     }
 
-    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    if XOR {
+        super::super::scalar::mul_slice_xor_pure_rust(c, tail_input, tail_out);
+    } else {
+        super::super::scalar::mul_slice_pure_rust(c, tail_input, tail_out);
+    }
 }
 
 #[cfg(all(

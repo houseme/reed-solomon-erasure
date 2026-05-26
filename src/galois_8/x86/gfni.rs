@@ -28,9 +28,6 @@ fn gfni_isomorphism_bytes() -> [u8; 16] {
         GFNI_ISOMORPHISM_ROWS[0],
     ];
     let mut bytes = [0u8; 16];
-    // The affine rows describe a reversible basis change from this crate's
-    // GF(2^8, 0x11d) representation into the GFNI-friendly basis and back.
-    // GF2P8AFFINE interprets each 64-bit word in byte-reversed row order.
     bytes[..8].copy_from_slice(&word);
     bytes[8..].copy_from_slice(&word);
     bytes
@@ -139,8 +136,7 @@ pub(crate) fn rust_gfni_avx2_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     if input.is_empty() {
         return;
     }
-
-    unsafe { rust_gfni_avx2_mul_slice_impl(c, input, out) }
+    unsafe { rust_gfni_avx2_mul_impl::<false>(c, input, out) }
 }
 
 #[cfg(all(
@@ -154,8 +150,7 @@ pub(crate) fn rust_gfni_avx2_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) 
     if input.is_empty() {
         return;
     }
-
-    unsafe { rust_gfni_avx2_mul_slice_xor_impl(c, input, out) }
+    unsafe { rust_gfni_avx2_mul_impl::<true>(c, input, out) }
 }
 
 #[cfg(all(
@@ -169,8 +164,7 @@ pub(crate) fn rust_gfni_avx512_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     if input.is_empty() {
         return;
     }
-
-    unsafe { rust_gfni_avx512_mul_slice_impl(c, input, out) }
+    unsafe { rust_gfni_avx512_mul_impl::<false>(c, input, out) }
 }
 
 #[cfg(all(
@@ -184,8 +178,7 @@ pub(crate) fn rust_gfni_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]
     if input.is_empty() {
         return;
     }
-
-    unsafe { rust_gfni_avx512_mul_slice_xor_impl(c, input, out) }
+    unsafe { rust_gfni_avx512_mul_impl::<true>(c, input, out) }
 }
 
 #[cfg(all(
@@ -195,36 +188,7 @@ pub(crate) fn rust_gfni_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]
     not(any(target_os = "android", target_os = "ios"))
 ))]
 #[target_feature(enable = "gfni,avx2")]
-unsafe fn rust_gfni_avx2_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
-    use core::arch::x86_64::{
-        __m256i, _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8, _mm256_loadu_si256,
-        _mm256_storeu_si256,
-    };
-
-    let (iso256, coeff_mapped): (__m256i, __m256i) = unsafe { gfni_avx2_constants(c) };
-
-    let bytes_done = input.len() & !31usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm256_loadu_si256(input.as_ptr().add(offset).cast()) };
-        let mapped_input = _mm256_gf2p8affine_epi64_epi8(input_vec, iso256, 0);
-        let product = _mm256_gf2p8mul_epi8(mapped_input, coeff_mapped);
-        let restored = _mm256_gf2p8affine_epi64_epi8(product, iso256, 0);
-        unsafe { _mm256_storeu_si256(out.as_mut_ptr().add(offset).cast(), restored) };
-        offset += 32;
-    }
-
-    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[target_feature(enable = "gfni,avx2")]
-unsafe fn rust_gfni_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
+unsafe fn rust_gfni_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
         __m256i, _mm256_gf2p8affine_epi64_epi8, _mm256_gf2p8mul_epi8, _mm256_loadu_si256,
         _mm256_storeu_si256, _mm256_xor_si256,
@@ -233,23 +197,30 @@ unsafe fn rust_gfni_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8])
     let (iso256, coeff_mapped): (__m256i, __m256i) = unsafe { gfni_avx2_constants(c) };
 
     let bytes_done = input.len() & !31usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm256_loadu_si256(input.as_ptr().add(offset).cast()) };
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
+
+    for (input_chunk, out_chunk) in simd_input
+        .chunks_exact(32)
+        .zip(simd_out.chunks_exact_mut(32))
+    {
+        let input_vec = unsafe { _mm256_loadu_si256(input_chunk.as_ptr().cast()) };
         let mapped_input = _mm256_gf2p8affine_epi64_epi8(input_vec, iso256, 0);
         let product = _mm256_gf2p8mul_epi8(mapped_input, coeff_mapped);
         let restored = _mm256_gf2p8affine_epi64_epi8(product, iso256, 0);
-        let out_vec = unsafe { _mm256_loadu_si256(out.as_ptr().add(offset).cast()) };
-        unsafe {
-            _mm256_storeu_si256(
-                out.as_mut_ptr().add(offset).cast(),
-                _mm256_xor_si256(out_vec, restored),
-            )
-        };
-        offset += 32;
+        if XOR {
+            let out_vec = unsafe { _mm256_loadu_si256(out_chunk.as_ptr().cast()) };
+            unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), _mm256_xor_si256(out_vec, restored)) };
+        } else {
+            unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), restored) };
+        }
     }
 
-    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    if XOR {
+        super::super::scalar::mul_slice_xor_pure_rust(c, tail_input, tail_out);
+    } else {
+        super::super::scalar::mul_slice_pure_rust(c, tail_input, tail_out);
+    }
 }
 
 #[cfg(all(
@@ -259,36 +230,7 @@ unsafe fn rust_gfni_avx2_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8])
     not(any(target_os = "android", target_os = "ios"))
 ))]
 #[target_feature(enable = "gfni,avx512f,avx512bw")]
-unsafe fn rust_gfni_avx512_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
-    use core::arch::x86_64::{
-        __m512i, _mm512_gf2p8affine_epi64_epi8, _mm512_gf2p8mul_epi8, _mm512_loadu_si512,
-        _mm512_storeu_si512,
-    };
-
-    let (iso512, coeff_mapped): (__m512i, __m512i) = unsafe { gfni_avx512_constants(c) };
-
-    let bytes_done = input.len() & !63usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm512_loadu_si512(input.as_ptr().add(offset).cast()) };
-        let mapped_input = _mm512_gf2p8affine_epi64_epi8::<0>(input_vec, iso512);
-        let product = _mm512_gf2p8mul_epi8(mapped_input, coeff_mapped);
-        let restored = _mm512_gf2p8affine_epi64_epi8::<0>(product, iso512);
-        unsafe { _mm512_storeu_si512(out.as_mut_ptr().add(offset).cast(), restored) };
-        offset += 64;
-    }
-
-    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
-}
-
-#[cfg(all(
-    feature = "simd-accel",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-#[target_feature(enable = "gfni,avx512f,avx512bw")]
-unsafe fn rust_gfni_avx512_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
+unsafe fn rust_gfni_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::x86_64::{
         __m512i, _mm512_gf2p8affine_epi64_epi8, _mm512_gf2p8mul_epi8, _mm512_loadu_si512,
         _mm512_storeu_si512, _mm512_xor_si512,
@@ -297,23 +239,30 @@ unsafe fn rust_gfni_avx512_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8
     let (iso512, coeff_mapped): (__m512i, __m512i) = unsafe { gfni_avx512_constants(c) };
 
     let bytes_done = input.len() & !63usize;
-    let mut offset = 0usize;
-    while offset < bytes_done {
-        let input_vec = unsafe { _mm512_loadu_si512(input.as_ptr().add(offset).cast()) };
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
+
+    for (input_chunk, out_chunk) in simd_input
+        .chunks_exact(64)
+        .zip(simd_out.chunks_exact_mut(64))
+    {
+        let input_vec = unsafe { _mm512_loadu_si512(input_chunk.as_ptr().cast()) };
         let mapped_input = _mm512_gf2p8affine_epi64_epi8::<0>(input_vec, iso512);
         let product = _mm512_gf2p8mul_epi8(mapped_input, coeff_mapped);
         let restored = _mm512_gf2p8affine_epi64_epi8::<0>(product, iso512);
-        let out_vec = unsafe { _mm512_loadu_si512(out.as_ptr().add(offset).cast()) };
-        unsafe {
-            _mm512_storeu_si512(
-                out.as_mut_ptr().add(offset).cast(),
-                _mm512_xor_si512(out_vec, restored),
-            )
-        };
-        offset += 64;
+        if XOR {
+            let out_vec = unsafe { _mm512_loadu_si512(out_chunk.as_ptr().cast()) };
+            unsafe { _mm512_storeu_si512(out_chunk.as_mut_ptr().cast(), _mm512_xor_si512(out_vec, restored)) };
+        } else {
+            unsafe { _mm512_storeu_si512(out_chunk.as_mut_ptr().cast(), restored) };
+        }
     }
 
-    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    if XOR {
+        super::super::scalar::mul_slice_xor_pure_rust(c, tail_input, tail_out);
+    } else {
+        super::super::scalar::mul_slice_pure_rust(c, tail_input, tail_out);
+    }
 }
 
 #[cfg(all(
