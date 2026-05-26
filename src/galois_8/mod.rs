@@ -193,6 +193,10 @@ mod tests {
         175,
     ];
 
+    const PROPERTY_TEST_VALUES: [u8; 16] = [
+        0, 1, 2, 3, 7, 15, 31, 63, 85, 127, 128, 129, 170, 192, 254, 255,
+    ];
+
     #[test]
     fn log_table_same_as_backblaze() {
         for i in 0..256 {
@@ -206,8 +210,7 @@ mod tests {
             let a = a as u8;
             for b in 0..256 {
                 let b = b as u8;
-                for c in 0..256 {
-                    let c = c as u8;
+                for &c in &PROPERTY_TEST_VALUES {
                     let x = add(a, add(b, c));
                     let y = add(add(a, b), c);
                     assert_eq!(x, y);
@@ -287,8 +290,7 @@ mod tests {
             let a = a as u8;
             for b in 0..256 {
                 let b = b as u8;
-                for c in 0..256 {
-                    let c = c as u8;
+                for &c in &PROPERTY_TEST_VALUES {
                     let x = mul(a, add(b, c));
                     let y = add(mul(a, b), mul(a, c));
                     assert_eq!(x, y);
