@@ -17,7 +17,7 @@ fi
 DATE_UTC="$(date -u +%F)"
 CPU_SLUG="${1:-}"
 if [[ -z "${CPU_SLUG}" ]]; then
-  CPU_SLUG="$(lscpu | awk -F: '/Model name:/ {gsub(/^ +/,\"\",$2); print $2; exit}' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')"
+  CPU_SLUG="$(lscpu | awk -F: '/Model name:/ {gsub(/^ +/, "", $2); print $2; exit}' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')"
 fi
 
 OUT_DIR="benchmarks/x86_64-simd"
@@ -48,13 +48,20 @@ feature_set() {
 }
 
 write_run_meta() {
-  python3 - <<PY
+  RUN_META_PATH="${RUN_META}" \
+  DATE_UTC_VALUE="${DATE_UTC}" \
+  CPU_SLUG_VALUE="${CPU_SLUG}" \
+  GIT_REVISION_VALUE="$(git_revision)" \
+  FEATURE_SET_VALUE="$(feature_set)" \
+  BACKENDS_VALUE="${BACKENDS[*]}" \
+  python3 - <<'PY'
 import json
+import os
 import pathlib
 import platform
 import subprocess
 
-out = pathlib.Path(${RUN_META@Q})
+out = pathlib.Path(os.environ["RUN_META_PATH"])
 
 def capture(cmd):
     try:
@@ -63,11 +70,11 @@ def capture(cmd):
         return ""
 
 payload = {
-    "date_utc": ${DATE_UTC@Q},
-    "machine_slug": ${CPU_SLUG@Q},
-    "git_revision": ${$(git_revision)@Q},
-    "feature_set": ${$(feature_set)@Q},
-    "backends": ${BACKENDS[*]@Q}.split(),
+    "date_utc": os.environ["DATE_UTC_VALUE"],
+    "machine_slug": os.environ["CPU_SLUG_VALUE"],
+    "git_revision": os.environ["GIT_REVISION_VALUE"],
+    "feature_set": os.environ["FEATURE_SET_VALUE"],
+    "backends": os.environ["BACKENDS_VALUE"].split(),
     "hostname": platform.node(),
     "arch": platform.machine(),
     "platform": platform.platform(),
