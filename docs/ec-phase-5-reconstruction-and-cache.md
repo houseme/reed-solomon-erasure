@@ -119,9 +119,10 @@
 - [x] cache 命中率分析已形成统一口径（`hit_rate`/`reuse_ratio`/`miss_cost_per_request`）并写入方法学文档
 - [x] 默认容量已改为按 workload 自动推导（基于 `data_shards + parity_shards` 与 parity 扇出估算，并做上下界裁剪）
 - [x] 重建热点 benchmark 已可沉淀为稳定 gate 场景：
-  - `scripts/check_reconstruction_hotspot_gate.py` 可对比 `reconstruction-hotspot-results.json`
-  - `scripts/release-check.sh` 已支持通过 `RUN_RECONSTRUCTION_HOTSPOT_GATE=1` 接入发布前回归
-  - gate 默认关注“场景覆盖 + 相对 baseline 的稳定回归”，不强行假设所有 hotspot candidate 在所有 ISA 上都绝对快于 baseline
+    - `scripts/check_reconstruction_hotspot_gate.py` 可对比 `reconstruction-hotspot-results.json`
+    - `scripts/release-check.sh` 已支持通过 `RUN_RECONSTRUCTION_HOTSPOT_GATE=1` 接入发布前回归
+    - gate 默认关注“场景覆盖 + 相对 baseline 的稳定回归”，不强行假设所有 hotspot candidate 在所有 ISA 上都绝对快于
+      baseline
 - [x] `reconstruct_data` 专项优化已具备同机 hotspot 与 throughput/profile 双证据
 
 ## 10. 执行待办（按优先级）
@@ -135,19 +136,19 @@
 ### P1（性能专项）
 
 - [x] 评估并落地容量策略：
-  - 显式容量 `> 0` 时按调用方配置生效
-  - `0` 代表启用自动策略
-  - 自动策略按 `total_shards * parity_shards * 2` 估算，并裁剪到 `128..=4096`
+    - 显式容量 `> 0` 时按调用方配置生效
+    - `0` 代表启用自动策略
+    - 自动策略按 `total_shards * parity_shards * 2` 估算，并裁剪到 `128..=4096`
 - [x] 已为 `reconstruct_data` 与 `reconstruct_some` 增加更直接的性能对照基准：
-  - 缺 1 data
-  - 缺多个 data
-  - data+parity 混合
-  - 重复缺失模式/非重复缺失模式
-  - 当前已补 `reconstruction-hotspot-results.{json,csv}` 输出，覆盖：
-    - `reconstruct` vs `reconstruct_data`
-    - `reconstruct_data` vs `reconstruct_some`
-    - 缺 1 data / 缺多个 data / data+parity 混合 / 32x16 大规模场景
-  - 当前剩余缺口：是否将这些热点场景进一步提升为稳定 gate，而不是基准本身缺失
+    - 缺 1 data
+    - 缺多个 data
+    - data+parity 混合
+    - 重复缺失模式/非重复缺失模式
+    - 当前已补 `reconstruction-hotspot-results.{json,csv}` 输出，覆盖：
+        - `reconstruct` vs `reconstruct_data`
+        - `reconstruct_data` vs `reconstruct_some`
+        - 缺 1 data / 缺多个 data / data+parity 混合 / 32x16 大规模场景
+    - 当前剩余缺口：是否将这些热点场景进一步提升为稳定 gate，而不是基准本身缺失
 
 ### P2（治理增强）
 
@@ -171,7 +172,7 @@ cargo test --features std benchmark_reconstruction_cache_stats
 cargo test --features std benchmark_reconstruction_hotspots
 ```
 
-## 13. reconstruct_data small-output data-stage A/B（2026-05-26）
+## 13. reconstruct_data small-output data-stage A/B (2026-05-26)
 
 本轮继续只围绕 `reconstruct_data` 的 data-stage 热点推进，目标是不再复用 shared
 `code_some_small_output_chunk_parallel` 路径，而是在 `missing_data <= 2` 场景下走更窄的专用并行路径。
