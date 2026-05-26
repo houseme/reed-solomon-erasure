@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use crate::core::RuntimeParallelPolicyCache;
 
 #[cfg(feature = "std")]
@@ -72,6 +73,7 @@ impl crate::ReedSolomon<super::Field> {
         )
     }
 
+    #[cfg(feature = "std")]
     fn reconstruct_parallel_decision(
         &self,
         shard_len: usize,
