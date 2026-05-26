@@ -245,3 +245,119 @@ cargo test --release --features "std simd-accel" benchmark_reconstruction_hotspo
 
 1. 可以把这版视为阶段 5 中 `reconstruct_data` 专项优化的有效增量
 2. 后续若继续深化，应优先扩展更多 `missing_data <= 2` 的 data-stage 专用实现，而不是重新回到 shared `code_some` 路径上打转
+
+## 14. `missing_data == 2` 双输出 chunk 粒度 A/B（2026-05-26）
+
+在上一版 `missing_data <= 2` data-stage 专用路径基础上，本轮只继续收窄双输出场景：
+
+1. 保持“按输出并行”的专用执行形态不变
+2. 只在 `reconstruct_data`
+3. 只在 `missing_data == 2`
+4. 且只在 `data_shard_count <= 16`
+
+时，将双输出 data-stage 的 chunk 下限提高到 `512 KiB`。
+
+这样做的目的，是让 `10x4` 一类小中规模配置减少小 chunk 调度开销，同时避免把 `32x16` 这类更大矩阵强行带入同一策略。
+
+### 14.1 实现状态
+
+状态：已完成并通过本地验证。
+
+当前行为：
+
+1. `missing_data == 1` 的 `reconstruct_data` 专用路径继续保留
+2. `missing_data == 2` 的 `reconstruct_data` 双输出路径继续绕开 shared small-output chunk 并行分支
+3. 当 `data_shard_count <= 16` 时，双输出路径使用 `max(default_chunk_len, 512 KiB)`
+4. 当 `data_shard_count > 16` 时，双输出路径退回默认 chunk 粒度
+
+### 14.2 验证命令
+
+```bash
+cargo check --features "std simd-accel" --lib
+cargo test --features "std simd-accel" test_reconstruct_data_one_missing_skips_small_output_chunk_parallel_path -- --nocapture
+cargo test --features "std simd-accel" test_reconstruct_data_two_missing_skips_small_output_chunk_parallel_path -- --nocapture
+cargo test --release --features "std simd-accel" benchmark_reconstruction_hotspots -- --nocapture
+RSE_BACKEND_OVERRIDE=rust-avx2 \
+RSE_WRITE_PROFILE_REPORT=1 \
+RSE_PROFILE_REPORT_PATH=/tmp/throughput-avx2-profile-reconstruct-data-two-output-512k-smallonly-v5.json \
+cargo bench --bench throughput_matrix --features "std simd-accel" -- --sample-size 10 --warm-up-time 1 --measurement-time 1
+```
+
+### 14.3 reconstruction hotspot 结果
+
+关键场景结果：
+
+1. `reconstruct_data_missing_1_data`: `1.0868x`
+2. `reconstruct_data_missing_2_data`: `1.0962x`
+3. `reconstruct_data_32x16_missing_2_data`: `1.0028x`
+
+结论：
+
+1. `10x4` 的缺 1 / 缺 2 data 热点都已稳定转正
+2. `32x16` 的缺 2 data 热点至少保持不退化
+
+### 14.4 throughput_matrix 结果摘要
+
+本轮同机结果可概括为：
+
+1. `reconstruct_data_10x4_1m`：持平到小幅正向
+2. `reconstruct_10x4_1m`：正向
+3. `reconstruct_data_32x16_1m`：持平
+4. `reconstruct_32x16_1m`：正向
+5. `encode / verify`：未出现结构性回退
+
+### 14.5 profile 结论
+
+基于 `/tmp/throughput-avx2-profile-reconstruct-data-two-output-512k-smallonly-v5.json`：
+
+1. `reconstruct_data 10x4_1m` 的 `code_some_small_output_chunk_parallel_calls = 0`
+2. `reconstruct_data 32x16_1m` 的 `code_some_small_output_chunk_parallel_calls = 0`
+
+说明：
+
+1. `missing_data <= 2` 的 `reconstruct_data` data-stage 已继续稳定绕开 shared small-output chunk 路径
+2. 当前新增收益主要来自更窄的专用 data-stage 组织，而不是回到共享调度逻辑
+
+### 14.6 当前结论
+
+这版是目前阶段 5 中最稳的 `reconstruct_data` data-stage 变体之一：
+
+1. 比“直接改 shared `code_some` 路径”的副作用更小
+2. 比“全局抬高 reconstruct_data 并行门槛”的回退更少
+3. 能同时兼顾 `10x4` 热点收益与 `32x16` 不退化目标
+
+建议状态：
+
+1. 可以将本轮实现视为阶段 5 的有效增量
+2. 后续若继续推进，优先继续限定在 `reconstruct_data` data-stage 的专用实现范围内
+3. 不建议再回到 shared `code_some_small_output_chunk_parallel` 路径上做全局 sweep
+
+### 14.7 最终复检（2026-05-26）
+
+为确认这版不是一次性噪音，本轮又追加了一次同口径复检：
+
+```bash
+RSE_BACKEND_OVERRIDE=rust-avx2 \
+RSE_WRITE_PROFILE_REPORT=1 \
+RSE_PROFILE_REPORT_PATH=/tmp/throughput-avx2-profile-recheck-v6.json \
+cargo bench --bench throughput_matrix --features "std simd-accel" -- --sample-size 10 --warm-up-time 1 --measurement-time 1
+
+cargo test --release --features "std simd-accel" benchmark_reconstruction_hotspots -- --nocapture
+```
+
+复检后的 reconstruction hotspot：
+
+1. `reconstruct_data_missing_1_data`: `1.2919x`
+2. `reconstruct_data_missing_2_data`: `1.0303x`
+3. `reconstruct_data_32x16_missing_2_data`: `1.0510x`
+
+复检后的 profile：
+
+1. `reconstruct_data 10x4_1m` 的 `code_some_small_output_chunk_parallel_calls = 0`
+2. `reconstruct_data 32x16_1m` 的 `code_some_small_output_chunk_parallel_calls = 0`
+
+复检后的 workload 级结论：
+
+1. `reconstruct_data_10x4_1m` 不再出现结构性回退，但收益仍偏接近噪音边界
+2. `reconstruct_data_32x16_1m` 转为正向
+3. `reconstruct_32x16_1m` 仍可能出现小幅回退，因此这版更适合作为“已验证有效但仍需继续观察”的阶段性增量，而不是终局版本

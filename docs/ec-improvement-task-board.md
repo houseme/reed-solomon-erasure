@@ -43,6 +43,7 @@
   - cache 已补齐 `evictions`，并提供统一分析口径（`hit_rate/reuse_ratio/miss_cost_per_request`）。
   - cache 默认容量已改为按 workload 自动调优。
   - `reconstruct_data` / `reconstruct_some` 专项对照基准与结果导出已落地；热点场景现已可通过 `scripts/check_reconstruction_hotspot_gate.py` + `scripts/release-check.sh` 沉淀为稳定 gate。
+  - `reconstruct_data` 的 `missing_data <= 2` data-stage 专用路径已落地，`10x4` 热点场景已在同机压测中验证为正收益，`32x16` 场景至少保持不退化。
 - 阶段 6（部分完成）：
   - golden vectors 与 self-test 入口已存在并可运行（`cargo test --test selftest`）。
   - 发布前检查脚本已补齐（`scripts/release-check.sh`）。
