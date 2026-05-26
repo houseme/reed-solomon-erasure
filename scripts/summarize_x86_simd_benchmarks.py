@@ -332,6 +332,8 @@ def print_summary(root: pathlib.Path):
     bench_dir = root / "benchmarks" / "x86_64-simd"
     rows = []
     for path in sorted(bench_dir.glob("*.json")):
+        if path.name.endswith(".run-meta.json"):
+            continue
         data = load_json(path)
         rankings = data.get("rankings_10x4_1m", {})
         recommendation = data.get("recommended_default_priority", {})
