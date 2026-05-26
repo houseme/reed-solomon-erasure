@@ -166,3 +166,156 @@ Microbenchmark：
 2. 多轮重复采样，降低当前主机上的测量噪声
 3. 第二台支持 `GFNI` 的 x86_64 主机结果
 4. `mul_slice` 与 `mul_slice_xor` 两条 microbench 主线都具备更稳定的优势证据
+
+## 2026-05-26 Extended Smoke Matrix Follow-up
+
+### 背景
+
+上一轮自动优先复核主要用 `10x4_1m` 作为代表 workload。为避免单点样本误导，本轮继续复用同一组 `extended smoke` 结果，补做整组 case 汇总，观察：
+
+1. `rust-avx512` 是否只在单一场景领先
+2. `rust-gfni-avx512` 是否已经具备跨 workload 的稳定优势
+3. `rust-avx2` 的“保守默认”是否仍由更广覆盖的 smoke 证据支撑
+
+### 覆盖范围
+
+本轮整理由以下 `extended smoke` case 组成：
+
+1. `4x2_64k`
+2. `10x4_1m`
+3. `32x16_1m`
+
+每个 case 均对以下操作比较 4 个 backend：
+
+1. `encode`
+2. `verify`
+3. `reconstruct`
+4. `reconstruct_data`
+
+候选 backend：
+
+1. `rust-avx2`
+2. `rust-avx512`
+3. `rust-gfni-avx2`
+4. `rust-gfni-avx512`
+
+### 汇总结果
+
+按 12 个 workload-operation 点位统计：
+
+1. `rust-avx512` 取得第一：`8` 次
+2. `rust-gfni-avx512` 取得第一：`3` 次
+3. `rust-avx2` 取得第一：`1` 次
+4. `rust-gfni-avx2` 取得第一：`0` 次
+
+分场景观察：
+
+`4x2_64k`
+
+1. `encode`: `rust-avx512` 第一
+2. `verify`: `rust-gfni-avx512` 第一
+3. `reconstruct`: `rust-gfni-avx512` 第一
+4. `reconstruct_data`: `rust-gfni-avx512` 第一
+
+`10x4_1m`
+
+1. `encode`: `rust-avx512` 第一
+2. `verify`: `rust-avx2` 第一
+3. `reconstruct`: `rust-avx512` 第一
+4. `reconstruct_data`: `rust-avx512` 第一
+
+`32x16_1m`
+
+1. `encode`: `rust-avx512` 第一
+2. `verify`: `rust-avx512` 第一
+3. `reconstruct`: `rust-avx512` 第一
+4. `reconstruct_data`: `rust-avx512` 第一
+
+### 解释
+
+1. 与只看 `10x4_1m` 相比，`rust-avx512` 在整组 `extended smoke` 上的证据明显更强，不再只是个别 workload 小幅领先
+2. `rust-gfni-avx512` 在小 workload（尤其 `4x2_64k`）上有亮点，但仍未形成跨场景的综合第一
+3. `rust-avx2` 当前更像“保守稳定默认”的代表，而不是“extended smoke 综合最优”的代表
+
+### 当前结论更新
+
+1. 这轮补充证据削弱了“`rust-avx2` 在 smoke 层面仍是综合最优默认路径”的说法
+2. 但它仍不足以单独推动默认策略切换，因为：
+   - 现有 `galois_backend` microbench 证据对 `AVX512 / GFNI` 还不够稳定
+   - `GFNI` 尤其缺少 `mul_slice_xor` 主线上的稳定优势
+   - 目前仍只有当前这台 `AMD EPYC 9V45` 主机结果
+3. 因此，本轮更准确的状态应表述为：
+   - `AVX512` 已经具备“值得继续追证、可能进入默认优先候选”的 smoke 证据
+   - `GFNI` 仍不足以退出 `override-only`
+   - 在没有更多重复采样和第二台机器前，默认顺序暂不变更
+
+## 2026-05-26 Full Collection Plus Throughput Matrix Follow-up
+
+### 背景
+
+为把证据链补到“kernel + smoke + end-to-end”三层，本轮继续完成：
+
+1. `scripts/collect_x86_simd_benchmarks.sh amd-epyc-9v45`
+2. `throughput_matrix` 端到端旁证，仅比较：
+   - `rust-avx2`
+   - `rust-avx512`
+   - `rust-gfni-avx512`
+
+### 已执行命令
+
+完整采集：
+
+1. `./scripts/collect_x86_simd_benchmarks.sh amd-epyc-9v45`
+
+端到端旁证：
+
+1. `RSE_BACKEND_OVERRIDE=rust-avx2 RSE_PROFILE_REPORT_PATH=/tmp/throughput-rust-avx2-profile.json RSE_WRITE_PROFILE_REPORT=1 cargo bench --bench throughput_matrix --features 'std simd-accel benchmark-metrics' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+2. `RSE_BACKEND_OVERRIDE=rust-avx512 RSE_PROFILE_REPORT_PATH=/tmp/throughput-rust-avx512-profile.json RSE_WRITE_PROFILE_REPORT=1 cargo bench --bench throughput_matrix --features 'std simd-accel benchmark-metrics' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+3. `RSE_BACKEND_OVERRIDE=rust-gfni-avx512 RSE_PROFILE_REPORT_PATH=/tmp/throughput-rust-gfni-avx512-profile.json RSE_WRITE_PROFILE_REPORT=1 cargo bench --bench throughput_matrix --features 'std simd-accel benchmark-metrics' -- --sample-size 10 --warm-up-time 1 --measurement-time 1`
+
+### 完整采集结论
+
+新生成的机器级结果：
+
+1. [benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.json](/data/rustfs/reed-solomon-erasure/benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.json)
+2. [benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.run-meta.json](/data/rustfs/reed-solomon-erasure/benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.run-meta.json)
+
+汇总 JSON 给出的结果：
+
+1. `recommended_default_priority`：
+   - `rust-avx512`
+   - `rust-gfni-avx512`
+   - `rust-avx2`
+   - `rust-gfni-avx2`
+   - `rust-ssse3`
+   - `scalar`
+   - `simd-c`
+2. `policy_eligible_default_priority`：
+   - `rust-avx512`
+   - `rust-avx2`
+   - `rust-ssse3`
+   - `scalar`
+   - `simd-c`
+3. `adoption_decision_stub.status = manual-review-required`
+
+解释：
+
+1. 在同一批次、同一机器、完整 `release smoke + galois_backend` 采集下，`AVX512` 已经成为最强的默认候选
+2. `GFNI` 即便在纯推荐排序里很高，也仍被 `policy_eligible_default_priority` 排除在默认候选之外，说明当前治理逻辑仍然认为它缺少准入证据
+
+### Throughput Matrix 端到端观察
+
+本轮 `throughput_matrix` 没有给出足够干净、足以直接改默认顺序的结论：
+
+1. `rust-avx512` 在部分 `throughput_matrix` case 上表现积极，但端到端结果波动仍然较大
+2. `rust-gfni-avx512` 虽然在某些 kernel / smoke 点位强，但端到端层面仍然缺少稳定、全面的领先证据
+3. profile JSON 显示三者在并行/串行调用、chunk 使用、reconstruct data-stage 调用量上存在可观差异，但这些差异还不足以单独证明“更优默认策略”
+
+### 本轮最终判断
+
+1. 相比前一轮，这次完整采集明显增强了“`rust-avx512` 应进入默认优先候选”的证据
+2. 但 `throughput_matrix` 端到端旁证仍然不够稳定，因此今天仍不建议仅凭这一轮就直接修改自动默认顺序
+3. `GFNI` 仍然不应恢复自动优先，继续保持 `override-only`
+4. 如果下一步要推进默认顺序变更，更合理的候选已经从“`GFNI/AVX512` 二选一”收敛成：
+   - 只继续严肃评估 `rust-avx512` 是否提升到 `rust-avx2` 前面
+   - 不再优先考虑恢复 `GFNI` 自动优先
