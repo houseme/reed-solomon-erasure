@@ -1960,5 +1960,56 @@
       "scalar"
     ],
     "diverges_from_current_runtime_priority_x86": true
+  },
+  "policy_eligible_default_priority": {
+    "priority_order": [
+      "rust-avx2",
+      "rust-avx512",
+      "rust-ssse3",
+      "scalar",
+      "simd-c"
+    ],
+    "scored_backends": [
+      {
+        "backend_override": "rust-avx2",
+        "score": 8.7093
+      },
+      {
+        "backend_override": "rust-avx512",
+        "score": 6.4011
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "score": 3.0038
+      },
+      {
+        "backend_override": "scalar",
+        "score": 2.0617
+      },
+      {
+        "backend_override": "simd-c",
+        "score": 0.9133
+      }
+    ],
+    "rationale": [
+      "Starts from the benchmark-driven ranking.",
+      "Filters out backends that are not currently eligible for default runtime dispatch.",
+      "Experimental GFNI backends remain override-only until correctness, documentation, and multi-machine validation are complete."
+    ],
+    "eligible_backends_x86": [
+      "rust-avx2",
+      "rust-avx512",
+      "rust-ssse3",
+      "scalar",
+      "simd-c"
+    ],
+    "current_runtime_priority_x86": [
+      "rust-avx2",
+      "rust-avx512",
+      "rust-ssse3",
+      "simd-c",
+      "scalar"
+    ],
+    "diverges_from_current_runtime_priority_x86": true
   }
 }

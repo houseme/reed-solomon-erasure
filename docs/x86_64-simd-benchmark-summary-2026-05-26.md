@@ -82,6 +82,18 @@ JSON 中的综合打分结果为：
 2. 保持 `GFNI` 为 `override-only`
 3. 继续把 `GFNI` 视为“值得追踪的候选路径”，但还不是默认路径
 
+### 当前策略可用排序
+
+在排除当前仍属实验性、不可直接进入默认 runtime dispatch 的 backend 后，`policy_eligible_default_priority` 为：
+
+1. `rust-avx2`
+2. `rust-avx512`
+3. `rust-ssse3`
+4. `scalar`
+5. `simd-c`
+
+这比单纯看分数更适合直接指导当前代码里的自动选路策略。
+
 ## 本轮附带改进
 
 1. 新增统一采集脚本 `scripts/run_x86_backend_smoke_matrix.sh`

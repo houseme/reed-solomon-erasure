@@ -19,6 +19,14 @@ KNOWN_BACKENDS = {
     "rust-gfni-avx512",
 }
 
+DEFAULT_POLICY_ELIGIBLE_BACKENDS_X86 = {
+    "rust-avx2",
+    "rust-avx512",
+    "rust-ssse3",
+    "simd-c",
+    "scalar",
+}
+
 SUPPORTED_RELEASE_SMOKE_FILES = {
     "smoke-results-release-auto.csv",
     "smoke-results-release-scalar.csv",
@@ -220,6 +228,27 @@ def choose_recommended_priority(machine_json: Dict) -> Dict:
     return recommendation
 
 
+def choose_policy_eligible_priority(machine_json: Dict) -> Dict:
+    recommendation = choose_recommended_priority(machine_json)
+    eligible = [
+        row
+        for row in recommendation["scored_backends"]
+        if row["backend_override"] in DEFAULT_POLICY_ELIGIBLE_BACKENDS_X86
+    ]
+    return {
+        "priority_order": [row["backend_override"] for row in eligible],
+        "scored_backends": eligible,
+        "rationale": [
+            "Starts from the benchmark-driven ranking.",
+            "Filters out backends that are not currently eligible for default runtime dispatch.",
+            "Experimental GFNI backends remain override-only until correctness, documentation, and multi-machine validation are complete.",
+        ],
+        "eligible_backends_x86": sorted(DEFAULT_POLICY_ELIGIBLE_BACKENDS_X86),
+        "current_runtime_priority_x86": CURRENT_RUNTIME_PRIORITY_X86,
+        "diverges_from_current_runtime_priority_x86": [row["backend_override"] for row in eligible] != CURRENT_RUNTIME_PRIORITY_X86[: len(eligible)],
+    }
+
+
 def write_machine_json(root: pathlib.Path, out_json: pathlib.Path, machine_slug: str, date_utc: str):
     release_smoke = collect_release_smoke(root)
     report = {
@@ -240,6 +269,7 @@ def write_machine_json(root: pathlib.Path, out_json: pathlib.Path, machine_slug:
     report["rankings_10x4_1m"] = backend_rankings(report)
     report["criterion_rankings"] = criterion_rankings(report)
     report["recommended_default_priority"] = choose_recommended_priority(report)
+    report["policy_eligible_default_priority"] = choose_policy_eligible_priority(report)
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(report, indent=2))
 

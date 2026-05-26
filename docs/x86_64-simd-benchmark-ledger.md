@@ -57,6 +57,7 @@
 3. 更新 benchmark 汇总脚本中的 `current_runtime_priority_x86`，使其反映当前真实代码策略
 4. 新增 `scripts/run_x86_backend_smoke_matrix.sh`，为后续每轮改进提供统一 smoke 采集入口
 5. 已将 `mul_slice_xor` 补入 x86 cross-backend conformance matrix，并通过当前机器定向测试
+6. benchmark 汇总结果已增加 `policy_eligible_default_priority`，显式区分“纯性能排序”和“当前可进入默认策略的排序”
 
 ### 后续准入规则
 
