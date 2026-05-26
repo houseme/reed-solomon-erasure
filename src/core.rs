@@ -2235,18 +2235,36 @@ impl<F: Field> ReedSolomon<F> {
                 .iter()
                 .map(|shard| shard.as_slice())
                 .collect();
+            let required_missing_data_indices: SmallVec<[usize; 32]> = (0..self.data_shard_count)
+                .filter(|&i| required[i] && originally_missing[i])
+                .collect();
 
-            for i in 0..self.data_shard_count {
-                if !required[i] || !originally_missing[i] {
-                    continue;
-                }
+            if required_missing_data_indices.is_empty() {
+                return Ok(());
+            }
 
-                let mut recovered = vec![F::zero(); shard_len];
-                let matrix_rows = [data_decode_matrix.get_row(i)];
-                let mut outputs = [&mut recovered[..]];
-                self.code_some_slices(&matrix_rows, &sub_shards, &mut outputs);
+            let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+                SmallVec::with_capacity(required_missing_data_indices.len());
+            for &idx in &required_missing_data_indices {
+                matrix_rows.push(data_decode_matrix.get_row(idx));
+            }
 
-                match shards[i].get_or_initialize(shard_len) {
+            let mut recovered_data: Vec<Vec<F::Elem>> = required_missing_data_indices
+                .iter()
+                .map(|_| vec![F::zero(); shard_len])
+                .collect();
+            let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_data
+                .iter_mut()
+                .map(|shard| shard.as_mut_slice())
+                .collect();
+            self.code_some_slices(&matrix_rows, &sub_shards, &mut outputs);
+            drop(outputs);
+
+            for (idx, recovered) in required_missing_data_indices
+                .into_iter()
+                .zip(recovered_data.into_iter())
+            {
+                match shards[idx].get_or_initialize(shard_len) {
                     Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(&recovered),
                     Err(Err(err)) => return Err(err),
                 }

@@ -280,22 +280,44 @@ impl crate::ReedSolomon<super::Field> {
                 .iter()
                 .map(|shard| shard.as_slice())
                 .collect();
-            let use_parallel = self.parallel_policy(shard_len, 1).use_parallel;
+            let required_missing_data_indices: smallvec::SmallVec<[usize; 32]> =
+                (0..self.data_shard_count())
+                    .filter(|&i| required[i] && shards[i].is_none())
+                    .collect();
 
-            for i in 0..self.data_shard_count() {
-                if !required[i] || shards[i].is_some() {
-                    continue;
-                }
+            if required_missing_data_indices.is_empty() {
+                return Ok(());
+            }
 
-                let mut recovered = vec![0u8; shard_len];
-                let matrix_rows = [data_decode_matrix.get_row(i)];
-                let mut outputs = [&mut recovered[..]];
-                if use_parallel {
-                    self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
-                } else {
-                    self.code_some_slices_chunked(&matrix_rows, &sub_shards, &mut outputs);
-                }
-                shards[i] = Some(recovered);
+            let mut matrix_rows: smallvec::SmallVec<[&[u8]; 32]> =
+                smallvec::SmallVec::with_capacity(required_missing_data_indices.len());
+            for &idx in &required_missing_data_indices {
+                matrix_rows.push(data_decode_matrix.get_row(idx));
+            }
+
+            let mut recovered_data: Vec<Vec<u8>> = required_missing_data_indices
+                .iter()
+                .map(|_| vec![0u8; shard_len])
+                .collect();
+            let mut outputs: smallvec::SmallVec<[&mut [u8]; 32]> = recovered_data
+                .iter_mut()
+                .map(|shard| shard.as_mut_slice())
+                .collect();
+            let use_parallel = self
+                .parallel_policy(shard_len, required_missing_data_indices.len())
+                .use_parallel;
+            if use_parallel {
+                self.code_some_slices_par_raw(&matrix_rows, &sub_shards, &mut outputs);
+            } else {
+                self.code_some_slices_chunked(&matrix_rows, &sub_shards, &mut outputs);
+            }
+            drop(outputs);
+
+            for (idx, recovered) in required_missing_data_indices
+                .into_iter()
+                .zip(recovered_data.into_iter())
+            {
+                shards[idx] = Some(recovered);
             }
 
             return Ok(());
