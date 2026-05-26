@@ -1,3 +1,58 @@
+## Unreleased (main vs master)
+### Added
+- Runtime-dispatched GF(2^8) backend architecture under `src/galois_8/`, replacing the prior single-file layout with dedicated modules (`backend`, `policy`, `profile`, `scalar`, `legacy`, `x86`, `aarch64`).
+- New Rust SIMD backend implementations and metadata:
+  - x86 backends: `ssse3`, `avx2`, `avx512`, `gfni` (`src/galois_8/x86/*.rs`)
+  - aarch64 backend: `neon` (`src/galois_8/aarch64/neon.rs`)
+  - legacy C fallback path retained in `src/galois_8/legacy/simd_c.rs`
+- Backend runtime control and observability:
+  - `RSE_BACKEND_OVERRIDE` backend selection override
+  - `RSE_STRICT_BACKEND_OVERRIDE` strict override validation path
+  - exported runtime backend metadata APIs (`active_backend_name/id/kind`)
+- Public tuning/profile API surface:
+  - `CodecOptions`, `MatrixMode`
+  - `ParallelPolicy`, `ParallelDecision`, `PARALLEL_POLICY_VERSION`
+  - `ReconstructionCacheStats`, `ReconstructionCacheAnalysis`, `RuntimeProfileStats`
+- Parallel policy environment controls:
+  - `RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES`
+  - `RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB`
+  - `RS_PARALLEL_POLICY_MAX_JOBS`
+- New benchmark and validation assets:
+  - benches: `benches/throughput_matrix.rs`, `benches/galois_backend.rs`, `benches/common/mod.rs`
+  - tests: `tests/benchmark_smoke.rs`, `tests/golden_vectors.rs`, `tests/selftest.rs`, `tests/common/mod.rs`
+  - x86 benchmark artifact: `benchmarks/x86_64-simd/2026-05-25-amd-epyc-9v45.json`
+- New release/perf automation scripts:
+  - `scripts/release-check.sh` (fast/extended profiles)
+  - `scripts/check_backend_consistency.sh` (arch-aware backend sweep)
+  - `scripts/check_benchmark_regression.py` (operation-threshold regression gate)
+  - `scripts/collect_x86_simd_benchmarks.sh`
+  - `scripts/summarize_x86_simd_benchmarks.py`
+
+### Changed
+- Hot-path compute behavior in `src/core.rs`:
+  - consolidated parallel scheduler/policy decisions
+  - optimized required-only reconstruct paths (`reconstruct_some`)
+  - optimized verify scratch-buffer path
+  - expanded reconstruction cache policy/capacity behavior and profiling counters
+- Project baseline and dependency stack:
+  - Rust edition `2018 -> 2024`
+  - `rust-version = 1.95`
+  - `std` feature now includes `rayon`
+  - cache backend switched from `lru` to `hashlink`
+  - dependency updates across runtime/dev/build (`rand`, `quickcheck`, `criterion`, `parking_lot`, `smallvec`, `spin`, `libm`, `cc`)
+- Validation/reporting workflow:
+  - benchmark smoke tests now export structured output to `target/benchmark-smoke/smoke-results.json` and `target/benchmark-smoke/smoke-results.csv`
+  - release checks now support profile-based execution (`VALIDATION_PROFILE=fast|extended`)
+- Build/docs alignment:
+  - README updated to describe Rust SIMD runtime dispatch as preferred path with legacy C fallback
+  - `build.rs` and package metadata updated to match new backend/validation workflow
+
+### Fixed
+- Restored std and no-std validation coverage paths in mainline test flow.
+- Fixed compatibility with upgraded randomness and quickcheck interfaces after dependency updates.
+- Removed unsafe unwrap-dependent paths introduced by dependency evolution and tightened unsafe boundaries with clippy-focused cleanup.
+- Resolved post-sync x86 SIMD conflict and restored backend correctness validation coverage in runtime dispatch paths.
+
 ## 6.0.0
 - Use LruCache instead of InversionTree for caching data decode matrices
   - See [PR #104](https://github.com/rust-rse/reed-solomon-erasure/pull/104)
