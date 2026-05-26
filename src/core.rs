@@ -1759,12 +1759,21 @@ impl<F: Field> ReedSolomon<F> {
             return;
         }
 
+        // The two-output reconstruct_data hotspot benefits from fewer, larger
+        // chunks on smaller data sets, but 32x16-sized matrices became less
+        // stable in local A/B runs. Keep the wider chunk only on small/medium
+        // data-shard counts until we have stronger evidence for larger sets.
+        let chunk_len = if self.data_shard_count <= 16 {
+            core::cmp::min(shard_len, core::cmp::max(decision.chunk_len, 512 * 1024))
+        } else {
+            decision.chunk_len
+        };
         self.runtime_profile_metrics.record_code_some(
             true,
             shard_len,
             inputs.len(),
             outputs.len(),
-            decision.chunk_len,
+            chunk_len,
         );
 
         let data_shard_count = self.data_shard_count;
@@ -1777,7 +1786,7 @@ impl<F: Field> ReedSolomon<F> {
 
                 let mut start = 0;
                 while start < shard_len {
-                    let end = core::cmp::min(start + decision.chunk_len, shard_len);
+                    let end = core::cmp::min(start + chunk_len, shard_len);
                     let output_chunk = &mut output[start..end];
 
                     F::mul_slice(matrix_row[0], &inputs[0][start..end], output_chunk);
