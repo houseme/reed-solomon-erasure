@@ -64,3 +64,10 @@
 1. 只有当 `AVX512` 在 release smoke 与关键微基准上稳定优于 `AVX2`，才考虑提升默认优先级
 2. 只有当 `GFNI` 在正确性、性能与文档说明三方面同时收口，才考虑退出 override-only
 3. 每次涉及 selector 或 backend 行为调整，都应先更新本 ledger，再同步更新摘要文档
+
+### 第二台 GFNI 机器预留
+
+在第二台支持 `GFNI` 的 x86_64 机器可用前，已经预留以下文档：
+
+1. [x86_64-simd-second-gfni-machine-template.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-second-gfni-machine-template.md)
+2. [x86_64-simd-second-gfni-machine-checklist.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-second-gfni-machine-checklist.md)
