@@ -72,6 +72,43 @@
 3. 在至少一台以上 `GFNI` 机器上完成同口径 smoke 与 benchmark 复核
 4. 明确 `GFNI` 相比 `rust-avx2` 的收益是否稳定且可复现
 
+## 建议的准入清单
+
+若未来要讨论把 `GFNI` 放入默认 runtime dispatch，建议至少同时满足以下四类证据：
+
+### 1. 数学与表示层证据
+
+1. 明确记录当前库使用的域表示与 `GFNI` 工作域之间的映射关系
+2. 明确说明 `GFNI_ISOMORPHISM_ROWS` 的来源或推导方法
+3. 明确说明为什么“输入映射 -> 常量映射 -> GF2P8MUL -> 输出映射”保持语义等价
+
+### 2. 正确性证据
+
+1. `mul_slice` 与 `mul_slice_xor` 都已纳入 cross-backend conformance matrix
+2. 对 `scalar / avx2 / avx512 / gfni` 都有稳定对照
+3. 长度边界、非对齐输入、不同系数覆盖都已保留
+
+### 3. 性能证据
+
+1. 至少在两台支持 `GFNI` 的机器上复跑同口径 smoke matrix
+2. 至少在一轮 `galois_backend` microbenchmark 中证明收益不是偶然噪音
+3. 至少在 `encode / verify / reconstruct / reconstruct_data` 里说明收益集中在哪些场景
+
+### 4. 策略证据
+
+1. benchmark 结果需要区分“raw 性能排序”与“当前可进入默认策略的排序”
+2. 若 `GFNI` 仅在单机获胜，不应直接提升为默认路径
+3. 若 `GFNI` 只在微基准获胜，但在集成 smoke 上没有稳定优势，也不应提升
+
+## 待补证据模板
+
+后续每次补 `GFNI` 相关材料，建议至少按下面四项补充：
+
+1. 机器信息：CPU 型号、关键 ISA、测试日期
+2. 正确性信息：跑了哪些 cross-backend case、是否新增异常
+3. 性能信息：与 `rust-avx2`、`rust-avx512` 的对比结论
+4. 策略结论：是否仍保持 `override-only`
+
 ## 与 2026-05-26 Benchmark 的关系
 
 根据 [docs/x86_64-simd-benchmark-summary-2026-05-26.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-summary-2026-05-26.md)：
