@@ -20,18 +20,38 @@
 
 已执行：
 
-1. `cargo test --features simd-accel test_select_x86_backend_priority -- --nocapture`
-2. `cargo test --features simd-accel test_active_backend_metadata -- --nocapture`
-3. `./scripts/run_x86_backend_smoke_matrix.sh 2026-05-26 amd-epyc-9v45`
-4. `cargo bench --bench galois_backend --features 'std simd-accel'`，分别对 `rust-avx2 / rust-avx512 / rust-gfni-avx512` 做 override 采样
+1. `cargo check --lib`
+2. `cargo check --features 'std simd-accel' --lib`
+3. `cargo test --features 'std simd-accel' test_select_x86_backend_priority -- --nocapture`
+4. `cargo test --features 'std simd-accel' test_select_x86_override_backend_allows_experimental_gfni -- --nocapture`
+5. `cargo test --features 'std simd-accel' test_active_backend_metadata -- --nocapture`
+6. `cargo test --features 'std simd-accel' test_x86_cross_backend_conformance_matrix -- --nocapture`
+7. `cargo test --features 'std simd-accel' test_reconstruct_data_one_missing_skips_small_output_chunk_parallel_path -- --nocapture`
+8. `cargo test --features 'std simd-accel' test_reconstruct_data_two_missing_skips_small_output_chunk_parallel_path -- --nocapture`
+9. `RSE_BACKEND_OVERRIDE=auto RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+10. `RSE_BACKEND_OVERRIDE=rust-gfni-avx512 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
 
 结果：
 
-1. selector 优先级测试通过
-2. active backend 元数据测试通过
-3. 当前代码行为与 release checklist 的默认策略一致
-4. 当前机器上 `rust-avx2` 在关键 release smoke 场景里综合领先
-5. 当前机器上 `AVX512 / GFNI` 尚无充分证据证明应提升为默认优先
+1. `cargo check` 与 `cargo check --features 'std simd-accel' --lib` 均通过
+2. selector 默认优先级测试通过，确认自动路径重新稳定在 `rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust`
+3. GFNI override 测试通过，确认 `rust-gfni-avx2 / rust-gfni-avx512` 仍可显式启用，但不会进入自动默认路径
+4. active backend 元数据测试通过；在当前 `AMD EPYC 9V45`（支持 `ssse3 / avx2 / avx512f / avx512bw / gfni`）上，`auto` 实际命中 `rust-avx2`
+5. x86 cross-backend conformance matrix 通过，`mul_slice / mul_slice_xor` 在当前机器上的各 backend 一致性保持正确
+6. `reconstruct_data` 的单缺片/双缺片并行路径测试通过，确认小输出恢复路径仍可执行；同时测试已与 `benchmark-metrics` feature gate 的真实语义对齐
+7. release smoke 归档结果显示：
+   - `auto` 结果文件中 `backend=rust-avx2`、`backend_override=auto`、`override_honored=true`
+   - `rust-gfni-avx512` override 结果文件中 `backend=rust-gfni-avx512`、`backend_override=rust-gfni-avx512`、`override_honored=true`
+8. 当前机器上 `rust-gfni-avx512` 在部分 smoke 场景有单点优势，但 `rust-avx2` 仍是当前默认策略的保守最优解；现阶段仍无充分证据把 `AVX512` 或 `GFNI` 提升为自动优先
+
+## 本轮 Review 结论
+
+1. 当前分支最明显的“补丁叠补丁”问题不在 SIMD 内核本身，而在 runtime dispatch 选路层：后续修改一度把 `GFNI / AVX512` 推进到自动默认路径前面，和既有文档、验证结论、上线检查口径发生漂移
+2. 本轮已将 `src/galois_8/backend.rs` 收敛为更清晰的两层语义：
+   - 自动默认选路只保留保守稳定路径
+   - 实验/强制 backend 仅通过显式 override 进入
+3. `Refactor SIMD mul slice backends` 这轮 ISA 内核重构本身以去重为主，没有发现新的性能退化证据，当前可以保留
+4. `reconstruct_data` 的 1/2 输出并行恢复路径没有发现算法性错误，但测试口径中存在旧的 metrics 假设；本轮已把测试预期收敛到 `benchmark-metrics` feature gate 的真实行为，避免后续把“统计未开启”误判为功能回归
 
 ## 仍待完成
 
