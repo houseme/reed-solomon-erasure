@@ -49,7 +49,7 @@ run_reconstruction_hotspot_gate() {
   fi
 
   run cargo test --release --features "std simd-accel" \
-    benchmark_reconstruction_hotspots -- --nocapture
+    benchmark_reconstruction_hotspots -- --ignored --nocapture
 
   if [[ -n "${RSE_RECONSTRUCTION_HOTSPOT_BASELINE:-}" ]]; then
     run python3 scripts/check_reconstruction_hotspot_gate.py \
@@ -72,7 +72,7 @@ run_reconstruction_hotspot_gate() {
 run_fast_checks() {
   run cargo check --tests
   run cargo test --test selftest
-  run_smoke_profile fast cargo test --test golden_vectors --test benchmark_smoke
+  run_smoke_profile quick cargo test --test golden_vectors --test benchmark_smoke
   run cargo test --no-default-features
   run cargo test --features std
 }

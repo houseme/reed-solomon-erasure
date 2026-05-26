@@ -12,7 +12,8 @@ use reed_solomon_erasure::galois_8::{
 };
 
 use self::bench_common::{
-    BenchCase, FAST_SMOKE_CASES, Operation, SMOKE_CASES, derived_seed, make_full_shards,
+    BenchCase, FAST_SMOKE_CASES, Operation, QUICK_SMOKE_CASES, SMOKE_CASES, derived_seed,
+    make_full_shards,
 };
 use self::common::{assert_backend_override_honored_if_strict, override_honored};
 
@@ -143,6 +144,8 @@ fn smoke_profile() -> &'static str {
         .as_deref()
         .map(|value| match value {
             "extended" => "extended",
+            "fast" => "fast",
+            "quick" => "quick",
             _ => "fast",
         })
         .unwrap_or("fast")
@@ -151,7 +154,8 @@ fn smoke_profile() -> &'static str {
 fn smoke_cases() -> &'static [BenchCase] {
     match smoke_profile() {
         "extended" => SMOKE_CASES,
-        _ => FAST_SMOKE_CASES,
+        "fast" => FAST_SMOKE_CASES,
+        _ => QUICK_SMOKE_CASES,
     }
 }
 
@@ -162,6 +166,7 @@ fn smoke_iterations() -> usize {
         .filter(|value| *value > 0)
         .unwrap_or_else(|| match smoke_profile() {
             "extended" => 3,
+            "fast" => 1,
             _ => 1,
         })
 }

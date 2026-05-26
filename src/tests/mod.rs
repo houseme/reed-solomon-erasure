@@ -25,6 +25,15 @@ type ShardByShard<'a> = crate::ShardByShard<'a, galois_8::Field>;
 #[cfg(feature = "std")]
 const BENCHMARK_ARTIFACT_SCHEMA_VERSION: u32 = 1;
 
+#[cfg(feature = "std")]
+fn benchmark_test_iterations() -> usize {
+    std::env::var("RSE_TEST_BENCH_ITERATIONS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(3)
+}
+
 macro_rules! make_random_shards {
     ($per_shard:expr, $size:expr) => {{
         let mut shards = Vec::with_capacity(20);
@@ -821,7 +830,7 @@ fn bench_reconstruct_data_hotspot(
     missing_indices: &[usize],
 ) -> ReconstructionHotspotBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
-    let iterations = 3usize;
+    let iterations = benchmark_test_iterations();
     let missing_data_indices: Vec<usize> = missing_indices
         .iter()
         .copied()
@@ -887,7 +896,7 @@ fn bench_reconstruct_some_hotspot(
     required_indices: &[usize],
 ) -> ReconstructionHotspotBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
-    let iterations = 3usize;
+    let iterations = benchmark_test_iterations();
     let bytes = (required_indices.len().max(1) * shard_size) as f64;
     let mut required = vec![false; data_shards + parity_shards];
     for &index in required_indices {
@@ -947,7 +956,7 @@ fn bench_encode_sep_pair(
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
     let policy = r.effective_parallel_policy();
-    let iterations = 3usize;
+    let iterations = benchmark_test_iterations();
     let bytes = (data_shards * shard_size) as f64;
 
     let mut serial_total = 0.0;
@@ -1000,7 +1009,7 @@ fn bench_verify_with_buffer_pair(
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
     let policy = r.effective_parallel_policy();
-    let iterations = 3usize;
+    let iterations = benchmark_test_iterations();
     let bytes = (data_shards * shard_size) as f64;
 
     let mut serial_total = 0.0;
@@ -1052,7 +1061,7 @@ fn bench_reconstruct_pair(
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
     let policy = r.effective_parallel_policy();
-    let iterations = 3usize;
+    let iterations = benchmark_test_iterations();
     let bytes = (data_shards * shard_size) as f64;
 
     let mut serial_total = 0.0;
@@ -1119,7 +1128,7 @@ fn bench_reconstruct_some_required_data_pair(
 ) -> ParallelHelperBenchResult {
     let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
     let policy = r.effective_parallel_policy();
-    let iterations = 3usize;
+    let iterations = benchmark_test_iterations();
     let bytes = (required_count * shard_size) as f64;
 
     let mut serial_total = 0.0;
@@ -1300,6 +1309,7 @@ fn write_reconstruction_hotspot_bench_results(results: &[ReconstructionHotspotBe
 
 #[cfg(feature = "std")]
 #[test]
+#[ignore = "benchmark-style artifact test; run explicitly when collecting performance data"]
 fn benchmark_parallel_helpers_quantify_gain() {
     let results = vec![
         bench_encode_sep_pair(10, 4, 1024 * 1024),
@@ -1331,6 +1341,7 @@ fn benchmark_parallel_helpers_quantify_gain() {
 
 #[cfg(feature = "std")]
 #[test]
+#[ignore = "benchmark-style artifact test; run explicitly when collecting performance data"]
 fn benchmark_reconstruction_hotspots() {
     let results = vec![
         bench_reconstruct_data_hotspot(10, 4, 1024 * 1024, "reconstruct_data_missing_1_data", &[0]),
@@ -1468,6 +1479,7 @@ fn test_reconstruction_cache_stats_track_evictions() {
 
 #[cfg(feature = "std")]
 #[test]
+#[ignore = "benchmark-style artifact test; run explicitly when collecting performance data"]
 fn benchmark_reconstruction_cache_patterns() {
     let r = ReedSolomon::with_options(
         10,
@@ -1543,6 +1555,7 @@ fn run_reconstruction_pattern(
 
 #[cfg(feature = "std")]
 #[test]
+#[ignore = "benchmark-style artifact test; run explicitly when collecting performance data"]
 fn benchmark_reconstruction_cache_layers() {
     let data_shards = 10usize;
     let parity_shards = 4usize;

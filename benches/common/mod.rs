@@ -68,6 +68,13 @@ pub const FAST_SMOKE_CASES: &[BenchCase] = &[
     },
 ];
 
+pub const QUICK_SMOKE_CASES: &[BenchCase] = &[BenchCase {
+    data_shards: 4,
+    parity_shards: 2,
+    shard_size: 64 * 1024,
+    label: "4x2_64k",
+}];
+
 #[allow(dead_code)]
 pub const FULL_CASES: &[BenchCase] = &[
     BenchCase {

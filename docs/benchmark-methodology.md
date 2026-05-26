@@ -18,6 +18,18 @@ Smoke (fast regression):
 cargo test --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
 ```
 
+Smoke profiles:
+
+- `RSE_SMOKE_PROFILE=quick`: single small 4+2 / 64 KiB case for default release-check use
+- `RSE_SMOKE_PROFILE=fast`: quick profile plus 10+4 / 1 MiB
+- `RSE_SMOKE_PROFILE=extended`: full smoke matrix with higher default iteration count
+
+Example:
+
+```bash
+RSE_SMOKE_PROFILE=quick cargo test --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
+```
+
 Throughput matrix:
 
 ```bash
@@ -55,6 +67,27 @@ Cache analysis outputs (tests):
 - `target/benchmark-smoke/reconstruction-cache-patterns.csv`
 - `target/benchmark-smoke/reconstruction-hotspot-results.json`
 - `target/benchmark-smoke/reconstruction-hotspot-results.csv`
+
+These artifact-producing reconstruction benchmarks are marked `#[ignore]` on purpose.
+Run them explicitly so normal `cargo test` stays bounded and does not mix
+correctness validation with long-running CPU-saturating workload measurement.
+
+Explicit commands:
+
+```bash
+cargo test --features std benchmark_parallel_helpers_quantify_gain -- --ignored --nocapture
+cargo test --features std benchmark_reconstruction_cache_patterns -- --ignored --nocapture
+cargo test --features std benchmark_reconstruction_cache_layers -- --ignored --nocapture
+cargo test --release --features "std simd-accel" benchmark_reconstruction_hotspots -- --ignored --nocapture
+```
+
+If you are debugging a hang-like symptom or want a lighter local sampling pass,
+lower the inner loop count:
+
+```bash
+RSE_TEST_BENCH_ITERATIONS=1 \
+  cargo test --features std benchmark_parallel_helpers_quantify_gain -- --ignored --nocapture
+```
 
 Regression gate inputs / outputs:
 
@@ -155,6 +188,13 @@ This script runs test gates for:
 - backend/ISA consistency sweep (when `RUN_BACKEND_CONSISTENCY=1`)
 - `no_std` build path
 - `std` and optional `simd-accel` paths
+
+If you want a lower-noise local pass that avoids test-level parallelism and
+keeps smoke work on the smallest profile, use:
+
+```bash
+./scripts/serial-test-check.sh
+```
 
 ## 8. Smoke Regression Gate
 
