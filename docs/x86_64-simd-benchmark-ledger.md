@@ -13,6 +13,7 @@
 1. `AMD EPYC 9V45 96-Core Processor`
 2. 指令集能力包含 `ssse3 / avx2 / avx512f / avx512bw / gfni`
 3. 采样环境来自 `lscpu`，完整信息已写入 [benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.json](/data/rustfs/reed-solomon-erasure/benchmarks/x86_64-simd/2026-05-26-amd-epyc-9v45.json)
+4. 本轮可读摘要见 [x86_64-simd-benchmark-summary-2026-05-26.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-summary-2026-05-26.md)
 
 ### 已执行命令
 

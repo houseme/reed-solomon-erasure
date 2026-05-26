@@ -27,6 +27,8 @@
 1. [x86_64 SIMD 验证结果与收官评审记录](./x86_64-simd-verification-results.md)
 2. [x86_64 SIMD Runtime Dispatch 最终交付总结](./x86_64-simd-final-delivery-summary.md)
 3. [x86_64 SIMD Runtime Dispatch 上线检查清单](./x86_64-simd-release-checklist.md)
+4. [x86_64 SIMD Benchmark Summary (2026-05-26)](./x86_64-simd-benchmark-summary-2026-05-26.md)
+5. [x86_64 SIMD GFNI Design Notes](./x86_64-simd-gfni-design.md)
 
 该文档集中记录：
 
