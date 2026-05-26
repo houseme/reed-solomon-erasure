@@ -57,6 +57,26 @@ def load_csv(path: pathlib.Path):
         return list(csv.DictReader(f))
 
 
+def capture_machine_info() -> Dict[str, str]:
+    info = {
+        "hostname": platform.node(),
+        "arch": platform.machine(),
+        "platform": platform.platform(),
+    }
+
+    try:
+        info["lscpu"] = subprocess.check_output(["lscpu"], text=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        info["lscpu"] = ""
+
+    try:
+        info["uname_a"] = subprocess.check_output(["uname", "-a"], text=True).strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        info["uname_a"] = ""
+
+    return info
+
+
 def collect_criterion(root: pathlib.Path) -> List[Dict]:
     criterion_dir = root / "target" / "criterion"
     rows = []
@@ -249,14 +269,40 @@ def choose_policy_eligible_priority(machine_json: Dict) -> Dict:
     }
 
 
+def adoption_decision_stub(machine_json: Dict) -> Dict:
+    recommendation = machine_json.get("recommended_default_priority", {})
+    mismatches = machine_json.get("release_smoke_override_mismatches", {})
+    mismatch_count = sum(len(rows) for rows in mismatches.values())
+    diverges = recommendation.get("diverges_from_current_runtime_priority_x86", False)
+
+    return {
+        "status": "manual-review-required",
+        "reason": (
+            "same-machine evidence must be reviewed manually before changing the "
+            "default runtime priority"
+        ),
+        "override_mismatch_count": mismatch_count,
+        "diverges_from_current_runtime_priority_x86": diverges,
+        "recommended_priority_order": recommendation.get("priority_order", []),
+        "suggested_labels": [
+            "candidate-only",
+            "candidate-default",
+            "fallback-only",
+        ],
+    }
+
+
 def write_machine_json(root: pathlib.Path, out_json: pathlib.Path, machine_slug: str, date_utc: str):
     release_smoke = collect_release_smoke(root)
+    machine_info = capture_machine_info()
     report = {
         "date_utc": date_utc,
         "machine_slug": machine_slug,
-        "hostname": platform.node(),
-        "arch": platform.machine(),
-        "lscpu": subprocess.check_output(["lscpu"], text=True),
+        "hostname": machine_info["hostname"],
+        "arch": machine_info["arch"],
+        "platform": machine_info["platform"],
+        "lscpu": machine_info["lscpu"],
+        "uname_a": machine_info["uname_a"],
         "criterion_galois_backend": collect_criterion(root),
         "release_smoke": release_smoke,
         "release_smoke_override_mismatches": {
@@ -270,6 +316,14 @@ def write_machine_json(root: pathlib.Path, out_json: pathlib.Path, machine_slug:
     report["criterion_rankings"] = criterion_rankings(report)
     report["recommended_default_priority"] = choose_recommended_priority(report)
     report["policy_eligible_default_priority"] = choose_policy_eligible_priority(report)
+    report["adoption_decision_stub"] = adoption_decision_stub(report)
+    report["default_switch_checklist"] = {
+        "same_machine_required": True,
+        "repeat_runs_required": True,
+        "kernel_and_workload_evidence_required": True,
+        "override_mismatches_must_be_empty": True,
+        "manual_review_required_when_priority_diverges": True,
+    }
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(report, indent=2))
 
@@ -291,6 +345,10 @@ def print_summary(root: pathlib.Path):
                 "reconstruct_data": top["reconstruct_data"].get("backend_override", "n/a"),
                 "recommended_default_priority": recommendation.get("priority_order", []),
                 "recommendation_rationale": recommendation.get("rationale", []),
+                "adoption_decision_status": data.get("adoption_decision_stub", {}).get(
+                    "status", "legacy-archive-no-stub"
+                ),
+                "override_mismatch_count": data.get("adoption_decision_stub", {}).get("override_mismatch_count", 0),
             }
         )
     print(json.dumps(rows, indent=2))

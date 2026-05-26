@@ -17,24 +17,24 @@
 
 | 阶段 | 名称 | 目标 | 当前状态 | 依赖 |
 |---|---|---|---|---|
-| 1 | 基线与回归框架 | 建立性能与正确性基线 | 部分完成 | 无 |
+| 1 | 基线与回归框架 | 建立性能与正确性基线 | 已完成 | 无 |
 | 2 | API 与配置能力 | 补齐高价值 API 与 options | 已完成（第一批） | 阶段 1 |
-| 3 | 并行调度 | 引入自动并发与分块执行 | 部分完成 | 阶段 1, 2 |
+| 3 | 并行调度 | 引入自动并发与分块执行 | 已完成（治理已补齐） | 阶段 1, 2 |
 | 4 | SIMD 架构升级 | runtime ISA dispatch 与多后端 | 已完成（首批目标） | 阶段 1, 3 |
 | 5 | 重建与缓存优化 | 降低 reconstruction 开销 | 部分完成 | 阶段 2, 3 |
-| 6 | 自检与发布治理 | 稳定性、回归与发布保护 | 部分完成 | 阶段 1-5 |
+| 6 | 自检与发布治理 | 稳定性、回归与发布保护 | 部分完成（治理闭环推进中） | 阶段 1-5 |
 
 ### 2.1 状态说明（核实结论）
 
-- 阶段 1（部分完成）：
+- 阶段 1（已完成）：
   - 已有 `benches/common/mod.rs`、`tests/benchmark_smoke.rs`、`tests/golden_vectors.rs`。
   - `benchmark_smoke_matrix_runs_and_exports_results` 与 `golden_vectors` 已通过。
   - benchmark 运行说明文档已补齐（`docs/benchmark-methodology.md`）。
 - 阶段 2（已完成第一批）：
   - `CodecOptions`、`with_options`、`split/join`、`fast_one_parity`、`reconstruct_some` 已在代码与测试中落地。
-- 阶段 3（部分完成）：
+- 阶段 3（已完成，治理已补齐）：
   - 已有 chunk 化执行路径与 `std` 并行入口（`encode_*_par` / `verify_*_par` / `reconstruct_*_opt`）。
-  - “线程数自动推导策略”未形成独立可配置策略层，仍需补齐。
+  - “线程数自动推导策略”已形成独立策略层（`ParallelPolicy` / `ParallelDecision`），并已接入自动选择路径。
 - 阶段 4（已完成首批目标）：
   - runtime ISA dispatch、多后端抽象、GFNI/ARM64 runtime 路线已经在代码与阶段文档中落地。
   - 后续仍可继续做更细的性能追踪与新 ISA 扩展，但不再属于“未开始”状态。
@@ -42,11 +42,11 @@
   - cache 可观测（stats/metrics）与部分 reconstruction 优化已具备。
   - cache 已补齐 `evictions`，并提供统一分析口径（`hit_rate/reuse_ratio/miss_cost_per_request`）。
   - cache 默认容量已改为按 workload 自动调优。
-  - 重建热点 gate 场景仍需继续补足更细的 `reconstruct_data` / `reconstruct_some` 专项对照基准。
+  - `reconstruct_data` / `reconstruct_some` 专项对照基准与结果导出已落地；剩余缺口是将热点场景进一步沉淀为稳定 gate。
 - 阶段 6（部分完成）：
   - golden vectors 与 self-test 入口已存在并可运行（`cargo test --test selftest`）。
   - 发布前检查脚本已补齐（`scripts/release-check.sh`）。
-  - benchmark regression gate 与 backend/ISA consistency 自动回归入口已补齐，后续主要是补 CI 接线与基线治理规范。
+  - benchmark regression gate 与 backend/ISA consistency 自动回归入口已补齐，阶段 3/5 的可比较 schema 与 baseline 更新治理规则也已写入 `docs/benchmark-methodology.md`。
 
 ## 3. 统一验收标准
 

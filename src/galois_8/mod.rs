@@ -709,10 +709,25 @@ mod tests {
     fn test_backend_override_affects_active_backend() {
         #[cfg(target_arch = "aarch64")]
         {
+            with_env_var("RSE_BACKEND_OVERRIDE", "scalar", || {
+                assert_eq!(
+                    super::backend::runtime_override_backend_name_for_test(),
+                    Some("scalar-rust")
+                );
+                assert_eq!(
+                    super::backend::runtime_override_backend_id_for_test(),
+                    Some(BackendId::ScalarRust)
+                );
+            });
+
             with_env_var("RSE_BACKEND_OVERRIDE", "rust-neon", || {
                 assert_eq!(
                     super::backend::runtime_override_backend_name_for_test(),
                     Some("rust-neon")
+                );
+                assert_eq!(
+                    super::backend::runtime_override_backend_id_for_test(),
+                    Some(BackendId::RustNeon)
                 );
             });
         }
@@ -779,6 +794,38 @@ mod tests {
                 );
             });
         }
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        feature = "std",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
+    #[test]
+    fn test_aarch64_backend_override_metadata_matches_expected_ids() {
+        with_env_var("RSE_BACKEND_OVERRIDE", "scalar", || {
+            assert_eq!(
+                super::backend::runtime_override_backend_name_for_test(),
+                Some("scalar-rust")
+            );
+            assert_eq!(
+                super::backend::runtime_override_backend_id_for_test(),
+                Some(BackendId::ScalarRust)
+            );
+        });
+
+        with_env_var("RSE_BACKEND_OVERRIDE", "rust-neon", || {
+            assert_eq!(
+                super::backend::runtime_override_backend_name_for_test(),
+                Some("rust-neon")
+            );
+            assert_eq!(
+                super::backend::runtime_override_backend_id_for_test(),
+                Some(BackendId::RustNeon)
+            );
+        });
     }
 
     #[cfg(all(

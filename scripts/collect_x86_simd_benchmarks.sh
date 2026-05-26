@@ -22,6 +22,7 @@ fi
 
 OUT_DIR="benchmarks/x86_64-simd"
 OUT_JSON="${OUT_DIR}/${DATE_UTC}-${CPU_SLUG}.json"
+RUN_META="${OUT_DIR}/${DATE_UTC}-${CPU_SLUG}.run-meta.json"
 
 BACKENDS=(
   auto
@@ -37,6 +38,46 @@ BACKENDS=(
 mkdir -p "${OUT_DIR}"
 mkdir -p target/benchmark-smoke
 mkdir -p target/criterion
+
+git_revision() {
+  git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+}
+
+feature_set() {
+  echo "std|simd-accel"
+}
+
+write_run_meta() {
+  python3 - <<PY
+import json
+import pathlib
+import platform
+import subprocess
+
+out = pathlib.Path(${RUN_META@Q})
+
+def capture(cmd):
+    try:
+        return subprocess.check_output(cmd, text=True).strip()
+    except Exception:
+        return ""
+
+payload = {
+    "date_utc": ${DATE_UTC@Q},
+    "machine_slug": ${CPU_SLUG@Q},
+    "git_revision": ${$(git_revision)@Q},
+    "feature_set": ${$(feature_set)@Q},
+    "backends": ${BACKENDS[*]@Q}.split(),
+    "hostname": platform.node(),
+    "arch": platform.machine(),
+    "platform": platform.platform(),
+    "uname_a": capture(["uname", "-a"]),
+    "lscpu": capture(["lscpu"]),
+}
+out.write_text(json.dumps(payload, indent=2))
+print(out)
+PY
+}
 
 run_smoke() {
   local backend="$1"
@@ -70,4 +111,8 @@ python3 scripts/summarize_x86_simd_benchmarks.py \
   --machine-slug "${CPU_SLUG}" \
   --date "${DATE_UTC}"
 
+echo "==> writing ${RUN_META}"
+write_run_meta >/dev/null
+
 echo "saved: ${OUT_JSON}"
+echo "saved: ${RUN_META}"

@@ -9,11 +9,6 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 
-BASE_TESTS=(
-  test_active_backend_metadata
-  test_backend_override_affects_active_backend
-)
-
 run_test() {
   local backend="$1"
   local test_name="$2"
@@ -38,7 +33,10 @@ case "$(uname -m)" in
 esac
 
 for backend in "${BACKENDS[@]}"; do
-  for test_name in "${BASE_TESTS[@]}"; do
-    run_test "${backend}" "${test_name}"
-  done
+  # Metadata test validates the default runtime dispatch for the host.
+  # It should run only with auto selection, not with forced override backends.
+  if [[ "${backend}" == "auto" ]]; then
+    run_test "${backend}" "test_active_backend_metadata"
+  fi
+  run_test "${backend}" "test_backend_override_affects_active_backend"
 done

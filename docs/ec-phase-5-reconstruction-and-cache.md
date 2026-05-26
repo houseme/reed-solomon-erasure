@@ -132,7 +132,7 @@
   - 显式容量 `> 0` 时按调用方配置生效
   - `0` 代表启用自动策略
   - 自动策略按 `total_shards * parity_shards * 2` 估算，并裁剪到 `128..=4096`
-- [ ] 为 `reconstruct_data` 与 `reconstruct_some` 增加更直接的性能对照基准：
+- [x] 已为 `reconstruct_data` 与 `reconstruct_some` 增加更直接的性能对照基准：
   - 缺 1 data
   - 缺多个 data
   - data+parity 混合
@@ -141,11 +141,12 @@
     - `reconstruct` vs `reconstruct_data`
     - `reconstruct_data` vs `reconstruct_some`
     - 缺 1 data / 缺多个 data / data+parity 混合 / 32x16 大规模场景
+  - 当前剩余缺口：是否将这些热点场景进一步提升为稳定 gate，而不是基准本身缺失
 
 ### P2（治理增强）
 
 - [x] 将 cache 分析方法写入文档（输入、样本规模、统计口径，见 `docs/benchmark-methodology.md`）
-- [ ] 增加可选 feature gate，允许在 release 配置中关闭重统计开销
+- [x] 已增加可选 feature gate：`benchmark-metrics`，允许在 release 配置中关闭重统计开销
 
 ## 11. 建议 PR 拆分
 

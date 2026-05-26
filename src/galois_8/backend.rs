@@ -180,6 +180,7 @@ struct X86FeatureSet {
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 struct Aarch64FeatureSet {
     neon: bool,
+    sve: bool,
 }
 
 #[cfg(all(
@@ -380,8 +381,10 @@ fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
     feature = "std"
 ))]
 fn detect_aarch64_features() -> Aarch64FeatureSet {
+    let sve = super::aarch64::sve::detect_sve_features().available;
     Aarch64FeatureSet {
         neon: std::arch::is_aarch64_feature_detected!("neon"),
+        sve,
     }
 }
 
@@ -415,6 +418,7 @@ fn supports_simd_c_aarch64(features: Aarch64FeatureSet) -> bool {
     feature = "std"
 ))]
 fn select_aarch64_backend(features: Aarch64FeatureSet) -> GaloisBackend {
+    let _ = features.sve;
     if supports_rust_neon(features) {
         return RUST_NEON_BACKEND;
     }
@@ -762,12 +766,48 @@ mod tests {
     fn test_select_aarch64_backend_priority() {
         assert_eq!(
             BackendId::RustNeon,
-            select_aarch64_backend(Aarch64FeatureSet { neon: true }).id
+            select_aarch64_backend(Aarch64FeatureSet {
+                neon: true,
+                sve: false,
+            })
+            .id
         );
 
         assert_eq!(
             BackendId::ScalarRust,
-            select_aarch64_backend(Aarch64FeatureSet { neon: false }).id
+            select_aarch64_backend(Aarch64FeatureSet {
+                neon: false,
+                sve: false,
+            })
+            .id
+        );
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "std"
+    ))]
+    #[test]
+    fn test_select_aarch64_backend_sve_placeholder_does_not_change_current_priority() {
+        assert_eq!(
+            BackendId::RustNeon,
+            select_aarch64_backend(Aarch64FeatureSet {
+                neon: true,
+                sve: true,
+            })
+            .id
+        );
+
+        assert_eq!(
+            BackendId::ScalarRust,
+            select_aarch64_backend(Aarch64FeatureSet {
+                neon: false,
+                sve: true,
+            })
+            .id
         );
     }
 }

@@ -272,8 +272,15 @@ pub fn active_backend_kind() -> BackendKind
 - [x] `rust-neon` 当前 correctness 已通过，并在 release 内核 benchmark / throughput bench 上显示出优于当前 `simd-c` 的趋势
 - [ ] 仍需继续观察更广泛 case 与更稳定基准，以确认是否长期保持默认优先级
 - [x] `rust-avx2` 已在 native `x86_64` 主机（`AMD EPYC 9V45`）完成 runtime benchmark 与 release smoke 复核，当前结论支持继续作为默认首选
-- [x] GFNI 路径已实验性引入，当前同时具备 `rust-gfni-avx2` 与 `rust-gfni-avx512`，并保持 override-only
-- [ ] ARM64 路径尚未完成更深度的性能治理与 SVE 扩展预留验证
+- [x] GFNI 路径代码与 backend override 已引入，当前同时具备 `rust-gfni-avx2` 与 `rust-gfni-avx512`，并保持 override-only；剩余缺口是 native GFNI 主机上的性能验证与默认优先级结论
+- [x] ARM64 路径的治理收口与 SVE 预留结构已完成，包括目录边界、feature-detect 插槽、override/metadata 验证与 profiling 契约
+- [ ] ARM64 更深度的性能治理与可用 SVE backend 仍属后续实现任务
+
+补充核查（2026-05-26，aarch64-apple-darwin 本机）：
+
+- [x] `rust-neon` / `scalar` override 在 `RSE_STRICT_BACKEND_OVERRIDE=1` 下均可严格命中；
+- [x] `test_active_backend_metadata` 与 `test_backend_override_affects_active_backend` 在 `std + simd-accel` 下通过；
+- [x] `benchmark_smoke` 结果文件包含 backend 元数据字段（`backend/backend_id/backend_kind/backend_override/override_honored`）并与 override 行为一致。
 
 ## 12. 执行待办（按优先级）
 
@@ -302,9 +309,11 @@ pub fn active_backend_kind() -> BackendKind
 
 ### P2（高级优化）
 
-- [x] GFNI 路径已完成实验性引入与本机正确性验证
-- [ ] ARM64 路径稳定性治理与 SVE 预留扩展位
-- [x] Rust backend 成为默认路径前的退役门槛文档化
+- [x] GFNI 路径已完成实验性引入与本机正确性验证；后续仍需补 native GFNI 主机上的性能验证
+- [x] ARM64 路径已补 SVE 预留扩展位（目录与 feature-detect 插槽）
+- [x] ARM64 路径治理收口与 SVE 预留结构
+- [ ] ARM64 深度性能治理与 SVE backend 实装/验证
+- [x] Rust backend 成为默认路径前的退役门槛文档化（见 `docs/benchmark-methodology.md`）
 
 ## 13. 建议 PR 拆分
 
@@ -312,6 +321,35 @@ pub fn active_backend_kind() -> BackendKind
 2. `phase4-runtime-dispatch`: runtime feature 探测 + 分发缓存 + 回退路径
 3. `phase4-rust-backend-pilot`: 首条 Rust SIMD backend + C/Rust 对照测试
 4. `phase4-gfni-arm64`: GFNI/ARM64 强化与基准验证
+
+## 14.1 Rust Backend 默认切换门槛
+
+Rust backend 允许成为默认优先路径前，至少需要满足以下条件：
+
+1. correctness 全通过：
+   - scalar 对照
+   - backend consistency sweep
+   - smoke regression 不出现 correctness 漂移
+2. benchmark 证据充分：
+   - 同机、同 feature、同 backend override 口径下完成对照
+   - `galois_backend` 与 workload 级 `smoke` / `throughput_matrix` 至少一条主线成立
+3. 结果稳定：
+   - 不能基于单次 noisy run 决策
+   - 需要重复运行并以中位数结论为主
+4. 回退路径清晰：
+   - `scalar` fallback 保留
+   - `simd-c` 或前序稳定 backend 仍可通过 override 强制回退
+5. 治理同步：
+   - baseline 更新理由已记录
+   - 默认优先级变更已同步到相关文档与脚本
+
+在未满足上述条件前，Rust backend 可以继续作为：
+
+- correctness-validated backend
+- benchmark candidate backend
+- explicit override backend
+
+但不应仅凭局部结果直接替换为默认优先路径。
 
 ## 14. 验收命令
 

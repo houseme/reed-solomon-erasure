@@ -309,3 +309,187 @@ Guidelines:
 3. When metrics are disabled, scripts should treat zero-valued counters as
    “metrics unavailable in this build” unless the workload naturally produces
    zeros.
+
+## 13. Native AVX2 Same-Machine Benchmark Runbook
+
+Use this workflow when deciding whether `rust-avx2` is ready to outrank
+`simd-c` on a real x86_64 AVX2 machine.
+
+### 13.1 Preconditions
+
+1. Run on a native x86_64 host that actually exposes AVX2.
+2. Keep machine, governor, and feature set stable across the whole run.
+3. Prefer a clean worktree or at least a clearly recorded commit / diff scope.
+4. Avoid mixing incremental artifacts from unrelated benchmark sessions.
+
+### 13.2 Required commands
+
+Primary collection flow:
+
+```bash
+bash scripts/collect_x86_simd_benchmarks.sh
+```
+
+This flow collects:
+
+- release smoke results per backend override
+- `galois_backend` criterion results
+- machine summary JSON under `benchmarks/x86_64-simd/`
+
+### 13.3 Minimum evidence package
+
+The benchmark package is not considered decision-ready unless it includes:
+
+1. release smoke comparisons for:
+   - `auto`
+   - `simd-c`
+   - `rust-avx2`
+   - `scalar`
+2. kernel benchmark comparisons for:
+   - `galois_mul_slice`
+   - `galois_mul_slice_xor`
+3. override-honored checks with no silent mismatch for the compared backends
+4. archived machine JSON in `benchmarks/x86_64-simd/`
+
+### 13.4 Decision template
+
+When judging whether `rust-avx2` may become the default x86_64 priority, record:
+
+- machine json:
+- commit or diff scope:
+- compared backends:
+- smoke winner by operation:
+- kernel winner by operation:
+- recommended priority from summary script:
+- diverges from current runtime priority:
+- repeated-run stability conclusion:
+- adoption decision:
+- fallback plan:
+
+### 13.5 Stability rule
+
+Do not promote `rust-avx2` based on one archived run alone.
+
+Recommended minimum:
+
+1. At least two same-machine archived runs
+2. No correctness or override mismatch anomalies
+3. No contradictory conclusion caused solely by noisy single-run outliers
+4. If recommendation changes across runs, prefer the backend that remains
+   competitive across smoke and kernel results rather than blindly following one
+   aggregate score
+
+### 13.6 Promotion decision classes
+
+Use one of the following final labels:
+
+- `candidate-only`: correctness is good, but performance evidence is not yet stable
+- `candidate-default`: evidence is strong enough to test a default-priority change
+- `fallback-only`: backend remains useful for explicit override or niche hosts, but
+  should not be promoted
+
+### 13.7 Ready-To-Paste Result Record
+
+Use the following record when the AVX2 run finishes:
+
+```text
+machine json:
+run meta:
+commit or diff scope:
+compared backends:
+smoke winner by operation:
+kernel winner by operation:
+recommended priority from summary script:
+diverges from current runtime priority:
+override mismatch count:
+repeated-run stability conclusion:
+adoption decision:
+fallback plan:
+follow-up action:
+```
+
+Recommended follow-up action values:
+
+- `promote-rust-avx2-candidate`
+- `keep-current-default-and-retest`
+- `treat-as-fallback-only`
+
+### 13.8 Exit Criteria
+
+Treat a same-machine AVX2 run as decision-ready only when all of the following
+are true:
+
+1. at least one archived machine JSON and matching `run-meta.json` exist
+2. release smoke evidence is present for the compared backends
+3. kernel benchmark evidence is present for the compared backends
+4. `override_mismatch_count` is zero
+5. a final adoption label has been chosen
+6. the result has been written back to the task board and phase 4 document
+
+## 14. Archived X86 Summary Interpretation
+
+The archived JSON under `benchmarks/x86_64-simd/` should be interpreted as
+evidence artifacts, not as automatic truth.
+
+Important fields:
+
+- `rankings_10x4_1m`
+- `criterion_rankings`
+- `recommended_default_priority`
+- `release_smoke_override_mismatches`
+
+Interpretation guidance:
+
+1. `recommended_default_priority` is a benchmark-driven suggestion, not an
+   unconditional promotion decision.
+2. `diverges_from_current_runtime_priority_x86=true` means the archived result
+   disagrees with the current runtime order and must be reviewed manually.
+3. If different archived runs recommend different orders, treat the result as
+   unstable until the reason is explained or repeated runs converge.
+
+## 15. ARM64 Profiling And Feature-Detect Contract
+
+This section standardizes how aarch64 backend evolution should expose feature
+detect signals and profiling fields so a future SVE backend can plug into the
+same observability story without redefining the rules.
+
+### 15.1 Feature-Detect Rules
+
+1. aarch64 capability detection should flow through `Aarch64FeatureSet`.
+2. New aarch64 backend candidates should add explicit fields there before
+   dispatch logic starts branching on ad hoc conditionals elsewhere.
+3. Placeholder capability fields are allowed when they do not change current
+   backend priority or runtime behavior.
+4. A new backend must not change existing dispatch order until correctness,
+   override behavior, and benchmark evidence are in place.
+
+### 15.2 Override Rules
+
+For each aarch64 backend candidate:
+
+1. `RSE_BACKEND_OVERRIDE` must map to a stable backend name.
+2. Strict override mode must either honor the request or fail loudly.
+3. Backend metadata should remain consistent across:
+   - `active_backend_name()`
+   - `active_backend_id()`
+   - `active_backend_kind()`
+   - smoke result metadata fields
+
+### 15.3 Profiling Rules
+
+1. Profiling should distinguish implementation work from tail fallback work.
+2. Runtime profile fields should remain comparable across ARM64 experiments.
+3. Backend-local profiling is allowed, but it should not replace the shared
+   runtime/profile counters already exported by the benchmark flow.
+4. If a future SVE backend adds counters, it should follow the same naming style
+   as the current NEON profiling surface.
+
+### 15.4 Minimum Validation For A Future SVE Backend
+
+Before a future `rust-sve` backend is considered usable, it should add:
+
+1. dispatch priority tests
+2. scalar correctness comparison
+3. override metadata validation
+4. smoke metadata verification
+5. workload and kernel benchmark evidence

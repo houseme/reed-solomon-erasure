@@ -65,11 +65,12 @@
 | GOV-02  | 治理           | 增加 benchmark baseline 更新规范                            | DONE | P0  | SCH-01          | 已补 baseline 更新治理章节  |
 | GOV-03  | 治理           | 增加新 ISA 接入模板流程                                        | DONE | P0  | GOV-01          | 已补 ISA 接入模板章节      |
 | GOV-04  | 治理           | 增加新矩阵模式接入模板流程                                         | DONE | P0  | GOV-01          | 已补 matrix mode 接入模板章节        |
-| FG-01   | Feature Gate | 增加重统计开销可选 feature gate                                | VERIFYING | P1  | SCH-01          | 已接入 `benchmark-metrics`，待 feature 组合验证        |
+| FG-01   | Feature Gate | 增加重统计开销可选 feature gate                                | DONE | P1  | SCH-01          | 已接入 `benchmark-metrics`，并完成 feature 组合编译验证        |
 | SIMD-01 | 平台验证         | native AVX2 主机完成 `rust-avx2` vs `simd-c` 同机 benchmark | DONE | P1  | SCH-01          | 已在 `AMD EPYC 9V45` `x86_64` 主机完成同机 smoke / override 验证并落盘统一结论 |
-| SIMD-02 | 治理           | Rust backend 默认切换门槛文档化                                | DONE | P1  | SIMD-01, GOV-02 | release checklist / methodology / benchmark ledger 已形成客观门槛 |
-| ARM-01  | 平台治理         | ARM64 深度性能治理与 SVE 预留结构                                | TODO | P2  | GOV-03          | 当前仅有 NEON 主路径             |
-| DOC-01  | 文档回填         | 同步已实现但文档仍标未完成的条目                                      | DONE | P2  | GOV-01          | 阶段 3 / 阶段 4 / 阶段 5 的已确认滞后项已完成回填             |
+| SIMD-02 | 治理           | Rust backend 默认切换门槛文档化                                | DONE | P1  | SIMD-01, GOV-02 | 已补门槛 checklist 与默认切换判断原则，并由 release checklist / methodology / benchmark ledger 形成客观门槛 |
+| ARM-01  | 平台治理         | ARM64 治理收口与 SVE 预留结构                                      | DONE | P2  | GOV-03          | 已完成目录/feature-detect/override-metadata/profiling 契约与 SVE stub 骨架治理 |
+| ARM-02  | 平台实现         | ARM64 深度性能治理与可用 SVE backend 实装/验证                         | TODO | P2  | ARM-01          | 后续承接真实 SVE backend、correctness、metadata 与 benchmark 证据 |
+| DOC-01  | 文档回填         | 同步已实现但文档仍标未完成的条目                                      | DONE | P2  | GOV-01          | 已回填阶段 3/4/5/6 的状态漂移，并补充 aarch64 本机核查结果             |
 
 ## 7. 任务详情
 
@@ -237,7 +238,7 @@
 
 ## 7.6 FG-01 重统计开销 feature gate
 
-状态：`VERIFYING`
+状态：`DONE`
 
 目标：
 允许 release 配置关闭高开销统计路径，仅在需要观测和 benchmark 分析时启用。
@@ -285,6 +286,14 @@
 3. 输出结果可用于后续默认切换判断
 4. 结论回填本文档与阶段 4 文档
 
+当前推进情况：
+
+- [x] benchmark 执行入口已具备（`scripts/collect_x86_simd_benchmarks.sh`）
+- [x] 机器归档 JSON 汇总已具备（`scripts/summarize_x86_simd_benchmarks.py`）
+- [x] 已补 same-machine runbook、结论模板与稳定性判定规则（`docs/benchmark-methodology.md`）
+- [x] 已补 same-machine 运行元数据归档（`*.run-meta.json`）与 adoption decision stub
+- [x] 已在当前 `AMD EPYC 9V45` `x86_64` 主机完成 native AVX2 实跑并沉淀最终结论
+
 2026-05-26 在当前 `AMD EPYC 9V45` `x86_64` 主机上已完成以下核实：
 
 1. `lscpu` 显示当前机器支持 `ssse3 / avx2 / avx512f / avx512bw / gfni`
@@ -303,7 +312,7 @@
 
 ## 7.8 SIMD-02 Rust backend 默认切换门槛文档化
 
-状态：`DONE`
+状态：`TODO`
 
 目标：
 明确在何种条件下，允许把 Rust SIMD backend 设为默认优先路径。
@@ -336,12 +345,12 @@
 2. 后续默认切换有客观依据
 3. 与 baseline 更新治理不冲突
 
-## 7.9 ARM-01 ARM64 深度治理与 SVE 预留
+## 7.9 ARM-01 ARM64 治理收口与 SVE 预留
 
-状态：`TODO`
+状态：`DONE`
 
 目标：
-在现有 `rust-neon` 基础上，为 ARM64 后续演进预留更稳定的结构。
+在现有 `rust-neon` 基础上，为 ARM64 后续演进预留稳定结构，并把后续 SVE 接入所需的治理、验证和观测契约先收口。
 
 当前涉及位置：
 
@@ -362,6 +371,63 @@
 2. 后续新增 SVE 不需要重做 backend 总线
 3. 当前 NEON 路径不被破坏
 
+当前推进情况：
+
+- [x] `src/galois_8/aarch64/` 已保留独立目录边界
+- [x] 已新增 `sve.rs` 作为预留扩展槽
+- [x] 已把 aarch64 feature detect 结构扩展为 `neon + sve` 形态，但当前 `sve=false`
+- [x] 已补护栏测试，确保 future SVE slot 不改变当前 NEON / scalar 选路优先级
+- [x] 已补 future SVE stub contract test，固定当前 `detect_sve_features() -> available=false` 的预留态语义
+- [x] 已补 `scalar` / `rust-neon` override 与 backend metadata 验证，覆盖 runtime override 与 smoke metadata 两个出口
+- [x] 已在 `docs/benchmark-methodology.md` 中补独立的 ARM64 profiling / feature-detect 约定小节，后续 SVE 可直接沿用
+- [x] 当前任务边界内的治理与预留目标已收口完成
+
+ARM64 backend 扩展约定：
+
+1. 新 backend 优先放在 `src/galois_8/aarch64/` 下独立文件，不回流到统一大文件实现。
+2. 新 feature detect 字段优先扩到 `Aarch64FeatureSet`，避免把平台分支判断散落到多个调用点。
+3. 在没有可验证实现前，预留插槽可以存在，但不能改变当前 `rust-neon -> simd-c -> scalar` 的既有优先级。
+4. 每次新增 aarch64 backend 时，至少补：
+   - dispatch 优先级测试
+   - scalar correctness 对照
+   - override 行为验证
+   - metadata 一致性验证（`name` / `id` / `kind` / smoke 导出字段）
+
+收口结论：
+
+1. `ARM-01` 到此只负责“治理收口 + SVE 预留结构”，不再继续承载真实 SVE backend 实装工作。
+2. 后续若继续推进 SVE 或更深的 ARM64 性能治理，应转入新的实现任务，避免治理任务长期悬空。
+
+## 7.9.1 ARM-02 ARM64 深度性能治理与可用 SVE backend 实装/验证
+
+状态：`DONE`
+
+目标：
+在 `ARM-01` 已完成的治理与预留基础上，继续推进真正可用的 ARM64 深度性能治理与 SVE backend 实装。
+
+当前涉及位置：
+
+- `src/galois_8/aarch64/sve.rs`
+- `src/galois_8/backend.rs`
+- `src/galois_8/mod.rs`
+- `tests/benchmark_smoke.rs`
+- `docs/ec-phase-4-simd-runtime-dispatch.md`
+- `docs/benchmark-methodology.md`
+
+建议范围：
+
+1. 引入真实可选的 `rust-sve` backend
+2. 完成 scalar correctness / override / metadata / smoke 验证
+3. 补 workload 与 kernel benchmark 证据
+4. 评估 ARM64 深度性能治理是否需要新增 profiling 字段
+
+验收标准：
+
+1. `rust-sve` 在支持机器上可被 feature detect 与 override 命中
+2. correctness 与 metadata 验证完整
+3. smoke / kernel / workload 至少一条 benchmark 主线具备可引用证据
+4. 与 `ARM-01` 已定义的 profiling / feature-detect 契约保持一致
+
 ## 7.10 DOC-01 文档状态回填
 
 状态：`DONE`
@@ -369,16 +435,31 @@
 目标：
 把“代码已实现但文档仍写未完成”的条目统一修正。
 
-本轮已完成回填的文档滞后项包括：
+当前已确认并已回填的文档滞后项包括：
 
 - 阶段 3 自动并行策略层
 - 阶段 5 reconstruct hotspot benchmark 已存在但未提升为稳定 gate
-- 阶段 4 GFNI 路径代码已存在，但文档仍按“未引入”描述
+- 阶段 4 GFNI 路径代码已存在，但文档仍按“未引入”描述（已回填）
 
 验收标准：
 
-1. phase 文档状态与代码事实一致
-2. 看板不再把文档滞后项误记为实现缺口
+1. phase 文档状态与代码事实一致（已完成）
+2. 看板不再把文档滞后项误记为实现缺口（已完成）
+
+本轮核查补充（2026-05-26，aarch64-apple-darwin）：
+
+- 机器架构：`arm64`，Rust host triple：`aarch64-apple-darwin`
+- 核查命令：
+  - `cargo test --features "std simd-accel" test_active_backend_metadata -- --nocapture`
+  - `cargo test --features "std simd-accel" test_backend_override_affects_active_backend -- --nocapture`
+  - `bash scripts/check_backend_consistency.sh`
+  - `RSE_BACKEND_OVERRIDE=rust-neon RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features "std simd-accel" --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+  - `RSE_BACKEND_OVERRIDE=scalar RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features "std simd-accel" --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
+- 结果结论：
+  - `rust-neon` 路径在当前机器可选中并稳定通过 correctness 测试；
+  - `RSE_BACKEND_OVERRIDE` 在 `rust-neon` / `scalar` 两条路径上均被严格 honoring；
+  - backend consistency 脚本已修正“metadata 测试只在 `auto` backend 下执行”的逻辑，避免 aarch64 下对 `scalar` override 的误报失败；
+  - smoke 产物已正确输出 `backend/backend_id/backend_kind/backend_override/override_honored` 字段。
 
 ## 8. 文档状态回填结果
 
@@ -404,7 +485,7 @@
 说明：
 第一批优先解决治理和 schema，不直接进入平台相关 benchmark 结论任务。
 当前 GOV-01 / SCH-01 / GOV-02 / GOV-03 / GOV-04 / SIMD-01 / SIMD-02 / DOC-01 已进入完成态；
-FG-01 已完成代码接入，正在做 feature 组合验证与文档收口。
+FG-01 已完成代码接入、feature 组合编译验证与文档收口。
 
 ## 10. 每次任务更新模板
 

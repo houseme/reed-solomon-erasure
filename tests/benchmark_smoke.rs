@@ -265,3 +265,56 @@ fn benchmark_smoke_matrix_runs_and_exports_results() {
     );
     write_results(&results);
 }
+
+#[cfg(all(
+    feature = "simd-accel",
+    feature = "std",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[test]
+fn benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides() {
+    use std::mem;
+
+    // SAFETY: scoped test-only env var overrides restored before returning.
+    unsafe {
+        std::env::set_var("RSE_BACKEND_OVERRIDE", "scalar");
+        std::env::set_var("RSE_STRICT_BACKEND_OVERRIDE", "1");
+    }
+    let scalar_override = backend_override();
+    let scalar_backend = backend().to_string();
+    let scalar_backend_id = backend_id();
+    let scalar_backend_kind = backend_kind();
+    let scalar_honored = override_honored();
+
+    // SAFETY: scoped test-only env var overrides restored before returning.
+    unsafe {
+        std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-neon");
+    }
+    let neon_override = backend_override();
+    let neon_backend = backend().to_string();
+    let neon_backend_id = backend_id();
+    let neon_backend_kind = backend_kind();
+    let neon_honored = override_honored();
+
+    // SAFETY: paired cleanup for the scoped env var overrides above.
+    unsafe {
+        std::env::remove_var("RSE_BACKEND_OVERRIDE");
+        std::env::remove_var("RSE_STRICT_BACKEND_OVERRIDE");
+    }
+
+    assert_eq!("scalar", scalar_override);
+    assert_eq!("scalar-rust", scalar_backend);
+    assert_eq!("ScalarRust", scalar_backend_id);
+    assert_eq!("Scalar", scalar_backend_kind);
+    assert!(scalar_honored);
+
+    assert_eq!("rust-neon", neon_override);
+    assert_eq!("rust-neon", neon_backend);
+    assert_eq!("RustNeon", neon_backend_id);
+    assert_eq!("RustSimd", neon_backend_kind);
+    assert!(neon_honored);
+
+    mem::drop((scalar_backend, neon_backend));
+}

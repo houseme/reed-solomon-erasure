@@ -121,13 +121,13 @@
 
 - [x] 引入 benchmark 基线快照对比机制（阈值报警）
 - [x] 将关键 case 纳入回归门槛（例如 10+4/32+16 的 encode/verify/reconstruct）
-- [ ] 为阶段 3/5 的性能输出定义统一“可比较 schema”
+- [x] 已为阶段 3/5 的性能输出补统一核心 schema（`schema_version` / `artifact_kind` / 核心比较字段）
 
 ### P2（长期演进）
 
 - [x] 完成跨 ISA consistency 自动化流程设计（本地复用脚本入口）
-- [ ] 增加新 ISA、新矩阵模式接入模板流程（文档化）
-- [ ] 增加“何时更新 benchmark 基线”的治理规范
+- [x] 已增加新 ISA、新矩阵模式接入模板流程（文档化）
+- [x] 已增加“何时更新 benchmark 基线”的治理规范
 
 ## 10. 建议 PR 拆分
 
