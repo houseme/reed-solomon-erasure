@@ -655,10 +655,17 @@ fn test_reconstruct_data_two_missing_skips_small_output_chunk_parallel_path() {
     r.reconstruct_data_opt(&mut shards).unwrap();
     let stats = r.runtime_profile_stats();
 
-    assert_eq!(1, stats.reconstruct_data_only_calls);
-    assert_eq!(1, stats.reconstruct_data_stage_calls);
-    assert!(stats.code_some_parallel_calls >= 1);
-    assert_eq!(0, stats.code_some_small_output_chunk_parallel_calls);
+    if benchmark_metrics_enabled() {
+        assert_eq!(1, stats.reconstruct_data_only_calls);
+        assert_eq!(1, stats.reconstruct_data_stage_calls);
+        assert!(stats.code_some_parallel_calls >= 1);
+        assert_eq!(0, stats.code_some_small_output_chunk_parallel_calls);
+    } else {
+        assert_eq!(0, stats.reconstruct_data_only_calls);
+        assert_eq!(0, stats.reconstruct_data_stage_calls);
+        assert_eq!(0, stats.code_some_parallel_calls);
+        assert_eq!(0, stats.code_some_small_output_chunk_parallel_calls);
+    }
 }
 
 #[cfg(feature = "std")]
@@ -675,10 +682,17 @@ fn test_reconstruct_data_one_missing_skips_small_output_chunk_parallel_path() {
     r.reconstruct_data_opt(&mut shards).unwrap();
     let stats = r.runtime_profile_stats();
 
-    assert_eq!(1, stats.reconstruct_data_only_calls);
-    assert_eq!(1, stats.reconstruct_data_stage_calls);
-    assert!(stats.code_some_parallel_calls >= 1);
-    assert_eq!(0, stats.code_some_small_output_chunk_parallel_calls);
+    if benchmark_metrics_enabled() {
+        assert_eq!(1, stats.reconstruct_data_only_calls);
+        assert_eq!(1, stats.reconstruct_data_stage_calls);
+        assert!(stats.code_some_parallel_calls >= 1);
+        assert_eq!(0, stats.code_some_small_output_chunk_parallel_calls);
+    } else {
+        assert_eq!(0, stats.reconstruct_data_only_calls);
+        assert_eq!(0, stats.reconstruct_data_stage_calls);
+        assert_eq!(0, stats.code_some_parallel_calls);
+        assert_eq!(0, stats.code_some_small_output_chunk_parallel_calls);
+    }
 }
 
 #[cfg(feature = "std")]
@@ -2587,7 +2601,8 @@ quickcheck! {
                 convert_2D_slices!(parity_shards =>to_mut_vec &mut [u8]);
 
             for (i, shard) in data_refs.iter().enumerate().take(data) {
-                r.encode_single_sep(i, shard, &mut parity_refs).unwrap();
+                r.encode_single_sep(i, shard, &mut parity_refs)
+                    .unwrap();
             }
         }
 
@@ -4190,8 +4205,7 @@ fn test_encode_single_sep_error_handling() {
             let mut parity_refs = convert_2D_slices!(parity=>to_mut_vec &mut [u8]);
 
             for (i, shard) in data_refs.iter().enumerate().take(10) {
-                r.encode_single_sep(i, shard, &mut parity_refs)
-                    .unwrap();
+                r.encode_single_sep(i, shard, &mut parity_refs).unwrap();
             }
 
             assert_eq!(

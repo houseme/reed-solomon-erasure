@@ -531,7 +531,9 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_matches_scalar_mul_slice() {
-        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = NEON_PROFILE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
         for &len in &lengths {
             for _ in 0..16 {
@@ -558,7 +560,9 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_matches_scalar_mul_slice_xor() {
-        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = NEON_PROFILE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
         for &len in &lengths {
             for _ in 0..16 {
@@ -587,7 +591,9 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_matches_simd_c() {
-        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = NEON_PROFILE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
         for &len in &lengths {
             for _ in 0..16 {
@@ -614,7 +620,9 @@ mod tests {
     ))]
     #[test]
     fn test_rust_neon_profile_stats_track_vector_vs_tail() {
-        let _guard = NEON_PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = NEON_PROFILE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_rust_neon_profile_stats();
 
         let c = 25u8;
@@ -673,17 +681,11 @@ mod tests {
                     && std::is_x86_feature_detected!("avx512bw");
                 let has_avx2 = std::is_x86_feature_detected!("avx2");
 
-                if has_gfni && has_avx512 {
-                    assert_eq!(active_backend_name(), "rust-gfni-avx512");
-                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
-                } else if has_gfni && has_avx2 {
-                    assert_eq!(active_backend_name(), "rust-gfni-avx2");
+                if has_avx2 {
+                    assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if has_avx512 {
                     assert_eq!(active_backend_name(), "rust-avx512");
-                    assert_eq!(active_backend_kind(), BackendKind::RustSimd);
-                } else if has_avx2 {
-                    assert_eq!(active_backend_name(), "rust-avx2");
                     assert_eq!(active_backend_kind(), BackendKind::RustSimd);
                 } else if std::is_x86_feature_detected!("ssse3") {
                     assert_eq!(active_backend_name(), "rust-ssse3");
@@ -694,6 +696,15 @@ mod tests {
                 } else {
                     assert_eq!(active_backend_name(), "scalar-rust");
                     assert_eq!(active_backend_kind(), BackendKind::Scalar);
+                }
+
+                if has_gfni && has_avx512 {
+                    with_env_var("RSE_BACKEND_OVERRIDE", "rust-gfni-avx512", || {
+                        assert_eq!(
+                            super::backend::runtime_override_backend_name_for_test(),
+                            Some("rust-gfni-avx512")
+                        );
+                    });
                 }
             }
 
@@ -893,7 +904,10 @@ mod tests {
 
                     let mut simd_c_xor = xor_seed.clone();
                     legacy::simd_c::simd_c_mul_slice_xor(c, &input, &mut simd_c_xor);
-                    assert_eq!(scalar_xor, simd_c_xor, "simd-c xor mismatch len={len} coeff={c}");
+                    assert_eq!(
+                        scalar_xor, simd_c_xor,
+                        "simd-c xor mismatch len={len} coeff={c}"
+                    );
                 }
 
                 if has_ssse3 {
@@ -903,7 +917,10 @@ mod tests {
 
                     let mut ssse3_xor = xor_seed.clone();
                     x86::ssse3::rust_ssse3_mul_slice_xor(c, &input, &mut ssse3_xor);
-                    assert_eq!(scalar_xor, ssse3_xor, "ssse3 xor mismatch len={len} coeff={c}");
+                    assert_eq!(
+                        scalar_xor, ssse3_xor,
+                        "ssse3 xor mismatch len={len} coeff={c}"
+                    );
                 }
 
                 if has_avx2 {
@@ -913,7 +930,10 @@ mod tests {
 
                     let mut avx2_xor = xor_seed.clone();
                     x86::avx2::rust_avx2_mul_slice_xor(c, &input, &mut avx2_xor);
-                    assert_eq!(scalar_xor, avx2_xor, "avx2 xor mismatch len={len} coeff={c}");
+                    assert_eq!(
+                        scalar_xor, avx2_xor,
+                        "avx2 xor mismatch len={len} coeff={c}"
+                    );
                 }
 
                 if has_avx512 {
@@ -923,7 +943,10 @@ mod tests {
 
                     let mut avx512_xor = xor_seed.clone();
                     x86::avx512::rust_avx512_mul_slice_xor(c, &input, &mut avx512_xor);
-                    assert_eq!(scalar_xor, avx512_xor, "avx512 xor mismatch len={len} coeff={c}");
+                    assert_eq!(
+                        scalar_xor, avx512_xor,
+                        "avx512 xor mismatch len={len} coeff={c}"
+                    );
                 }
 
                 if has_gfni {
@@ -933,7 +956,10 @@ mod tests {
 
                     let mut gfni_xor = xor_seed.clone();
                     x86::gfni::rust_gfni_avx2_mul_slice_xor(c, &input, &mut gfni_xor);
-                    assert_eq!(scalar_xor, gfni_xor, "gfni xor mismatch len={len} coeff={c}");
+                    assert_eq!(
+                        scalar_xor, gfni_xor,
+                        "gfni xor mismatch len={len} coeff={c}"
+                    );
                 }
             }
         }

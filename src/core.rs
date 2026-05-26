@@ -1694,6 +1694,15 @@ impl<F: Field> ReedSolomon<F> {
             return;
         }
 
+        if outputs.len() <= 2 {
+            self.code_some_slices_one_or_two_outputs_reconstruct_data_par_raw(
+                matrix_rows,
+                inputs,
+                outputs,
+            );
+            return;
+        }
+
         let decision = self.parallel_policy(shard_len, outputs.len());
         if !decision.use_parallel {
             self.code_some_slices_chunked(matrix_rows, inputs, outputs);
@@ -1714,6 +1723,15 @@ impl<F: Field> ReedSolomon<F> {
     {
         let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
         if shard_len == 0 {
+            return;
+        }
+
+        if outputs.len() <= 2 {
+            self.code_some_slices_one_or_two_outputs_reconstruct_data_par_raw(
+                matrix_rows,
+                inputs,
+                outputs,
+            );
             return;
         }
 
