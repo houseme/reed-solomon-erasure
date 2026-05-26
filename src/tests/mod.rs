@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -678,6 +679,196 @@ struct ParallelHelperBenchResult {
 }
 
 #[cfg(feature = "std")]
+struct ReconstructionHotspotBenchResult {
+    scenario: &'static str,
+    missing_pattern: String,
+    required_pattern: String,
+    baseline_operation: &'static str,
+    candidate_operation: &'static str,
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+    useful_shards: usize,
+    baseline_mb_s: f64,
+    candidate_mb_s: f64,
+    speedup: f64,
+}
+
+#[cfg(feature = "std")]
+fn shard_index_pattern(data_shards: usize, indices: &[usize]) -> String {
+    if indices.is_empty() {
+        return "-".to_string();
+    }
+
+    let mut parts = Vec::with_capacity(indices.len());
+    for &index in indices {
+        if index < data_shards {
+            parts.push(format!("d{index}"));
+        } else {
+            parts.push(format!("p{}", index - data_shards));
+        }
+    }
+
+    parts.join("|")
+}
+
+#[cfg(feature = "std")]
+fn option_shards_with_missing(shards: &[Vec<u8>], missing_indices: &[usize]) -> Vec<Option<Vec<u8>>> {
+    let mut working = shards_to_option_shards(shards);
+    for &index in missing_indices {
+        working[index] = None;
+    }
+    working
+}
+
+#[cfg(feature = "std")]
+fn assert_required_reconstruction_matches(
+    original: &[Vec<u8>],
+    baseline: &[Option<Vec<u8>>],
+    candidate: &[Option<Vec<u8>>],
+    required_indices: &[usize],
+    missing_indices: &[usize],
+) {
+    for &index in required_indices {
+        assert_eq!(baseline[index].as_ref().unwrap(), &original[index]);
+        assert_eq!(candidate[index].as_ref().unwrap(), &original[index]);
+    }
+
+    for &index in missing_indices {
+        if !required_indices.contains(&index) {
+            assert!(candidate[index].is_none());
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+fn bench_reconstruct_data_hotspot(
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+    scenario: &'static str,
+    missing_indices: &[usize],
+) -> ReconstructionHotspotBenchResult {
+    let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let iterations = 3usize;
+    let missing_data_indices: Vec<usize> = missing_indices
+        .iter()
+        .copied()
+        .filter(|&index| index < data_shards)
+        .collect();
+    let useful_shards = missing_data_indices.len().max(1);
+    let bytes = (useful_shards * shard_size) as f64;
+
+    let mut baseline_total = 0.0;
+    let mut candidate_total = 0.0;
+
+    for _ in 0..iterations {
+        let mut shards = make_random_shards!(shard_size, data_shards + parity_shards);
+        r.encode(&mut shards).unwrap();
+
+        let mut baseline = option_shards_with_missing(&shards, missing_indices);
+        let baseline_start = Instant::now();
+        r.reconstruct(&mut baseline).unwrap();
+        baseline_total += baseline_start.elapsed().as_secs_f64();
+
+        let mut candidate = option_shards_with_missing(&shards, missing_indices);
+        let candidate_start = Instant::now();
+        r.reconstruct_data(&mut candidate).unwrap();
+        candidate_total += candidate_start.elapsed().as_secs_f64();
+
+        for &index in &missing_data_indices {
+            assert_eq!(baseline[index].as_ref().unwrap(), &shards[index]);
+            assert_eq!(candidate[index].as_ref().unwrap(), &shards[index]);
+        }
+        for &index in missing_indices {
+            if index >= data_shards {
+                assert!(candidate[index].is_none());
+            }
+        }
+    }
+
+    let baseline_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / baseline_total;
+    let candidate_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / candidate_total;
+
+    ReconstructionHotspotBenchResult {
+        scenario,
+        missing_pattern: shard_index_pattern(data_shards, missing_indices),
+        required_pattern: shard_index_pattern(data_shards, &missing_data_indices),
+        baseline_operation: "reconstruct",
+        candidate_operation: "reconstruct_data",
+        data_shards,
+        parity_shards,
+        shard_size,
+        useful_shards,
+        baseline_mb_s,
+        candidate_mb_s,
+        speedup: candidate_mb_s / baseline_mb_s,
+    }
+}
+
+#[cfg(feature = "std")]
+fn bench_reconstruct_some_hotspot(
+    data_shards: usize,
+    parity_shards: usize,
+    shard_size: usize,
+    scenario: &'static str,
+    missing_indices: &[usize],
+    required_indices: &[usize],
+) -> ReconstructionHotspotBenchResult {
+    let r = ReedSolomon::new(data_shards, parity_shards).unwrap();
+    let iterations = 3usize;
+    let bytes = (required_indices.len().max(1) * shard_size) as f64;
+    let mut required = vec![false; data_shards + parity_shards];
+    for &index in required_indices {
+        required[index] = true;
+    }
+
+    let mut baseline_total = 0.0;
+    let mut candidate_total = 0.0;
+
+    for _ in 0..iterations {
+        let mut shards = make_random_shards!(shard_size, data_shards + parity_shards);
+        r.encode(&mut shards).unwrap();
+
+        let mut baseline = option_shards_with_missing(&shards, missing_indices);
+        let baseline_start = Instant::now();
+        r.reconstruct_data(&mut baseline).unwrap();
+        baseline_total += baseline_start.elapsed().as_secs_f64();
+
+        let mut candidate = option_shards_with_missing(&shards, missing_indices);
+        let candidate_start = Instant::now();
+        r.reconstruct_some(&mut candidate, &required).unwrap();
+        candidate_total += candidate_start.elapsed().as_secs_f64();
+
+        assert_required_reconstruction_matches(
+            &shards,
+            &baseline,
+            &candidate,
+            required_indices,
+            missing_indices,
+        );
+    }
+
+    let baseline_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / baseline_total;
+    let candidate_mb_s = (bytes * iterations as f64) / (1024.0 * 1024.0) / candidate_total;
+
+    ReconstructionHotspotBenchResult {
+        scenario,
+        missing_pattern: shard_index_pattern(data_shards, missing_indices),
+        required_pattern: shard_index_pattern(data_shards, required_indices),
+        baseline_operation: "reconstruct_data",
+        candidate_operation: "reconstruct_some",
+        data_shards,
+        parity_shards,
+        shard_size,
+        useful_shards: required_indices.len(),
+        baseline_mb_s,
+        candidate_mb_s,
+        speedup: candidate_mb_s / baseline_mb_s,
+    }
+}
+
+#[cfg(feature = "std")]
 fn bench_encode_sep_pair(
     data_shards: usize,
     parity_shards: usize,
@@ -970,6 +1161,63 @@ fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
 }
 
 #[cfg(feature = "std")]
+fn write_reconstruction_hotspot_bench_results(results: &[ReconstructionHotspotBenchResult]) {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
+    fs::create_dir_all(&dir).unwrap();
+
+    let json_path = dir.join("reconstruction-hotspot-results.json");
+    let csv_path = dir.join("reconstruction-hotspot-results.csv");
+
+    let mut json = String::from("[\n");
+    for (i, result) in results.iter().enumerate() {
+        let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
+        json.push_str(&format!(
+            "  {{\"scenario\":\"{}\",\"missing_pattern\":\"{}\",\"required_pattern\":\"{}\",\"baseline_operation\":\"{}\",\"candidate_operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"useful_shards\":{},\"baseline_mb_s\":{:.4},\"candidate_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
+            result.scenario,
+            result.missing_pattern,
+            result.required_pattern,
+            result.baseline_operation,
+            result.candidate_operation,
+            result.data_shards,
+            result.parity_shards,
+            result.shard_size,
+            result.useful_shards,
+            result.baseline_mb_s,
+            result.candidate_mb_s,
+            result.speedup,
+            suffix
+        ));
+    }
+    json.push(']');
+    fs::write(&json_path, json).unwrap();
+
+    let mut csv = String::from(
+        "scenario,missing_pattern,required_pattern,baseline_operation,candidate_operation,data_shards,parity_shards,shard_size,useful_shards,baseline_mb_s,candidate_mb_s,speedup\n",
+    );
+    for result in results {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{:.4},{:.4},{:.4}\n",
+            result.scenario,
+            result.missing_pattern,
+            result.required_pattern,
+            result.baseline_operation,
+            result.candidate_operation,
+            result.data_shards,
+            result.parity_shards,
+            result.shard_size,
+            result.useful_shards,
+            result.baseline_mb_s,
+            result.candidate_mb_s,
+            result.speedup
+        ));
+    }
+    fs::write(&csv_path, csv).unwrap();
+
+    assert!(json_path.exists());
+    assert!(csv_path.exists());
+}
+
+#[cfg(feature = "std")]
 #[test]
 fn benchmark_parallel_helpers_quantify_gain() {
     let results = vec![
@@ -998,6 +1246,67 @@ fn benchmark_parallel_helpers_quantify_gain() {
     assert!(results.iter().all(|result| result.speedup.is_finite()));
 
     write_parallel_helper_bench_results(&results);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn benchmark_reconstruction_hotspots() {
+    let results = vec![
+        bench_reconstruct_data_hotspot(10, 4, 1024 * 1024, "reconstruct_data_missing_1_data", &[0]),
+        bench_reconstruct_data_hotspot(10, 4, 1024 * 1024, "reconstruct_data_missing_2_data", &[0, 2]),
+        bench_reconstruct_data_hotspot(
+            10,
+            4,
+            1024 * 1024,
+            "reconstruct_data_missing_data_plus_parity",
+            &[1, 10],
+        ),
+        bench_reconstruct_data_hotspot(
+            32,
+            16,
+            1024 * 1024,
+            "reconstruct_data_32x16_missing_2_data",
+            &[0, 2],
+        ),
+        bench_reconstruct_some_hotspot(
+            10,
+            4,
+            1024 * 1024,
+            "reconstruct_some_required_1_of_2_missing_data",
+            &[0, 2],
+            &[2],
+        ),
+        bench_reconstruct_some_hotspot(
+            10,
+            4,
+            1024 * 1024,
+            "reconstruct_some_required_2_of_3_missing_data",
+            &[0, 2, 4],
+            &[0, 4],
+        ),
+        bench_reconstruct_some_hotspot(
+            10,
+            4,
+            1024 * 1024,
+            "reconstruct_some_required_data_and_skip_parity",
+            &[1, 10],
+            &[1],
+        ),
+        bench_reconstruct_some_hotspot(
+            32,
+            16,
+            1024 * 1024,
+            "reconstruct_some_32x16_required_2_of_4_missing_data",
+            &[0, 2, 4, 6],
+            &[2, 6],
+        ),
+    ];
+
+    assert!(results.iter().all(|result| result.baseline_mb_s.is_finite()));
+    assert!(results.iter().all(|result| result.candidate_mb_s.is_finite()));
+    assert!(results.iter().all(|result| result.speedup.is_finite()));
+
+    write_reconstruction_hotspot_bench_results(&results);
 }
 
 #[cfg(feature = "std")]
