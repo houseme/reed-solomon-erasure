@@ -178,6 +178,35 @@ fn test_codec_options_zero_cache_capacity_falls_back_to_default() {
 
     assert_eq!(10, r.data_shard_count());
     assert_eq!(3, r.parity_shard_count());
+    assert_eq!(
+        ReedSolomon::recommended_inversion_cache_capacity(10, 3),
+        r.inversion_cache_capacity()
+    );
+}
+
+#[test]
+fn test_recommended_inversion_cache_capacity_scales_with_workload() {
+    let small = ReedSolomon::recommended_inversion_cache_capacity(4, 2);
+    let medium = ReedSolomon::recommended_inversion_cache_capacity(10, 4);
+    let large = ReedSolomon::recommended_inversion_cache_capacity(32, 16);
+
+    assert_eq!(128, small);
+    assert_eq!(128, medium);
+    assert_eq!(2048, large);
+    assert!(small <= medium);
+    assert!(medium < large);
+}
+
+#[test]
+fn test_codec_options_explicit_cache_capacity_is_preserved() {
+    let options = CodecOptions {
+        inversion_cache_capacity: 7,
+        ..CodecOptions::default()
+    };
+
+    let r = ReedSolomon::with_options(10, 3, options).unwrap();
+
+    assert_eq!(7, r.inversion_cache_capacity());
 }
 
 #[test]

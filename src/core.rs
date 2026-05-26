@@ -25,7 +25,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use super::Field;
 use super::ReconstructShard;
 
-const DATA_DECODE_MATRIX_CACHE_CAPACITY: usize = 254;
+const DATA_DECODE_MATRIX_CACHE_MIN_CAPACITY: usize = 128;
+const DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY: usize = 4096;
 const CODE_SLICE_MIN_CHUNK_BYTES: usize = 16 * 1024;
 const CODE_SLICE_DEFAULT_CHUNK_BYTES: usize = 64 * 1024;
 const CODE_SLICE_LARGE_CHUNK_BYTES: usize = 256 * 1024;
@@ -62,7 +63,7 @@ impl Default for CodecOptions {
         Self {
             fast_one_parity: false,
             inversion_cache: true,
-            inversion_cache_capacity: DATA_DECODE_MATRIX_CACHE_CAPACITY,
+            inversion_cache_capacity: 0,
             matrix_mode: MatrixMode::Vandermonde,
         }
     }
@@ -906,6 +907,33 @@ impl<F: Field> PartialEq for ReedSolomon<F> {
 }
 
 impl<F: Field> ReedSolomon<F> {
+    fn normalize_inversion_cache_capacity(
+        data_shards: usize,
+        parity_shards: usize,
+        requested_capacity: usize,
+    ) -> usize {
+        if requested_capacity > 0 {
+            return requested_capacity;
+        }
+
+        Self::recommended_inversion_cache_capacity(data_shards, parity_shards)
+    }
+
+    fn derive_inversion_cache_capacity(data_shards: usize, parity_shards: usize) -> usize {
+        let total_shards = data_shards.saturating_add(parity_shards);
+        let heuristic = total_shards
+            .saturating_mul(parity_shards.max(1))
+            .saturating_mul(2);
+        let rounded = heuristic
+            .checked_next_power_of_two()
+            .unwrap_or(DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY);
+
+        rounded.clamp(
+            DATA_DECODE_MATRIX_CACHE_MIN_CAPACITY,
+            DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY,
+        )
+    }
+
     // AUDIT
     //
     // Error detection responsibilities
@@ -1033,9 +1061,11 @@ impl<F: Field> ReedSolomon<F> {
 
         let total_shards = data_shards + parity_shards;
 
-        if options.inversion_cache_capacity == 0 {
-            options.inversion_cache_capacity = DATA_DECODE_MATRIX_CACHE_CAPACITY;
-        }
+        options.inversion_cache_capacity = Self::normalize_inversion_cache_capacity(
+            data_shards,
+            parity_shards,
+            options.inversion_cache_capacity,
+        );
 
         let matrix = Self::build_matrix_with_options(data_shards, total_shards, options);
         #[cfg(feature = "std")]
@@ -1067,6 +1097,17 @@ impl<F: Field> ReedSolomon<F> {
 
     pub fn total_shard_count(&self) -> usize {
         self.total_shard_count
+    }
+
+    pub fn inversion_cache_capacity(&self) -> usize {
+        self.options.inversion_cache_capacity
+    }
+
+    pub fn recommended_inversion_cache_capacity(
+        data_shards: usize,
+        parity_shards: usize,
+    ) -> usize {
+        Self::derive_inversion_cache_capacity(data_shards, parity_shards)
     }
 
     #[cfg(feature = "std")]
