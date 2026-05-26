@@ -10,12 +10,7 @@ const FIELD_SIZE: usize = 256;
 
 const GENERATING_POLYNOMIAL: usize = 29;
 
-#[cfg(all(
-    feature = "simd-accel",
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(feature = "simd-accel")]
 #[derive(Copy, Clone)]
 enum SimdCBuildTarget {
     Baseline,
@@ -163,13 +158,43 @@ fn write_tables() {
     }
 }
 
-#[cfg(all(
-    feature = "simd-accel",
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(feature = "simd-accel")]
+fn target_cfg(name: &str) -> String {
+    env::var(name).unwrap_or_default()
+}
+
+#[cfg(feature = "simd-accel")]
+fn should_compile_simd_c_for_target() -> bool {
+    let target_arch = target_cfg("CARGO_CFG_TARGET_ARCH");
+    let target_env = target_cfg("CARGO_CFG_TARGET_ENV");
+    let target_os = target_cfg("CARGO_CFG_TARGET_OS");
+
+    let arch_supported = matches!(target_arch.as_str(), "x86_64" | "aarch64");
+    let env_supported = target_env != "msvc";
+    let os_supported = !matches!(target_os.as_str(), "android" | "ios");
+
+    arch_supported && env_supported && os_supported
+}
+
+#[cfg(feature = "simd-accel")]
+fn is_valid_march_value(arch: &str) -> bool {
+    !arch.is_empty()
+        && arch
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'+'))
+}
+
+#[cfg(feature = "simd-accel")]
 fn compile_simd_c() {
+    if !should_compile_simd_c_for_target() {
+        if let Ok(arch) = env::var("RUST_REED_SOLOMON_ERASURE_ARCH") {
+            println!(
+                "cargo:warning=ignoring RUST_REED_SOLOMON_ERASURE_ARCH={arch} because simd-c is disabled for this target"
+            );
+        }
+        return;
+    }
+
     let mut build = cc::Build::new();
     build.opt_level(3);
 
@@ -177,11 +202,17 @@ fn compile_simd_c() {
 
     match env::var("RUST_REED_SOLOMON_ERASURE_ARCH") {
         Ok(arch) => {
-            // Use explicitly specified environment variable as architecture.
-            build.flag(format!("-march={}", arch));
-            println!("cargo:rustc-env=RSE_SIMD_C_ARCH={arch}");
-            println!("cargo:rustc-cfg=rse_simd_c_build_unknown");
-            build_target = SimdCBuildTarget::ExplicitArch;
+            if is_valid_march_value(&arch) {
+                // Use explicitly specified environment variable as architecture.
+                build.flag(format!("-march={arch}"));
+                println!("cargo:rustc-env=RSE_SIMD_C_ARCH={arch}");
+                println!("cargo:rustc-cfg=rse_simd_c_build_unknown");
+                build_target = SimdCBuildTarget::ExplicitArch;
+            } else {
+                println!(
+                    "cargo:warning=invalid RUST_REED_SOLOMON_ERASURE_ARCH value '{arch}', expected [A-Za-z0-9_.+-]+; falling back to baseline simd-c build"
+                );
+            }
         }
         Err(_error) => {}
     }
@@ -200,15 +231,13 @@ fn compile_simd_c() {
         .compile("reedsolomon");
 }
 
-#[cfg(not(all(
-    feature = "simd-accel",
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-)))]
+#[cfg(not(feature = "simd-accel"))]
 fn compile_simd_c() {}
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=RUST_REED_SOLOMON_ERASURE_ARCH");
+    println!("cargo:rerun-if-changed=simd_c/reedsolomon.c");
+    println!("cargo:rerun-if-changed=simd_c/reedsolomon.h");
     println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_baseline)");
     println!("cargo:rustc-check-cfg=cfg(rse_simd_c_build_unknown)");
     compile_simd_c();
