@@ -22,6 +22,9 @@ mod galois_16;
 type ReedSolomon = crate::ReedSolomon<galois_8::Field>;
 type ShardByShard<'a> = crate::ShardByShard<'a, galois_8::Field>;
 
+#[cfg(feature = "std")]
+const BENCHMARK_ARTIFACT_SCHEMA_VERSION: u32 = 1;
+
 macro_rules! make_random_shards {
     ($per_shard:expr, $size:expr) => {{
         let mut shards = Vec::with_capacity(20);
@@ -116,6 +119,11 @@ fn with_env_var<R>(key: &str, value: &str, f: impl FnOnce() -> R) -> R {
         std::env::remove_var(key);
     }
     result
+}
+
+#[cfg(feature = "std")]
+fn benchmark_metrics_enabled() -> bool {
+    cfg!(feature = "benchmark-metrics")
 }
 
 #[test]
@@ -1113,12 +1121,15 @@ fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
 
     let json_path = dir.join("parallel-helper-results.json");
     let csv_path = dir.join("parallel-helper-results.csv");
+    let metrics_enabled = benchmark_metrics_enabled();
 
     let mut json = String::from("[\n");
     for (i, result) in results.iter().enumerate() {
         let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
         json.push_str(&format!(
-            "  {{\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"policy_version\":{},\"policy_min_parallel_shard_bytes\":{},\"policy_min_bytes_per_job\":{},\"serial_mb_s\":{:.4},\"parallel_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
+            "  {{\"schema_version\":{},\"artifact_kind\":\"parallel-helper-results\",\"benchmark_metrics_enabled\":{},\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"policy_version\":{},\"policy_min_parallel_shard_bytes\":{},\"policy_min_bytes_per_job\":{},\"serial_mb_s\":{:.4},\"parallel_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
+            BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+            metrics_enabled,
             result.operation,
             result.data_shards,
             result.parity_shards,
@@ -1136,11 +1147,13 @@ fn write_parallel_helper_bench_results(results: &[ParallelHelperBenchResult]) {
     fs::write(&json_path, json).unwrap();
 
     let mut csv = String::from(
-        "operation,data_shards,parity_shards,shard_size,policy_version,policy_min_parallel_shard_bytes,policy_min_bytes_per_job,serial_mb_s,parallel_mb_s,speedup\n",
+        "schema_version,artifact_kind,benchmark_metrics_enabled,operation,data_shards,parity_shards,shard_size,policy_version,policy_min_parallel_shard_bytes,policy_min_bytes_per_job,serial_mb_s,parallel_mb_s,speedup\n",
     );
     for result in results {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{:.4},{:.4},{:.4}\n",
+            "{},parallel-helper-results,{},{},{},{},{},{},{},{},{:.4},{:.4},{:.4}\n",
+            BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+            metrics_enabled,
             result.operation,
             result.data_shards,
             result.parity_shards,
@@ -1166,12 +1179,15 @@ fn write_reconstruction_hotspot_bench_results(results: &[ReconstructionHotspotBe
 
     let json_path = dir.join("reconstruction-hotspot-results.json");
     let csv_path = dir.join("reconstruction-hotspot-results.csv");
+    let metrics_enabled = benchmark_metrics_enabled();
 
     let mut json = String::from("[\n");
     for (i, result) in results.iter().enumerate() {
         let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
         json.push_str(&format!(
-            "  {{\"scenario\":\"{}\",\"missing_pattern\":\"{}\",\"required_pattern\":\"{}\",\"baseline_operation\":\"{}\",\"candidate_operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"useful_shards\":{},\"baseline_mb_s\":{:.4},\"candidate_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
+            "  {{\"schema_version\":{},\"artifact_kind\":\"reconstruction-hotspot-results\",\"benchmark_metrics_enabled\":{},\"scenario\":\"{}\",\"missing_pattern\":\"{}\",\"required_pattern\":\"{}\",\"baseline_operation\":\"{}\",\"candidate_operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"useful_shards\":{},\"baseline_mb_s\":{:.4},\"candidate_mb_s\":{:.4},\"speedup\":{:.4}}}{}",
+            BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+            metrics_enabled,
             result.scenario,
             result.missing_pattern,
             result.required_pattern,
@@ -1191,11 +1207,13 @@ fn write_reconstruction_hotspot_bench_results(results: &[ReconstructionHotspotBe
     fs::write(&json_path, json).unwrap();
 
     let mut csv = String::from(
-        "scenario,missing_pattern,required_pattern,baseline_operation,candidate_operation,data_shards,parity_shards,shard_size,useful_shards,baseline_mb_s,candidate_mb_s,speedup\n",
+        "schema_version,artifact_kind,benchmark_metrics_enabled,scenario,missing_pattern,required_pattern,baseline_operation,candidate_operation,data_shards,parity_shards,shard_size,useful_shards,baseline_mb_s,candidate_mb_s,speedup\n",
     );
     for result in results {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{:.4},{:.4},{:.4}\n",
+            "{},reconstruction-hotspot-results,{},{},{},{},{},{},{},{},{},{},{:.4},{:.4},{:.4}\n",
+            BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+            metrics_enabled,
             result.scenario,
             result.missing_pattern,
             result.required_pattern,
@@ -1421,7 +1439,9 @@ fn benchmark_reconstruction_cache_patterns() {
     let path = dir.join("reconstruction-cache-stats.json");
 
     let body = format!(
-        "{{\"requests\":{},\"hits\":{},\"misses\":{},\"inserts\":{},\"evictions\":{},\"hit_rate\":{:.6},\"reuse_ratio\":{:.6},\"miss_cost_per_request\":{:.6}}}",
+        "{{\"schema_version\":{},\"artifact_kind\":\"reconstruction-cache-stats\",\"benchmark_metrics_enabled\":{},\"requests\":{},\"hits\":{},\"misses\":{},\"inserts\":{},\"evictions\":{},\"hit_rate\":{:.6},\"reuse_ratio\":{:.6},\"miss_cost_per_request\":{:.6}}}",
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         stats.requests,
         stats.hits,
         stats.misses,
@@ -1515,14 +1535,30 @@ fn benchmark_reconstruction_cache_layers() {
     let path = dir.join("reconstruction-cache-patterns.csv");
 
     let body = format!(
-        "scenario,seconds\nrepeated_data_cached,{:.6}\nrepeated_data_uncached,{:.6}\nvarying_data_cached,{:.6}\nvarying_data_uncached,{:.6}\nrepeated_all_cached,{:.6}\nrepeated_all_uncached,{:.6}\nvarying_all_cached,{:.6}\nvarying_all_uncached,{:.6}\n",
+        "schema_version,artifact_kind,benchmark_metrics_enabled,scenario,seconds\n{},reconstruction-cache-patterns,{},repeated_data_cached,{:.6}\n{},reconstruction-cache-patterns,{},repeated_data_uncached,{:.6}\n{},reconstruction-cache-patterns,{},varying_data_cached,{:.6}\n{},reconstruction-cache-patterns,{},varying_data_uncached,{:.6}\n{},reconstruction-cache-patterns,{},repeated_all_cached,{:.6}\n{},reconstruction-cache-patterns,{},repeated_all_uncached,{:.6}\n{},reconstruction-cache-patterns,{},varying_all_cached,{:.6}\n{},reconstruction-cache-patterns,{},varying_all_uncached,{:.6}\n",
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         repeated_data_cached,
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         repeated_data_uncached,
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         varying_data_cached,
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         varying_data_uncached,
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         repeated_all_cached,
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         repeated_all_uncached,
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         varying_all_cached,
+        BENCHMARK_ARTIFACT_SCHEMA_VERSION,
+        benchmark_metrics_enabled(),
         varying_all_uncached,
     );
     fs::write(&path, body).unwrap();

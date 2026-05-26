@@ -26,6 +26,8 @@ struct SmokeResult {
     ns_per_iter: f64,
 }
 
+const ARTIFACT_SCHEMA_VERSION: u32 = 1;
+
 fn git_revision() -> String {
     Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
@@ -66,6 +68,10 @@ fn backend_kind() -> String {
 
 fn backend_override() -> String {
     std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string())
+}
+
+fn benchmark_metrics_enabled() -> bool {
+    cfg!(feature = "benchmark-metrics")
 }
 
 fn target_triple() -> String {
@@ -172,6 +178,8 @@ fn write_results(results: &[SmokeResult]) {
     let backend_kind = backend_kind();
     let backend_override = backend_override();
     let override_honored = override_honored();
+    let metrics_enabled = benchmark_metrics_enabled();
+    let iterations = smoke_iterations();
 
     let json_path = dir.join("smoke-results.json");
     let csv_path = dir.join("smoke-results.csv");
@@ -180,15 +188,18 @@ fn write_results(results: &[SmokeResult]) {
     for (i, result) in results.iter().enumerate() {
         let suffix = if i + 1 == results.len() { "\n" } else { ",\n" };
         json.push_str(&format!(
-            "  {{\"git_revision\":\"{}\",\"target_triple\":\"{}\",\"features\":\"{}\",\"backend\":\"{}\",\"backend_id\":\"{}\",\"backend_kind\":\"{}\",\"backend_override\":\"{}\",\"override_honored\":{},\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"seed\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2}}}{}",
+            "  {{\"schema_version\":{},\"artifact_kind\":\"smoke-results\",\"git_revision\":\"{}\",\"target_triple\":\"{}\",\"features\":\"{}\",\"benchmark_metrics_enabled\":{},\"backend\":\"{}\",\"backend_id\":\"{}\",\"backend_kind\":\"{}\",\"backend_override\":\"{}\",\"override_honored\":{},\"iterations\":{},\"operation\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"seed\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2}}}{}",
+            ARTIFACT_SCHEMA_VERSION,
             revision,
             target,
             features,
+            metrics_enabled,
             backend,
             backend_id,
             backend_kind,
             backend_override,
             override_honored,
+            iterations,
             result.operation,
             result.data_shards,
             result.parity_shards,
@@ -203,19 +214,22 @@ fn write_results(results: &[SmokeResult]) {
     fs::write(&json_path, json).unwrap();
 
     let mut csv = String::from(
-        "git_revision,target_triple,features,backend,backend_id,backend_kind,backend_override,override_honored,operation,data_shards,parity_shards,shard_size,seed,throughput_mb_s,ns_per_iter\n",
+        "schema_version,artifact_kind,git_revision,target_triple,features,benchmark_metrics_enabled,backend,backend_id,backend_kind,backend_override,override_honored,iterations,operation,data_shards,parity_shards,shard_size,seed,throughput_mb_s,ns_per_iter\n",
     );
     for result in results {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{:.2}\n",
+            "{},smoke-results,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{:.2}\n",
+            ARTIFACT_SCHEMA_VERSION,
             revision,
             target,
             features,
+            metrics_enabled,
             backend,
             backend_id,
             backend_kind,
             backend_override,
             override_honored,
+            iterations,
             result.operation,
             result.data_shards,
             result.parity_shards,

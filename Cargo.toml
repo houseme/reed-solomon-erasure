@@ -47,9 +47,10 @@ categories = ["encoding"]
 license.workspace = true
 
 [features]
-default = ["std"] # simd off by default
+default = ["std", "benchmark-metrics"] # simd off by default
 std = ["parking_lot", "rayon"]
 simd-accel = ["cc", "libc"]
+benchmark-metrics = []
 
 [badges]
 travis-ci = { repository = "darrenldl/reed-solomon-erasure" }

@@ -1,6 +1,5 @@
 # reed-solomon-erasure
-[![Build Status](https://travis-ci.org/darrenldl/reed-solomon-erasure.svg?branch=master)](https://travis-ci.org/darrenldl/reed-solomon-erasure)
-[![Build status](https://ci.appveyor.com/api/projects/status/47c0emjoa9bhpjlb/branch/master?svg=true)](https://ci.appveyor.com/project/darrenldl/reed-solomon-erasure/branch/master)
+[![CI](https://github.com/darrenldl/reed-solomon-erasure/actions/workflows/ci.yml/badge.svg)](https://github.com/darrenldl/reed-solomon-erasure/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/darrenldl/reed-solomon-erasure/branch/master/graph/badge.svg)](https://codecov.io/gh/darrenldl/reed-solomon-erasure)
 [![Coverage Status](https://coveralls.io/repos/github/darrenldl/reed-solomon-erasure/badge.svg?branch=master)](https://coveralls.io/github/darrenldl/reed-solomon-erasure?branch=master)
 [![Crates](https://img.shields.io/crates/v/reed-solomon-erasure.svg)](https://crates.io/crates/reed-solomon-erasure)
@@ -8,6 +7,8 @@
 [![dependency status](https://deps.rs/repo/github/darrenldl/reed-solomon-erasure/status.svg)](https://deps.rs/repo/github/darrenldl/reed-solomon-erasure)
 
 Rust implementation of Reed-Solomon erasure coding
+
+CI has been migrated to a unified GitHub Actions workflow (`.github/workflows/ci.yml`) that includes test, build, security, typos, and tag-gated publish stages.
 
 WASM builds are also available, see section **WASM usage** below for details
 

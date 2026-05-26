@@ -13,6 +13,8 @@ use reed_solomon_erasure::{ReconstructionCacheStats, RuntimeProfileStats};
 
 use self::common::{BenchCase, Operation, SMOKE_CASES, case_name, derived_seed, make_full_shards};
 
+const ARTIFACT_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone)]
 struct ProfileRecord {
     operation: &'static str,
@@ -29,6 +31,10 @@ struct ProfileRecord {
 }
 
 static PROFILE_RECORDS: Mutex<Vec<ProfileRecord>> = Mutex::new(Vec::new());
+
+fn benchmark_metrics_enabled() -> bool {
+    cfg!(feature = "benchmark-metrics")
+}
 
 fn push_profile_record(
     operation: &'static str,
@@ -79,7 +85,7 @@ fn write_profile_report() {
         writeln!(
             file,
             concat!(
-                "  {{\"operation\":\"{}\",\"case\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},",
+                "  {{\"schema_version\":{},\"artifact_kind\":\"throughput-profile-report\",\"benchmark_metrics_enabled\":{},\"operation\":\"{}\",\"case\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},",
                 "\"policy_min_parallel_shard_bytes\":{},\"policy_min_bytes_per_job\":{},\"policy_max_jobs\":{},",
                 "\"code_some_serial_calls\":{},\"code_some_parallel_calls\":{},\"code_some_total_bytes\":{},\"code_some_total_chunks\":{},",
                 "\"code_some_small_output_chunk_parallel_calls\":{},\"code_some_small_output_chunk_parallel_outputs\":{},\"code_some_small_output_chunk_parallel_chunks\":{},",
@@ -92,6 +98,8 @@ fn write_profile_report() {
                 "\"cache_requests\":{},\"cache_hits\":{},\"cache_misses\":{},\"cache_inserts\":{},\"cache_evictions\":{},",
                 "\"cache_hit_rate\":{:.6},\"cache_reuse_ratio\":{:.6},\"cache_miss_cost_per_request\":{:.6}}}{}"
             ),
+            ARTIFACT_SCHEMA_VERSION,
+            benchmark_metrics_enabled(),
             item.operation,
             item.case_label,
             item.data_shards,

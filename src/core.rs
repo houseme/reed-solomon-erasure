@@ -20,7 +20,9 @@ use rayon::prelude::*;
 #[cfg(not(feature = "std"))]
 use spin::Mutex;
 #[cfg(feature = "std")]
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
+#[cfg(all(feature = "std", feature = "benchmark-metrics"))]
+use std::sync::atomic::AtomicUsize;
 
 use super::Field;
 use super::ReconstructShard;
@@ -71,42 +73,90 @@ impl Default for CodecOptions {
 
 #[cfg(feature = "std")]
 #[derive(Debug, Default)]
+struct MetricCounter {
+    #[cfg(feature = "benchmark-metrics")]
+    value: AtomicUsize,
+}
+
+#[cfg(feature = "std")]
+impl MetricCounter {
+    #[inline]
+    fn load(&self, ordering: Ordering) -> usize {
+        #[cfg(feature = "benchmark-metrics")]
+        {
+            self.value.load(ordering)
+        }
+        #[cfg(not(feature = "benchmark-metrics"))]
+        {
+            let _ = ordering;
+            0
+        }
+    }
+
+    #[inline]
+    fn store(&self, value: usize, ordering: Ordering) {
+        #[cfg(feature = "benchmark-metrics")]
+        {
+            self.value.store(value, ordering);
+        }
+        #[cfg(not(feature = "benchmark-metrics"))]
+        {
+            let _ = (value, ordering);
+        }
+    }
+
+    #[inline]
+    fn fetch_add(&self, value: usize, ordering: Ordering) -> usize {
+        #[cfg(feature = "benchmark-metrics")]
+        {
+            self.value.fetch_add(value, ordering)
+        }
+        #[cfg(not(feature = "benchmark-metrics"))]
+        {
+            let _ = (value, ordering);
+            0
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Default)]
 struct ReconstructionCacheMetrics {
-    requests: AtomicUsize,
-    hits: AtomicUsize,
-    misses: AtomicUsize,
-    inserts: AtomicUsize,
-    evictions: AtomicUsize,
+    requests: MetricCounter,
+    hits: MetricCounter,
+    misses: MetricCounter,
+    inserts: MetricCounter,
+    evictions: MetricCounter,
 }
 
 #[cfg(feature = "std")]
 #[derive(Debug, Default)]
 struct RuntimeProfileMetrics {
-    code_some_serial_calls: AtomicUsize,
-    code_some_parallel_calls: AtomicUsize,
-    code_some_total_bytes: AtomicUsize,
-    code_some_total_chunks: AtomicUsize,
-    code_some_small_output_chunk_parallel_calls: AtomicUsize,
-    code_some_small_output_chunk_parallel_outputs: AtomicUsize,
-    code_some_small_output_chunk_parallel_chunks: AtomicUsize,
-    code_single_serial_calls: AtomicUsize,
-    code_single_parallel_calls: AtomicUsize,
-    code_single_total_bytes: AtomicUsize,
-    code_single_total_chunks: AtomicUsize,
-    parallel_policy_calls: AtomicUsize,
-    parallel_policy_parallel: AtomicUsize,
-    parallel_policy_serial: AtomicUsize,
-    parallel_policy_total_jobs: AtomicUsize,
-    parallel_policy_total_chunk_len: AtomicUsize,
-    reconstruct_calls: AtomicUsize,
-    reconstruct_data_only_calls: AtomicUsize,
-    reconstruct_total_missing_data: AtomicUsize,
-    reconstruct_total_missing_parity: AtomicUsize,
-    reconstruct_all_present_fast_path: AtomicUsize,
-    reconstruct_data_stage_calls: AtomicUsize,
-    reconstruct_data_stage_bytes: AtomicUsize,
-    reconstruct_parity_stage_calls: AtomicUsize,
-    reconstruct_parity_stage_bytes: AtomicUsize,
+    code_some_serial_calls: MetricCounter,
+    code_some_parallel_calls: MetricCounter,
+    code_some_total_bytes: MetricCounter,
+    code_some_total_chunks: MetricCounter,
+    code_some_small_output_chunk_parallel_calls: MetricCounter,
+    code_some_small_output_chunk_parallel_outputs: MetricCounter,
+    code_some_small_output_chunk_parallel_chunks: MetricCounter,
+    code_single_serial_calls: MetricCounter,
+    code_single_parallel_calls: MetricCounter,
+    code_single_total_bytes: MetricCounter,
+    code_single_total_chunks: MetricCounter,
+    parallel_policy_calls: MetricCounter,
+    parallel_policy_parallel: MetricCounter,
+    parallel_policy_serial: MetricCounter,
+    parallel_policy_total_jobs: MetricCounter,
+    parallel_policy_total_chunk_len: MetricCounter,
+    reconstruct_calls: MetricCounter,
+    reconstruct_data_only_calls: MetricCounter,
+    reconstruct_total_missing_data: MetricCounter,
+    reconstruct_total_missing_parity: MetricCounter,
+    reconstruct_all_present_fast_path: MetricCounter,
+    reconstruct_data_stage_calls: MetricCounter,
+    reconstruct_data_stage_bytes: MetricCounter,
+    reconstruct_parity_stage_calls: MetricCounter,
+    reconstruct_parity_stage_bytes: MetricCounter,
 }
 
 #[cfg(feature = "std")]
