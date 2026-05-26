@@ -21,7 +21,7 @@
 | 2 | API 与配置能力 | 补齐高价值 API 与 options | 已完成（第一批） | 阶段 1 |
 | 3 | 并行调度 | 引入自动并发与分块执行 | 已完成（治理已补齐） | 阶段 1, 2 |
 | 4 | SIMD 架构升级 | runtime ISA dispatch 与多后端 | 已完成（首批目标） | 阶段 1, 3 |
-| 5 | 重建与缓存优化 | 降低 reconstruction 开销 | 部分完成 | 阶段 2, 3 |
+| 5 | 重建与缓存优化 | 降低 reconstruction 开销 | 部分完成（`reconstruct_data` data-stage 专项已验证） | 阶段 2, 3 |
 | 6 | 自检与发布治理 | 稳定性、回归与发布保护 | 部分完成（治理闭环推进中） | 阶段 1-5 |
 
 ### 2.1 状态说明（核实结论）
@@ -43,7 +43,8 @@
   - cache 已补齐 `evictions`，并提供统一分析口径（`hit_rate/reuse_ratio/miss_cost_per_request`）。
   - cache 默认容量已改为按 workload 自动调优。
   - `reconstruct_data` / `reconstruct_some` 专项对照基准与结果导出已落地；热点场景现已可通过 `scripts/check_reconstruction_hotspot_gate.py` + `scripts/release-check.sh` 沉淀为稳定 gate。
-  - `reconstruct_data` 的 `missing_data <= 2` data-stage 专用路径已落地，`10x4` 热点场景已在同机压测中验证为正收益，`32x16` 场景至少保持不退化。
+  - `reconstruct_data` 的 `missing_data <= 2` data-stage 专用路径已落地，且 `missing_data == 2` 双输出路径已按 `data_shard_count <= 16` 收窄为更大 chunk 粒度。
+  - 当前同机复检结果显示：`reconstruct_data_missing_1_data`、`reconstruct_data_missing_2_data`、`reconstruct_data_32x16_missing_2_data` 均为正收益，说明阶段 5 的 data-stage 专项优化已形成可引用证据。
 - 阶段 6（部分完成）：
   - golden vectors 与 self-test 入口已存在并可运行（`cargo test --test selftest`）。
   - 发布前检查脚本已补齐（`scripts/release-check.sh`）。

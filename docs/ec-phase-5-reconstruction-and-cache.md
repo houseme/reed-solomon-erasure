@@ -110,6 +110,8 @@
 - [x] `inversion_cache` 与 `inversion_cache_capacity` 已接入 `CodecOptions`
 - [x] cache metrics 已提供基础可观测项（`requests/hits/misses/inserts`）
 - [x] reconstruct_some 已有“required-only”恢复语义与测试
+- [x] `reconstruct_data` 的 `missing_data <= 2` data-stage 专用路径已落地
+- [x] `reconstruct_data` 的 `missing_data == 2` 双输出路径已按 `data_shard_count <= 16` 收窄 `512 KiB` chunk 粒度
 
 未完成 / 差距：
 
@@ -120,6 +122,7 @@
   - `scripts/check_reconstruction_hotspot_gate.py` 可对比 `reconstruction-hotspot-results.json`
   - `scripts/release-check.sh` 已支持通过 `RUN_RECONSTRUCTION_HOTSPOT_GATE=1` 接入发布前回归
   - gate 默认关注“场景覆盖 + 相对 baseline 的稳定回归”，不强行假设所有 hotspot candidate 在所有 ISA 上都绝对快于 baseline
+- [x] `reconstruct_data` 专项优化已具备同机 hotspot 与 throughput/profile 双证据
 
 ## 10. 执行待办（按优先级）
 
