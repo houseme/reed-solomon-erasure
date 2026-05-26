@@ -11,7 +11,9 @@ use reed_solomon_erasure::galois_8::{
     ReedSolomon, active_backend_id, active_backend_kind, active_backend_name,
 };
 
-use self::bench_common::{BenchCase, Operation, SMOKE_CASES, derived_seed, make_full_shards};
+use self::bench_common::{
+    BenchCase, FAST_SMOKE_CASES, Operation, SMOKE_CASES, derived_seed, make_full_shards,
+};
 use self::common::{assert_backend_override_honored_if_strict, override_honored};
 
 struct SmokeResult {
@@ -129,6 +131,35 @@ fn run_operation(case: BenchCase, operation: Operation, iterations: usize) -> Sm
     }
 }
 
+fn smoke_profile() -> &'static str {
+    std::env::var("RSE_SMOKE_PROFILE")
+        .ok()
+        .as_deref()
+        .map(|value| match value {
+            "extended" => "extended",
+            _ => "fast",
+        })
+        .unwrap_or("fast")
+}
+
+fn smoke_cases() -> &'static [BenchCase] {
+    match smoke_profile() {
+        "extended" => SMOKE_CASES,
+        _ => FAST_SMOKE_CASES,
+    }
+}
+
+fn smoke_iterations() -> usize {
+    std::env::var("RSE_SMOKE_ITERATIONS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| match smoke_profile() {
+            "extended" => 3,
+            _ => 1,
+        })
+}
+
 fn write_results(results: &[SmokeResult]) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
     fs::create_dir_all(&dir).unwrap();
@@ -204,11 +235,12 @@ fn write_results(results: &[SmokeResult]) {
 fn benchmark_smoke_matrix_runs_and_exports_results() {
     assert_backend_override_honored_if_strict();
     let mut results = Vec::new();
-    for case in SMOKE_CASES {
-        results.push(run_operation(*case, Operation::Encode, 3));
-        results.push(run_operation(*case, Operation::Verify, 3));
-        results.push(run_operation(*case, Operation::Reconstruct, 3));
-        results.push(run_operation(*case, Operation::ReconstructData, 3));
+    let iterations = smoke_iterations();
+    for case in smoke_cases() {
+        results.push(run_operation(*case, Operation::Encode, iterations));
+        results.push(run_operation(*case, Operation::Verify, iterations));
+        results.push(run_operation(*case, Operation::Reconstruct, iterations));
+        results.push(run_operation(*case, Operation::ReconstructData, iterations));
     }
 
     assert!(!results.is_empty());
