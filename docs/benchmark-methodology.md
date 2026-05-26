@@ -241,6 +241,49 @@ Or invoke it directly:
 bash scripts/check_backend_consistency.sh
 ```
 
+Host-specific override smoke matrix helpers are also available:
+
+```bash
+bash scripts/run_x86_backend_smoke_matrix.sh
+bash scripts/run_aarch64_backend_smoke_matrix.sh
+```
+
+On Apple Silicon or other `aarch64` hosts, the ARM64 sweep validates
+`auto`, `scalar`, and `rust-neon`.
+
+## 9.1 Reconstruction Hotspot Gate
+
+The phase-5 hotspot workloads can now be promoted from ad hoc benchmarks to a
+repeatable regression gate.
+
+Generate the current hotspot artifact:
+
+```bash
+cargo test --release --features "std simd-accel" benchmark_reconstruction_hotspots -- --nocapture
+```
+
+Compare it against a saved baseline:
+
+```bash
+python3 scripts/check_reconstruction_hotspot_gate.py \
+  --baseline /path/to/reconstruction-hotspot-results.json \
+  --current target/benchmark-smoke/reconstruction-hotspot-results.json \
+  --require-scenario reconstruct_data_missing_1_data \
+  --require-scenario reconstruct_some_required_1_of_2_missing_data
+```
+
+Use `--min-speedup scenario=value` only for scenarios that have already been
+proven to require a positive optimization margin on the target machine. Do not
+assume every hotspot candidate is universally faster across all architectures.
+
+Or drive it through the release workflow:
+
+```bash
+RUN_RECONSTRUCTION_HOTSPOT_GATE=1 \
+RSE_RECONSTRUCTION_HOTSPOT_BASELINE=/path/to/reconstruction-hotspot-results.json \
+./scripts/release-check.sh
+```
+
 ## 10. ISA Integration Template
 
 Use this template whenever adding a new SIMD or ISA-specific backend.

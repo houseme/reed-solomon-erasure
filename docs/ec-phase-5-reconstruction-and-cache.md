@@ -116,7 +116,10 @@
 - [x] 指标已覆盖 `evictions`
 - [x] cache 命中率分析已形成统一口径（`hit_rate`/`reuse_ratio`/`miss_cost_per_request`）并写入方法学文档
 - [x] 默认容量已改为按 workload 自动推导（基于 `data_shards + parity_shards` 与 parity 扇出估算，并做上下界裁剪）
-- [ ] 重建热点 benchmark 尚未沉淀为稳定 gate 场景
+- [x] 重建热点 benchmark 已可沉淀为稳定 gate 场景：
+  - `scripts/check_reconstruction_hotspot_gate.py` 可对比 `reconstruction-hotspot-results.json`
+  - `scripts/release-check.sh` 已支持通过 `RUN_RECONSTRUCTION_HOTSPOT_GATE=1` 接入发布前回归
+  - gate 默认关注“场景覆盖 + 相对 baseline 的稳定回归”，不强行假设所有 hotspot candidate 在所有 ISA 上都绝对快于 baseline
 
 ## 10. 执行待办（按优先级）
 

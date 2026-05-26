@@ -42,11 +42,12 @@
   - cache 可观测（stats/metrics）与部分 reconstruction 优化已具备。
   - cache 已补齐 `evictions`，并提供统一分析口径（`hit_rate/reuse_ratio/miss_cost_per_request`）。
   - cache 默认容量已改为按 workload 自动调优。
-  - `reconstruct_data` / `reconstruct_some` 专项对照基准与结果导出已落地；剩余缺口是将热点场景进一步沉淀为稳定 gate。
+  - `reconstruct_data` / `reconstruct_some` 专项对照基准与结果导出已落地；热点场景现已可通过 `scripts/check_reconstruction_hotspot_gate.py` + `scripts/release-check.sh` 沉淀为稳定 gate。
 - 阶段 6（部分完成）：
   - golden vectors 与 self-test 入口已存在并可运行（`cargo test --test selftest`）。
   - 发布前检查脚本已补齐（`scripts/release-check.sh`）。
   - benchmark regression gate 与 backend/ISA consistency 自动回归入口已补齐，阶段 3/5 的可比较 schema 与 baseline 更新治理规则也已写入 `docs/benchmark-methodology.md`。
+  - `aarch64` 主机 override smoke matrix 已提供独立入口，Apple Silicon 上可稳定复用 `auto/scalar/rust-neon` 校验链路。
 
 ## 3. 统一验收标准
 

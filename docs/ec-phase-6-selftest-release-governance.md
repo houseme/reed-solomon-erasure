@@ -104,6 +104,8 @@
 - [x] benchmark regression gate 已提供可执行脚本入口（`scripts/check_benchmark_regression.py`），并接入 `scripts/release-check.sh`
 - [x] 跨 backend / 跨 ISA 一致性验证已提供可复用自动流程入口（`scripts/check_backend_consistency.sh`）
 - [x] 发布前检查清单已固化为可执行脚本（`scripts/release-check.sh`）
+- [x] `aarch64` host override smoke matrix 已固化为可复用入口（`scripts/run_aarch64_backend_smoke_matrix.sh`）
+- [x] reconstruction hotspot gate 已接入发布脚本，可按 baseline 做稳定回归比较
 
 ## 9. 执行待办（按优先级）
 
