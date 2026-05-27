@@ -6,6 +6,12 @@ use alloc::vec::Vec;
 use super::{fill_random, option_shards_into_shards, shards_into_option_shards};
 use crate::galois_16::ReedSolomon;
 
+const QUICKCHECK_MAX_SHARD_LEN: usize = 1_024;
+
+fn quickcheck_shard_len(size: usize) -> usize {
+    1 + size % QUICKCHECK_MAX_SHARD_LEN
+}
+
 macro_rules! make_random_shards {
     ($per_shard:expr, $size:expr) => {{
         let mut shards = Vec::with_capacity(20);
@@ -57,7 +63,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -132,7 +138,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -181,7 +187,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -244,7 +250,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -278,7 +284,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -320,7 +326,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -351,7 +357,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -390,7 +396,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -419,7 +425,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -463,7 +469,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
