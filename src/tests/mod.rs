@@ -3093,7 +3093,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let reuse = reuse % 10;
 
@@ -3143,7 +3143,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let reuse = reuse % 10;
 
@@ -3256,7 +3256,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let reuse = reuse % 10;
 
@@ -3315,7 +3315,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let reuse = reuse % 10;
 
