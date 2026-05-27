@@ -32,6 +32,7 @@ const DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY: usize = 4096;
 const CODE_SLICE_MIN_CHUNK_BYTES: usize = 16 * 1024;
 const CODE_SLICE_DEFAULT_CHUNK_BYTES: usize = 64 * 1024;
 const CODE_SLICE_LARGE_CHUNK_BYTES: usize = 256 * 1024;
+const VERIFY_INLINE_SCRATCH_ELEMS: usize = 4 * 1024;
 #[cfg(feature = "std")]
 const PARALLEL_MIN_SHARD_BYTES: usize = 256 * 1024;
 #[cfg(feature = "std")]
@@ -810,6 +811,66 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
     }
 }
 
+/// Reusable parity scratch space for repeated verify calls.
+///
+/// This helper keeps the parity buffer allocation outside of `verify` so
+/// repeated callers can naturally take the `verify_with_buffer` fast path
+/// without having to manage `Vec<Vec<_>>` details themselves.
+#[derive(PartialEq, Debug, Clone)]
+pub struct VerifyWorkspace<F: Field> {
+    parity: Vec<Vec<F::Elem>>,
+}
+
+impl<F: Field> VerifyWorkspace<F> {
+    /// Creates a new reusable verify workspace for a codec and shard length.
+    pub fn new(codec: &ReedSolomon<F>, shard_len: usize) -> Self {
+        let mut parity = Vec::with_capacity(codec.parity_shard_count);
+        for _ in 0..codec.parity_shard_count {
+            parity.push(vec![F::zero(); shard_len]);
+        }
+        Self { parity }
+    }
+
+    /// Returns the number of parity shards currently allocated in the workspace.
+    pub fn parity_shards(&self) -> usize {
+        self.parity.len()
+    }
+
+    /// Returns the shard length currently held by the workspace, if any.
+    pub fn shard_len(&self) -> Option<usize> {
+        self.parity.first().map(Vec::len)
+    }
+
+    /// Resizes the workspace to match the given codec and shard length.
+    pub fn resize(&mut self, codec: &ReedSolomon<F>, shard_len: usize) {
+        if self.parity.len() < codec.parity_shard_count {
+            self.parity.reserve(codec.parity_shard_count - self.parity.len());
+            while self.parity.len() < codec.parity_shard_count {
+                self.parity.push(Vec::new());
+            }
+        } else if self.parity.len() > codec.parity_shard_count {
+            self.parity.truncate(codec.parity_shard_count);
+        }
+
+        for shard in &mut self.parity {
+            shard.resize(shard_len, F::zero());
+        }
+    }
+
+    fn prepare(&mut self, codec: &ReedSolomon<F>, shard_len: usize) {
+        if self.parity.len() != codec.parity_shard_count
+            || self.shard_len() != Some(shard_len)
+            || self.parity.iter().any(|shard| shard.len() != shard_len)
+        {
+            self.resize(codec, shard_len);
+        }
+    }
+
+    pub(crate) fn as_mut_shards(&mut self) -> &mut [Vec<F::Elem>] {
+        &mut self.parity
+    }
+}
+
 /// Reed-Solomon erasure code encoder/decoder.
 ///
 /// # Common error handling
@@ -915,6 +976,7 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
 /// | not `with_buffer` | `with_buffer` |
 /// | --- | --- |
 /// | `verify` | `verify_with_buffer` |
+/// | `verify_with_workspace` | `verify_with_buffer` (buffer managed for you) |
 ///
 /// The `with_buffer` variants also check the dimensions of the buffer and return
 /// `Error::TooFewBufferShards`, `Error::TooManyBufferShards`, `Error::EmptyShard`,
@@ -1670,14 +1732,14 @@ impl<F: Field> ReedSolomon<F> {
         check_slices!(multi => slices);
 
         let slice_len = slices[0].as_ref().len();
-        let mut buffer: SmallVec<[Vec<F::Elem>; 32]> =
-            SmallVec::with_capacity(self.parity_shard_count);
+        let scratch_len = self.parity_shard_count * slice_len;
+        let mut scratch: SmallVec<[F::Elem; VERIFY_INLINE_SCRATCH_ELEMS]> =
+            SmallVec::with_capacity(scratch_len);
+        scratch.resize(scratch_len, F::zero());
+        let mut buffer_views: SmallVec<[&mut [F::Elem]; 32]> =
+            scratch.chunks_mut(slice_len).collect();
 
-        for _ in 0..self.parity_shard_count {
-            buffer.push(vec![F::zero(); slice_len]);
-        }
-
-        self.verify_with_buffer_par(slices, &mut buffer)
+        self.verify_with_buffer_par(slices, &mut buffer_views)
     }
 
     #[cfg(feature = "std")]
@@ -2296,11 +2358,31 @@ impl<F: Field> ReedSolomon<F> {
         }
 
         let parity_rows = self.get_parity_rows();
-        let mut scratch = vec![F::zero(); self.parity_shard_count * slice_len];
+        let scratch_len = self.parity_shard_count * slice_len;
+        let mut scratch: SmallVec<[F::Elem; VERIFY_INLINE_SCRATCH_ELEMS]> =
+            SmallVec::with_capacity(scratch_len);
+        scratch.resize(scratch_len, F::zero());
         let mut buffer_views: SmallVec<[&mut [F::Elem]; 32]> =
             scratch.chunks_mut(slice_len).collect();
 
         Ok(self.check_some_slices_with_buffer_raw(&parity_rows, data, to_check, &mut buffer_views))
+    }
+
+    /// Checks parity shards using a reusable workspace-managed buffer.
+    pub fn verify_with_workspace<T>(
+        &self,
+        slices: &[T],
+        workspace: &mut VerifyWorkspace<F>,
+    ) -> Result<bool, Error>
+    where
+        T: AsRef<[F::Elem]>,
+    {
+        check_piece_count!(all => self, slices);
+        check_slices!(multi => slices);
+
+        let slice_len = slices[0].as_ref().len();
+        workspace.prepare(self, slice_len);
+        self.verify_with_buffer(slices, workspace.as_mut_shards())
     }
 
     /// Checks if the parity shards are correct.

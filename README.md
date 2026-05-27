@@ -52,6 +52,7 @@ older CPUs, YMMV.
 extern crate reed_solomon_erasure;
 
 use reed_solomon_erasure::galois_8::ReedSolomon;
+use reed_solomon_erasure::VerifyWorkspace;
 // or use the following for Galois 2^16 backend
 // use reed_solomon_erasure::galois_16::ReedSolomon;
 
@@ -83,10 +84,14 @@ fn main () {
     // Convert back to normal shard arrangement
     let result: Vec<_> = shards.into_iter().filter_map(|x| x).collect();
 
-    assert!(r.verify(&result).unwrap());
+    let mut verify_workspace = VerifyWorkspace::new(&r, master_copy[0].len());
+    assert!(r.verify_with_workspace(&result, &mut verify_workspace).unwrap());
     assert_eq!(master_copy, result);
 }
 ```
+
+For repeated verify calls, prefer `verify_with_workspace` or `verify_with_buffer`
+over plain `verify`, so the parity scratch buffer can be reused across calls.
 
 ## Benchmark it yourself
 You can test performance under different configurations quickly (e.g. data parity shards ratio, parallel parameters)

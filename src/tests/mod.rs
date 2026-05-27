@@ -1929,6 +1929,61 @@ fn test_galois_8_verify_with_buffer_opt_matches_verify_with_buffer() {
     assert_eq!(expected_buffer, actual_buffer);
 }
 
+#[test]
+fn test_verify_with_workspace_matches_verify_with_buffer() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(64 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected_buffer = make_random_shards!(64 * 1024, 4);
+    let expected = r.verify_with_buffer(&shards, &mut expected_buffer).unwrap();
+
+    let mut workspace = crate::VerifyWorkspace::new(&r, 64 * 1024);
+    let actual = r.verify_with_workspace(&shards, &mut workspace).unwrap();
+
+    assert_eq!(expected, actual);
+
+    shards[13][31] ^= 0xff;
+    let expected = r.verify_with_buffer(&shards, &mut expected_buffer).unwrap();
+    let actual = r.verify_with_workspace(&shards, &mut workspace).unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_verify_with_workspace_opt_matches_verify_with_buffer_opt() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected_buffer = make_random_shards!(256 * 1024, 4);
+    let expected = r
+        .verify_with_buffer_opt(&shards, &mut expected_buffer)
+        .unwrap();
+
+    let mut workspace = crate::VerifyWorkspace::new(&r, 256 * 1024);
+    let actual = r.verify_with_workspace_opt(&shards, &mut workspace).unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn test_verify_with_workspace_resizes_for_new_shard_len() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut workspace = crate::VerifyWorkspace::new(&r, 1024);
+
+    let mut small = make_random_shards!(1024, 14);
+    r.encode(&mut small).unwrap();
+    assert!(r.verify_with_workspace(&small, &mut workspace).unwrap());
+    assert_eq!(workspace.shard_len(), Some(1024));
+
+    let mut large = make_random_shards!(16 * 1024, 14);
+    r.encode(&mut large).unwrap();
+    assert!(r.verify_with_workspace(&large, &mut workspace).unwrap());
+    assert_eq!(workspace.shard_len(), Some(16 * 1024));
+    assert_eq!(workspace.parity_shards(), 4);
+}
+
 #[cfg(feature = "std")]
 #[test]
 fn test_galois_8_reconstruct_data_opt_matches_reconstruct_data() {

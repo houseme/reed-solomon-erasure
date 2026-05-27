@@ -7,6 +7,7 @@ This document standardizes how to run, collect, and compare benchmark results fo
 Targets:
 
 - smoke regression (`tests/benchmark_smoke.rs`)
+- small-file matrix (`tests/benchmark_small_files.rs`)
 - throughput matrix (`benches/throughput_matrix.rs`)
 - backend kernel benchmarks (`benches/galois_backend.rs`)
 
@@ -29,6 +30,21 @@ Example:
 ```bash
 RSE_SMOKE_PROFILE=quick cargo test --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
 ```
+
+Small-file matrix:
+
+```bash
+RSE_SMALL_FILE_PROFILE=fast \
+cargo test --release --features "std simd-accel" \
+  --test benchmark_small_files \
+  benchmark_small_file_matrix_runs_and_exports_results -- --nocapture
+```
+
+Small-file profiles:
+
+- `RSE_SMALL_FILE_PROFILE=quick`: `4+2` on `1 KiB / 4 KiB / 16 KiB / 64 KiB`
+- `RSE_SMALL_FILE_PROFILE=fast`: day-to-day small-file regression pass for `4+2` and `10+4`
+- `RSE_SMALL_FILE_PROFILE=extended`: full small-file baseline/update run through `1 MiB`
 
 Throughput matrix:
 
@@ -60,6 +76,11 @@ Smoke outputs:
 
 - `target/benchmark-smoke/smoke-results.json`
 - `target/benchmark-smoke/smoke-results.csv`
+
+Small-file outputs:
+
+- `target/benchmark-smoke/small-file-results.json`
+- `target/benchmark-smoke/small-file-results.csv`
 
 Cache analysis outputs (tests):
 
@@ -126,6 +147,7 @@ Artifact-specific fields remain allowed, but the core envelope should stay stabl
 Current artifact mapping:
 
 - `smoke-results`: regression-oriented throughput snapshot
+- `small-file-results`: small-shard latency/throughput snapshot
 - `parallel-helper-results`: serial vs optimized helper comparison
 - `reconstruction-hotspot-results`: reconstruct workload comparison
 - `reconstruction-cache-stats`: cache observability snapshot

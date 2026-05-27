@@ -56,6 +56,7 @@ pub use crate::core::ReedSolomon;
 #[cfg(feature = "std")]
 pub use crate::core::RuntimeProfileStats;
 pub use crate::core::ShardByShard;
+pub use crate::core::VerifyWorkspace;
 
 // TODO: Can be simplified once https://github.com/rust-lang/rfcs/issues/2505 is resolved
 #[cfg(not(feature = "std"))]

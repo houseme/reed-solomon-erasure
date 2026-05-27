@@ -168,6 +168,21 @@ impl crate::ReedSolomon<super::Field> {
     }
 
     #[cfg(feature = "std")]
+    pub fn verify_with_workspace_opt(
+        &self,
+        slices: &[Vec<u8>],
+        workspace: &mut crate::VerifyWorkspace<crate::galois_8::Field>,
+    ) -> Result<bool, crate::Error> {
+        let shard_len = Self::first_shard_len(slices);
+        workspace.resize(self, shard_len);
+        if self.should_parallel_data_path(shard_len, self.parity_shard_count()) {
+            self.verify_with_buffer_par(slices, workspace.as_mut_shards())
+        } else {
+            self.verify_with_buffer(slices, workspace.as_mut_shards())
+        }
+    }
+
+    #[cfg(feature = "std")]
     pub fn reconstruct_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
         let shard_len = Self::first_present_shard_len(shards);
         let missing_data = shards
