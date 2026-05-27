@@ -1430,11 +1430,19 @@ fn test_reconstruction_cache_stats_track_hits_and_misses() {
     r.reconstruct(&mut first).unwrap();
 
     let stats_after_first = r.reconstruction_cache_stats();
-    assert_eq!(1, stats_after_first.requests);
-    assert_eq!(0, stats_after_first.hits);
-    assert_eq!(1, stats_after_first.misses);
-    assert_eq!(1, stats_after_first.inserts);
-    assert_eq!(0, stats_after_first.evictions);
+    if benchmark_metrics_enabled() {
+        assert_eq!(1, stats_after_first.requests);
+        assert_eq!(0, stats_after_first.hits);
+        assert_eq!(1, stats_after_first.misses);
+        assert_eq!(1, stats_after_first.inserts);
+        assert_eq!(0, stats_after_first.evictions);
+    } else {
+        assert_eq!(0, stats_after_first.requests);
+        assert_eq!(0, stats_after_first.hits);
+        assert_eq!(0, stats_after_first.misses);
+        assert_eq!(0, stats_after_first.inserts);
+        assert_eq!(0, stats_after_first.evictions);
+    }
 
     let mut second = shards_to_option_shards(&shards);
     second[0] = None;
@@ -1442,16 +1450,29 @@ fn test_reconstruction_cache_stats_track_hits_and_misses() {
     r.reconstruct(&mut second).unwrap();
 
     let stats_after_second = r.reconstruction_cache_stats();
-    assert_eq!(2, stats_after_second.requests);
-    assert_eq!(1, stats_after_second.hits);
-    assert_eq!(1, stats_after_second.misses);
-    assert_eq!(1, stats_after_second.inserts);
-    assert_eq!(0, stats_after_second.evictions);
+    if benchmark_metrics_enabled() {
+        assert_eq!(2, stats_after_second.requests);
+        assert_eq!(1, stats_after_second.hits);
+        assert_eq!(1, stats_after_second.misses);
+        assert_eq!(1, stats_after_second.inserts);
+        assert_eq!(0, stats_after_second.evictions);
 
-    let analysis = stats_after_second.analysis();
-    assert!((analysis.hit_rate - 0.5).abs() < f64::EPSILON);
-    assert!((analysis.reuse_ratio - 1.0).abs() < f64::EPSILON);
-    assert!((analysis.miss_cost_per_request - 0.5).abs() < f64::EPSILON);
+        let analysis = stats_after_second.analysis();
+        assert!((analysis.hit_rate - 0.5).abs() < f64::EPSILON);
+        assert!((analysis.reuse_ratio - 1.0).abs() < f64::EPSILON);
+        assert!((analysis.miss_cost_per_request - 0.5).abs() < f64::EPSILON);
+    } else {
+        assert_eq!(0, stats_after_second.requests);
+        assert_eq!(0, stats_after_second.hits);
+        assert_eq!(0, stats_after_second.misses);
+        assert_eq!(0, stats_after_second.inserts);
+        assert_eq!(0, stats_after_second.evictions);
+
+        let analysis = stats_after_second.analysis();
+        assert_eq!(0.0, analysis.hit_rate);
+        assert_eq!(0.0, analysis.reuse_ratio);
+        assert_eq!(0.0, analysis.miss_cost_per_request);
+    }
 }
 
 #[cfg(feature = "std")]
@@ -1479,8 +1500,16 @@ fn test_reconstruction_cache_stats_track_evictions() {
     }
 
     let stats = r.reconstruction_cache_stats();
-    assert!(stats.inserts >= 3);
-    assert!(stats.evictions >= 1);
+    if benchmark_metrics_enabled() {
+        assert!(stats.inserts >= 3);
+        assert!(stats.evictions >= 1);
+    } else {
+        assert_eq!(0, stats.requests);
+        assert_eq!(0, stats.hits);
+        assert_eq!(0, stats.misses);
+        assert_eq!(0, stats.inserts);
+        assert_eq!(0, stats.evictions);
+    }
 }
 
 #[cfg(feature = "std")]
@@ -1535,7 +1564,15 @@ fn benchmark_reconstruction_cache_patterns() {
     );
     fs::write(&path, body).unwrap();
     assert!(path.exists());
-    assert!(stats.requests >= 10);
+    if benchmark_metrics_enabled() {
+        assert!(stats.requests >= 10);
+    } else {
+        assert_eq!(0, stats.requests);
+        assert_eq!(0, stats.hits);
+        assert_eq!(0, stats.misses);
+        assert_eq!(0, stats.inserts);
+        assert_eq!(0, stats.evictions);
+    }
 }
 
 #[cfg(feature = "std")]
