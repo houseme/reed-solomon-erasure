@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@stable # v1
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -66,14 +66,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable, beta, nightly]
+        toolchain: [ stable, beta, nightly ]
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@master # v1
         with:
           toolchain: ${{ matrix.toolchain }}
 
@@ -81,7 +81,7 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Build all crates
-        run: cargo build --verbose --all
+        run: cargo build --verbose --workspace --exclude reed-solomon-erasure-fuzz
 
   build-windows-native:
     name: Build Windows Native (${{ matrix.toolchain }})
@@ -89,14 +89,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable, beta, nightly]
+        toolchain: [ stable, beta, nightly ]
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@master # v1
         with:
           toolchain: ${{ matrix.toolchain }}
 
@@ -104,7 +104,7 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Build all crates
-        run: cargo build --verbose --all
+        run: cargo build --verbose --workspace --exclude reed-solomon-erasure-fuzz
 
   build-windows-gnu-targets:
     name: Build Windows GNU Target (${{ matrix.toolchain }}, ${{ matrix.target }})
@@ -112,15 +112,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable, beta, nightly]
-        target: [i686-pc-windows-gnu, x86_64-pc-windows-gnu]
+        toolchain: [ stable, beta, nightly ]
+        target: [ i686-pc-windows-gnu, x86_64-pc-windows-gnu ]
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust with target
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@master # v1
         with:
           toolchain: ${{ matrix.toolchain }}
           target: ${{ matrix.target }}
@@ -129,13 +129,13 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Check target build (default features)
-        run: cargo check --verbose --all --target ${{ matrix.target }}
+        run: cargo check --verbose --workspace --exclude reed-solomon-erasure-fuzz --target ${{ matrix.target }}
 
       - name: Check target build (no default features)
-        run: cargo check --verbose --all --target ${{ matrix.target }} --no-default-features
+        run: cargo check --verbose --workspace --exclude reed-solomon-erasure-fuzz --target ${{ matrix.target }} --no-default-features
 
       - name: Check target build (simd-accel)
-        run: cargo check --verbose --all --target ${{ matrix.target }} --features simd-accel
+        run: cargo check --verbose --workspace --exclude reed-solomon-erasure-fuzz --target ${{ matrix.target }} --features simd-accel
 
   test-linux:
     name: Test Linux (${{ matrix.toolchain }})
@@ -143,14 +143,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable, beta, nightly]
+        toolchain: [ stable, beta, nightly ]
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@master # v1
         with:
           toolchain: ${{ matrix.toolchain }}
 
@@ -158,10 +158,10 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Test no_std
-        run: cargo test --verbose --all --no-default-features
+        run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz --no-default-features
 
       - name: Test std + simd
-        run: cargo test --verbose --all --features simd-accel
+        run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz --features simd-accel
 
   test-windows-native:
     name: Test Windows Native (${{ matrix.toolchain }})
@@ -169,14 +169,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable, beta, nightly]
+        toolchain: [ stable, beta, nightly ]
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@master # v1
         with:
           toolchain: ${{ matrix.toolchain }}
 
@@ -184,7 +184,7 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Test all crates
-        run: cargo test --verbose --all
+        run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz
 
   test-macos-arm64:
     name: Test macOS ARM64 (${{ matrix.toolchain }})
@@ -192,14 +192,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable]
+        toolchain: [ stable ]
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@master # v1
         with:
           toolchain: ${{ matrix.toolchain }}
 
@@ -207,10 +207,10 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Test no_std
-        run: cargo test --verbose --all --no-default-features
+        run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz --no-default-features
 
       - name: Test std + simd
-        run: cargo test --verbose --all --features simd-accel
+        run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz --features simd-accel
 
   publish:
     name: Publish to crates.io
@@ -231,7 +231,9 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@master # v1
+        with:
+          toolchain: stable
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1

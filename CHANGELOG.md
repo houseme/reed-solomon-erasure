@@ -104,7 +104,7 @@
 
 ## 3.1.2 (not published)
 - Doc fix
-  - Added space before parantheses in code comments and documentation
+  - Added space before parentheses in code comments and documentation
 - Disabled SIMD C code for Android and iOS targets entirely
 
 ## 3.1.1
@@ -115,7 +115,7 @@
   - Previously used MB=10^6 bytes while I should have used MB=2^20 bytes
   - Table in README has been updated accordingly
     - The `>= 2.1.0` data is obtained by measuring again with the corrected `rse-benchmark` code
-    - The `2.0.X` and `1.X.X` data are simply adjusted by mutiplying `10^6` then dividing by `2^20`
+    - The `2.0.X` and `1.X.X` data are simply adjusted by multiplying `10^6` then dividing by `2^20`
 - Dependencies update
   - Updated `rand` from `0.4` to `0.5.4`
 - Added special handling in `build.rs` for CC options on Android and iOS

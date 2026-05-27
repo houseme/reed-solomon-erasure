@@ -2059,7 +2059,7 @@ fn test_reconstruct_shards() {
         assert_eq!(&shards, &master_copy);
     }
 
-    // Try to deocde with 6 data and 4 parity shards
+    // Try to decode with 6 data and 4 parity shards
     shards[0] = None;
     shards[2] = None;
     shards[12] = None;

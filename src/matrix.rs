@@ -119,7 +119,7 @@ impl<F: Field> Matrix<F> {
     pub fn multiply(&self, rhs: &Matrix<F>) -> Matrix<F> {
         if self.col_count != rhs.row_count {
             panic!(
-                "Colomn count on left is different from row count on right, lhs: {}, rhs: {}",
+                "Column count on left is different from row count on right, lhs: {}, rhs: {}",
                 self.col_count, rhs.row_count
             )
         }
