@@ -69,6 +69,38 @@ run_reconstruction_hotspot_gate() {
   fi
 }
 
+run_small_file_gate() {
+  if [[ "${RUN_SMALL_FILE_GATE:-0}" != "1" ]]; then
+    echo
+    echo "[release-check] skipping small-file gate (set RUN_SMALL_FILE_GATE=1)"
+    return
+  fi
+
+  run env RSE_SMALL_FILE_PROFILE="${RSE_SMALL_FILE_PROFILE:-fast}" \
+    cargo test --release --features "std simd-accel" \
+    --test benchmark_small_files \
+    benchmark_small_file_matrix_runs_and_exports_results -- --nocapture
+
+  if [[ -n "${RSE_SMALL_FILE_BASELINE:-}" ]]; then
+    run python3 scripts/check_benchmark_regression.py \
+      --baseline "${RSE_SMALL_FILE_BASELINE}" \
+      --current target/benchmark-smoke/small-file-results.json \
+      --metric "${RSE_SMALL_FILE_METRIC:-ns_per_iter}" \
+      --threshold encode=0.12 \
+      --threshold verify=0.12 \
+      --threshold verify_with_buffer=0.12 \
+      --threshold reconstruct=0.18 \
+      --threshold reconstruct_data=0.18 \
+      --require-case encode:4:2:1024 \
+      --require-case verify_with_buffer:4:2:4096 \
+      --require-case reconstruct:4:2:16384 \
+      --require-case reconstruct_data:10:4:65536
+  else
+    echo
+    echo "[release-check] small-file results generated without baseline compare (set RSE_SMALL_FILE_BASELINE=/path/to/small-file-results.json)"
+  fi
+}
+
 run_fast_checks() {
   run cargo check --tests
   run cargo test --test selftest
@@ -102,6 +134,7 @@ run_extended_checks() {
   if [[ "${RUN_SIMD_ACCEL_TESTS:-1}" == "1" ]]; then
     run cargo test --features "std simd-accel"
     run_backend_override_matrix
+    run_small_file_gate
     run_reconstruction_hotspot_gate
   else
     echo

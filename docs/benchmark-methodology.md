@@ -43,8 +43,14 @@ cargo test --release --features "std simd-accel" \
 Small-file profiles:
 
 - `RSE_SMALL_FILE_PROFILE=quick`: `4+2` on `1 KiB / 4 KiB / 16 KiB / 64 KiB`
-- `RSE_SMALL_FILE_PROFILE=fast`: day-to-day small-file regression pass for `4+2` and `10+4`
-- `RSE_SMALL_FILE_PROFILE=extended`: full small-file baseline/update run through `1 MiB`
+- `RSE_SMALL_FILE_PROFILE=fast`: `4+2` on `1 KiB / 4 KiB / 16 KiB / 64 KiB / 128 KiB / 256 KiB / 512 KiB`, plus `10+4` on `16 KiB / 64 KiB / 256 KiB / 512 KiB`
+- `RSE_SMALL_FILE_PROFILE=extended`: full small-file baseline/update run through `1 MiB` for both `4+2` and `10+4`
+
+Small-file helper script:
+
+```bash
+bash scripts/run_small_file_benchmark_matrix.sh
+```
 
 Throughput matrix:
 
@@ -116,6 +122,12 @@ Regression gate inputs / outputs:
 - current artifact: `target/benchmark-smoke/smoke-results.json`
 - consistency sweep: `scripts/check_backend_consistency.sh`
 
+Small-file gate inputs / outputs:
+
+- baseline artifact: archived `small-file-results.json` or `small-file-results.csv`
+- current artifact: `target/benchmark-smoke/small-file-results.json`
+- recommended metric for small shards: `ns_per_iter`
+
 Throughput profiling output (optional):
 
 - `target/benchmark-smoke/throughput-profile-report.json` (when `RSE_WRITE_PROFILE_REPORT=1`)
@@ -175,7 +187,8 @@ Notes:
 3. For each operation (`encode`, `verify`, `reconstruct`, `reconstruct_data`), compare:
    - throughput (`throughput_mb_s`)
    - latency (`ns_per_iter`) when available
-4. Use median of repeated runs for decisions; avoid single-run conclusions.
+4. For small-file decisions, prioritize `ns_per_iter` over `throughput_mb_s`, especially for `1 KiB` to `64 KiB`.
+5. Use median of repeated runs for decisions; avoid single-run conclusions.
 
 ## 6. Cache Metrics Interpretation
 
@@ -207,6 +220,7 @@ This script runs test gates for:
 - self-test entry
 - benchmark smoke
 - smoke regression gate (when `RSE_SMOKE_BASELINE` is set)
+- small-file regression gate (when `RUN_SMALL_FILE_GATE=1` and `RSE_SMALL_FILE_BASELINE` is set)
 - backend/ISA consistency sweep (when `RUN_BACKEND_CONSISTENCY=1`)
 - `no_std` build path
 - `std` and optional `simd-accel` paths
@@ -245,6 +259,35 @@ python3 scripts/check_benchmark_regression.py \
   --threshold reconstruct=0.18 \
   --threshold reconstruct_data=0.18
 ```
+
+The same tool also supports small-file latency checks:
+
+```bash
+python3 scripts/check_benchmark_regression.py \
+  --baseline old-small-file.json \
+  --current target/benchmark-smoke/small-file-results.json \
+  --metric ns_per_iter \
+  --threshold verify_with_buffer=0.12 \
+  --require-case encode:4:2:1024 \
+  --require-case verify_with_buffer:4:2:4096 \
+  --require-case reconstruct_data:10:4:65536
+```
+
+`release-check.sh` can also run the small-file gate:
+
+```bash
+VALIDATION_PROFILE=extended \
+RUN_SMALL_FILE_GATE=1 \
+RSE_SMALL_FILE_PROFILE=extended \
+RSE_SMALL_FILE_BASELINE=/abs/path/to/small-file-results.json \
+./scripts/release-check.sh
+```
+
+Recommended defaults for small-file checks:
+
+- `RSE_SMALL_FILE_METRIC=ns_per_iter`
+- `RSE_SMALL_FILE_PROFILE=fast` for day-to-day validation
+- `RSE_SMALL_FILE_PROFILE=extended` when refreshing an archived baseline
 
 ## 8.1 Baseline Update Governance
 

@@ -5,11 +5,18 @@ import json
 import pathlib
 import sys
 
-OPERATIONS = ("encode", "verify", "reconstruct", "reconstruct_data")
+OPERATIONS = (
+    "encode",
+    "verify",
+    "verify_with_buffer",
+    "reconstruct",
+    "reconstruct_data",
+)
 CASE_KEY = ("data_shards", "parity_shards", "shard_size")
 DEFAULT_THRESHOLDS = {
     "encode": 0.10,
     "verify": 0.12,
+    "verify_with_buffer": 0.12,
     "reconstruct": 0.15,
     "reconstruct_data": 0.15,
 }
@@ -28,6 +35,7 @@ def normalize_record(record):
     normalized = dict(record)
     normalized["operation"] = str(record["operation"])
     normalized["throughput_mb_s"] = float(record["throughput_mb_s"])
+    normalized["ns_per_iter"] = float(record["ns_per_iter"])
     for key in CASE_KEY:
         normalized[key] = str(record[key])
     return normalized
@@ -60,6 +68,24 @@ def parse_threshold_overrides(values):
     return thresholds
 
 
+def metric_value(record, metric):
+    if metric == "throughput_mb_s":
+        return record["throughput_mb_s"]
+    if metric == "ns_per_iter":
+        return record["ns_per_iter"]
+    raise SystemExit(f"unsupported metric: {metric}")
+
+
+def regression_ratio(baseline_value, current_value, metric):
+    if baseline_value <= 0.0:
+        return 0.0
+    if metric == "throughput_mb_s":
+        return max(0.0, (baseline_value - current_value) / baseline_value)
+    if metric == "ns_per_iter":
+        return max(0.0, (current_value - baseline_value) / baseline_value)
+    raise SystemExit(f"unsupported metric: {metric}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", required=True)
@@ -69,6 +95,12 @@ def main():
         action="append",
         default=[],
         help="Override allowed regression ratio, e.g. reconstruct=0.18",
+    )
+    parser.add_argument(
+        "--metric",
+        choices=("throughput_mb_s", "ns_per_iter"),
+        default="throughput_mb_s",
+        help="Metric used for regression detection. Use ns_per_iter for latency-sensitive small-file checks.",
     )
     parser.add_argument(
         "--require-case",
@@ -93,24 +125,29 @@ def main():
             continue
         baseline_record = baseline[key]
         op = current_record["operation"]
-        baseline_tp = baseline_record["throughput_mb_s"]
-        current_tp = current_record["throughput_mb_s"]
-        if baseline_tp <= 0.0:
+        baseline_value = metric_value(baseline_record, args.metric)
+        current_value = metric_value(current_record, args.metric)
+        if baseline_value <= 0.0:
             continue
-        regression_ratio = max(0.0, (baseline_tp - current_tp) / baseline_tp)
+        ratio = regression_ratio(baseline_value, current_value, args.metric)
         comparisons.append(
             {
                 "operation": op,
                 "data_shards": key[1],
                 "parity_shards": key[2],
                 "shard_size": key[3],
-                "baseline_throughput_mb_s": baseline_tp,
-                "current_throughput_mb_s": current_tp,
-                "regression_ratio": regression_ratio,
+                "metric": args.metric,
+                "baseline_metric_value": baseline_value,
+                "current_metric_value": current_value,
+                "baseline_throughput_mb_s": baseline_record["throughput_mb_s"],
+                "current_throughput_mb_s": current_record["throughput_mb_s"],
+                "baseline_ns_per_iter": baseline_record["ns_per_iter"],
+                "current_ns_per_iter": current_record["ns_per_iter"],
+                "regression_ratio": ratio,
                 "threshold": thresholds[op],
             }
         )
-        if regression_ratio > thresholds[op]:
+        if ratio > thresholds[op]:
             failures.append(comparisons[-1])
 
     for required in args.require_case:
@@ -134,6 +171,7 @@ def main():
     summary = {
         "baseline": str(baseline_path),
         "current": str(current_path),
+        "metric": args.metric,
         "thresholds": thresholds,
         "comparisons": comparisons,
         "failures": failures,
