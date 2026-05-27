@@ -844,6 +844,46 @@ mod tests {
         not(any(target_os = "android", target_os = "ios"))
     ))]
     #[test]
+    fn test_active_backend_metadata_fresh_process() {
+        use std::process::Command;
+
+        if std::env::var("RSE_GALOIS8_CHILD_CHECK").as_deref() == Ok("active-backend-metadata") {
+            println!("child_backend={}", active_backend_name());
+            println!("child_backend_kind={:?}", active_backend_kind());
+            return;
+        }
+
+        let current_exe = std::env::current_exe().unwrap();
+        let output = Command::new(current_exe)
+            .env_remove("RSE_BACKEND_OVERRIDE")
+            .env_remove("RSE_STRICT_BACKEND_OVERRIDE")
+            .env("RSE_GALOIS8_CHILD_CHECK", "active-backend-metadata")
+            .arg("--exact")
+            .arg("galois_8::tests::test_active_backend_metadata_fresh_process")
+            .arg("--nocapture")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "child active backend metadata check failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("child_backend=rust-neon"), "{stdout}");
+        assert!(stdout.contains("child_backend_kind=RustSimd"), "{stdout}");
+    }
+
+    #[cfg(all(
+        feature = "simd-accel",
+        feature = "std",
+        target_arch = "aarch64",
+        not(target_env = "msvc"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
+    #[test]
     fn test_aarch64_backend_override_metadata_matches_expected_ids() {
         with_env_var("RSE_BACKEND_OVERRIDE", "scalar", || {
             assert_eq!(
