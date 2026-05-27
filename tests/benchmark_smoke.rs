@@ -280,7 +280,17 @@ fn benchmark_smoke_matrix_runs_and_exports_results() {
 ))]
 #[test]
 fn benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides() {
-    use std::mem;
+    use std::process::Command;
+
+    if std::env::var("RSE_BENCHMARK_SMOKE_CHILD_CHECK").as_deref()
+        == Ok("aarch64-neon-override")
+    {
+        println!("child_backend={}", backend());
+        println!("child_backend_id={}", backend_id());
+        println!("child_backend_kind={}", backend_kind());
+        println!("child_override_honored={}", override_honored());
+        return;
+    }
 
     // SAFETY: scoped test-only env var overrides restored before returning.
     unsafe {
@@ -316,10 +326,29 @@ fn benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides() {
     assert!(scalar_honored);
 
     assert_eq!("rust-neon", neon_override);
-    assert_eq!("rust-neon", neon_backend);
-    assert_eq!("RustNeon", neon_backend_id);
-    assert_eq!("RustSimd", neon_backend_kind);
-    assert!(neon_honored);
 
-    mem::drop((scalar_backend, neon_backend));
+    let current_exe = std::env::current_exe().unwrap();
+    let output = Command::new(current_exe)
+        .env("RSE_BACKEND_OVERRIDE", "rust-neon")
+        .env("RSE_BENCHMARK_SMOKE_CHILD_CHECK", "aarch64-neon-override")
+        .arg("--exact")
+        .arg("benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides")
+        .arg("--nocapture")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "child override check failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("child_backend=rust-neon"), "{stdout}");
+    assert!(stdout.contains("child_backend_id=RustNeon"), "{stdout}");
+    assert!(stdout.contains("child_backend_kind=RustSimd"), "{stdout}");
+    assert!(stdout.contains("child_override_honored=true"), "{stdout}");
+
+    let _ = (neon_backend, neon_backend_id, neon_backend_kind, neon_honored);
 }

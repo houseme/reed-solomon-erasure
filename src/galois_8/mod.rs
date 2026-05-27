@@ -797,36 +797,41 @@ mod tests {
             });
 
             with_env_var("RSE_BACKEND_OVERRIDE", "rust-avx512", || {
-                assert_eq!(
-                    super::backend::runtime_override_backend_name_for_test(),
-                    Some("rust-avx512")
-                );
-                assert_eq!(
-                    super::backend::runtime_override_backend_id_for_test(),
-                    Some(BackendId::RustAvx512)
-                );
+                let avx512_name = super::backend::runtime_override_backend_name_for_test();
+                let avx512_id = super::backend::runtime_override_backend_id_for_test();
+                if std::is_x86_feature_detected!("avx512f")
+                    && std::is_x86_feature_detected!("avx512bw")
+                {
+                    assert_eq!(avx512_name, Some("rust-avx512"));
+                    assert_eq!(avx512_id, Some(BackendId::RustAvx512));
+                } else {
+                    assert_eq!(avx512_name, None);
+                    assert_eq!(avx512_id, None);
+                }
             });
 
             with_env_var("RSE_BACKEND_OVERRIDE", "rust-ssse3", || {
-                assert_eq!(
-                    super::backend::runtime_override_backend_name_for_test(),
-                    Some("rust-ssse3")
-                );
-                assert_eq!(
-                    super::backend::runtime_override_backend_id_for_test(),
-                    Some(BackendId::RustSsse3)
-                );
+                let ssse3_name = super::backend::runtime_override_backend_name_for_test();
+                let ssse3_id = super::backend::runtime_override_backend_id_for_test();
+                if std::is_x86_feature_detected!("ssse3") {
+                    assert_eq!(ssse3_name, Some("rust-ssse3"));
+                    assert_eq!(ssse3_id, Some(BackendId::RustSsse3));
+                } else {
+                    assert_eq!(ssse3_name, None);
+                    assert_eq!(ssse3_id, None);
+                }
             });
 
             with_env_var("RSE_BACKEND_OVERRIDE", "rust-avx2", || {
-                assert_eq!(
-                    super::backend::runtime_override_backend_name_for_test(),
-                    Some("rust-avx2")
-                );
-                assert_eq!(
-                    super::backend::runtime_override_backend_id_for_test(),
-                    Some(BackendId::RustAvx2)
-                );
+                let avx2_name = super::backend::runtime_override_backend_name_for_test();
+                let avx2_id = super::backend::runtime_override_backend_id_for_test();
+                if std::is_x86_feature_detected!("avx2") {
+                    assert_eq!(avx2_name, Some("rust-avx2"));
+                    assert_eq!(avx2_id, Some(BackendId::RustAvx2));
+                } else {
+                    assert_eq!(avx2_name, None);
+                    assert_eq!(avx2_id, None);
+                }
             });
         }
     }
