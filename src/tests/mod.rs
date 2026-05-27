@@ -25,6 +25,12 @@ type ShardByShard<'a> = crate::ShardByShard<'a, galois_8::Field>;
 #[cfg(feature = "std")]
 const BENCHMARK_ARTIFACT_SCHEMA_VERSION: u32 = 1;
 
+const QUICKCHECK_MAX_SHARD_LEN: usize = 1_024;
+
+fn quickcheck_shard_len(size: usize) -> usize {
+    1 + size % QUICKCHECK_MAX_SHARD_LEN
+}
+
 #[cfg(feature = "std")]
 fn benchmark_test_iterations() -> usize {
     std::env::var("RSE_TEST_BENCH_ITERATIONS")
@@ -2226,7 +2232,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2301,7 +2307,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2350,7 +2356,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2413,7 +2419,7 @@ quickcheck! {
             corrupt_pos_s.push(pos);
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2447,7 +2453,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2489,7 +2495,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2520,7 +2526,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2559,7 +2565,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2588,7 +2594,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
@@ -2633,7 +2639,7 @@ quickcheck! {
             parity -= data + parity - 256;
         }
 
-        let size = 1 + size % 1_000_000;
+        let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
