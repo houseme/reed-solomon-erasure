@@ -2,7 +2,6 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use smallvec::SmallVec;
 use spin::Once;
 
 use crate::errors::Error;
@@ -11,7 +10,10 @@ use std::sync::atomic::Ordering;
 #[cfg(feature = "std")]
 use std::sync::atomic::AtomicUsize;
 
-use super::leopard::validate_leopard_shard_len;
+mod driver;
+mod work;
+
+use self::work::FlatWork;
 
 const BITWIDTH8: usize = 8;
 const ORDER8: usize = 1 << BITWIDTH8;
@@ -60,14 +62,24 @@ struct Stage2Block {
     log_m: u8,
 }
 
-#[derive(Debug)]
-pub(crate) struct FlatWork {
-    lanes: usize,
-    lane_len: usize,
-    buf: Box<[u8]>,
+#[derive(Debug, Clone)]
+struct FftDit8Plan {
+    mtrunc: usize,
+    stage4_blocks: Vec<Stage4Block>,
+    final_stage: Option<Stage2Block>,
 }
 
-#[cfg(feature = "std")]
+#[derive(Debug, Clone)]
+struct IfftDit8Plan {
+    mtrunc: usize,
+    m: usize,
+    initial_blocks: Vec<Stage4Block>,
+    later_blocks: Vec<Stage4Block>,
+    clear_start: usize,
+    final_stage: Option<Stage2Block>,
+}
+
+#[derive(Debug)]
 #[derive(Debug, Default)]
 pub(crate) struct LeopardGf8ProfileMetrics {
     encode_calls: AtomicUsize,
@@ -89,59 +101,6 @@ pub struct LeopardGf8ProfileStats {
     pub encode_later_group_calls: usize,
     pub fft_stage_calls: usize,
     pub ifft_stage_calls: usize,
-}
-
-impl FlatWork {
-    pub(crate) fn new(lanes: usize, lane_len: usize) -> Self {
-        Self {
-            lanes,
-            lane_len,
-            buf: vec![0u8; lanes * lane_len].into_boxed_slice(),
-        }
-    }
-
-    pub(crate) fn lanes(&self) -> usize {
-        self.lanes
-    }
-
-    pub(crate) fn lane_len(&self) -> usize {
-        self.lane_len
-    }
-
-    pub(crate) fn lane(&self, idx: usize) -> &[u8] {
-        let start = idx * self.lane_len;
-        let end = start + self.lane_len;
-        &self.buf[start..end]
-    }
-
-    pub(crate) fn lane_mut(&mut self, idx: usize) -> &mut [u8] {
-        let start = idx * self.lane_len;
-        let end = start + self.lane_len;
-        &mut self.buf[start..end]
-    }
-
-    pub(crate) fn lane_views(&mut self, lanes: usize, size: usize) -> Vec<&mut [u8]> {
-        self.buf
-            .chunks_mut(self.lane_len)
-            .take(lanes)
-            .map(|lane| &mut lane[..size])
-            .collect()
-    }
-
-    pub(crate) fn with_lane_views<R>(
-        &mut self,
-        lanes: usize,
-        size: usize,
-        f: impl FnOnce(&mut [&mut [u8]]) -> R,
-    ) -> R {
-        let mut views: SmallVec<[&mut [u8]; 96]> = self
-            .buf
-            .chunks_mut(self.lane_len)
-            .take(lanes)
-            .map(|lane| &mut lane[..size])
-            .collect();
-        f(&mut views)
-    }
 }
 
 static TABLES8: Once<LeopardGf8Tables> = Once::new();
@@ -190,40 +149,18 @@ pub(crate) fn build_leopard_gf8_encode_driver(
     parity_shards: usize,
     shard_size: usize,
 ) -> Result<LeopardGf8EncodeDriver, Error> {
-    validate_leopard_shard_len(shard_size)?;
-    let _tables = init_leopard_gf8_tables();
-
-    let m = ceil_pow2(parity_shards.max(1));
-    let mtrunc = core::cmp::min(data_shards, m);
-    let last_count = data_shards % m;
-
-    let total_shards = data_shards.saturating_add(parity_shards);
-    let chunk_size = if total_shards >= 192 && shard_size >= WORK_SIZE8_HIGH_FANOUT {
-        WORK_SIZE8_HIGH_FANOUT
-    } else {
-        WORK_SIZE8
-    };
-
-    Ok(LeopardGf8EncodeDriver {
-        shard_size,
-        m,
-        mtrunc,
-        last_count,
-        chunk_size,
-        work_slices: m * 2,
-        skew_offset: m.saturating_sub(1),
-    })
+    driver::build_leopard_gf8_encode_driver(data_shards, parity_shards, shard_size)
 }
 
-fn build_fft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8; MODULUS8]) -> (Vec<Stage4Block>, Option<Stage2Block>) {
-    let mut blocks = Vec::new();
+fn build_fft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8; MODULUS8]) -> FftDit8Plan {
+    let mut stage4_blocks = Vec::new();
     let mut dist4 = m;
     let mut dist = m >> 2;
     while dist != 0 {
         let mut r = 0usize;
         while r < mtrunc {
             let i_end = r + dist;
-            blocks.push(Stage4Block {
+            stage4_blocks.push(Stage4Block {
                 r,
                 dist,
                 log_m01: skew_lut[i_end - 1],
@@ -245,11 +182,16 @@ fn build_fft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8; MODULUS8]) -> (V
         None
     };
 
-    (blocks, final_stage)
+    FftDit8Plan {
+        mtrunc,
+        stage4_blocks,
+        final_stage,
+    }
 }
 
-fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> (Vec<Stage4Block>, Option<Stage2Block>) {
-    let mut blocks = Vec::new();
+fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> IfftDit8Plan {
+    let mut initial_blocks = Vec::new();
+    let mut later_blocks = Vec::new();
     let mut dist = 1usize;
     let mut dist4 = 4usize;
 
@@ -258,7 +200,7 @@ fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> (Vec<Stage4
         let mut r = 0usize;
         while r < full_groups {
             let i_end = r + dist;
-            blocks.push(Stage4Block {
+            initial_blocks.push(Stage4Block {
                 r,
                 dist,
                 log_m01: skew_lut[i_end],
@@ -271,7 +213,7 @@ fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> (Vec<Stage4
         if full_groups < mtrunc {
             let r = full_groups;
             let i_end = r + dist;
-            blocks.push(Stage4Block {
+            initial_blocks.push(Stage4Block {
                 r,
                 dist,
                 log_m01: skew_lut[i_end],
@@ -286,7 +228,7 @@ fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> (Vec<Stage4
             let mut r = 0usize;
             while r < mtrunc {
                 let i_end = r + dist;
-                blocks.push(Stage4Block {
+                later_blocks.push(Stage4Block {
                     r,
                     dist,
                     log_m01: skew_lut[i_end],
@@ -309,7 +251,14 @@ fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> (Vec<Stage4
         None
     };
 
-    (blocks, final_stage)
+    IfftDit8Plan {
+        mtrunc,
+        m,
+        initial_blocks,
+        later_blocks,
+        clear_start: (mtrunc + 3) & !3usize,
+        final_stage,
+    }
 }
 
 pub(crate) fn encode_skeleton<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
@@ -346,6 +295,27 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
         .map(|shard| shard.as_ref().len())
         .ok_or(Error::TooFewShards)?;
     let driver = build_leopard_gf8_encode_driver(data_shards, parity_shards, shard_size)?;
+    let skew = &tables.fft_skew[driver.skew_offset..];
+    let first_ifft_plan = build_ifft_dit8_plan(driver.mtrunc, driver.m, skew);
+    let fft_plan = build_fft_dit8_plan(parity_shards, driver.m, &tables.fft_skew);
+    let mut later_ifft_plans = Vec::new();
+    let mut remainder_ifft_plan = None;
+    if driver.m < data_shards {
+        let mut group_offset = driver.m;
+        let mut skew_offset = driver.m;
+        while group_offset + driver.m <= data_shards {
+            later_ifft_plans.push(build_ifft_dit8_plan(driver.m, driver.m, &skew[skew_offset..]));
+            group_offset += driver.m;
+            skew_offset += driver.m;
+        }
+        if driver.last_count != 0 {
+            remainder_ifft_plan = Some(build_ifft_dit8_plan(
+                driver.last_count,
+                driver.m,
+                &skew[skew_offset..],
+            ));
+        }
+    }
 
     let chunk_cap = core::cmp::min(driver.shard_size, driver.chunk_size);
     let mut flat_work = FlatWork::new(driver.work_slices, chunk_cap);
@@ -357,18 +327,19 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
         PROFILE8.encode_chunks.fetch_add(1, Ordering::Relaxed);
         let end = core::cmp::min(offset + driver.chunk_size, driver.shard_size);
         let size = end - offset;
-        let skew = &tables.fft_skew[driver.skew_offset..];
         let zero_slice = &zero[..(end - offset)];
         let work_size = core::cmp::min(driver.m * 2, flat_work.lanes());
 
         flat_work.with_lane_views(work_size, size, |work| {
-            ifft_dit_encoder8(
+            #[cfg(feature = "std")]
+            if first_ifft_plan.mtrunc == first_ifft_plan.m {
+                PROFILE8.encode_full_groups.fetch_add(1, Ordering::Relaxed);
+            }
+            ifft_dit_encoder8_with_plan(
                 data,
-                driver.mtrunc,
+                &first_ifft_plan,
                 &mut work[..driver.m],
                 None,
-                driver.m,
-                skew,
                 offset,
                 end,
                 tables,
@@ -376,51 +347,46 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                 false,
             );
 
-            if driver.m < data_shards {
-                let mut group_offset = driver.m;
-                let mut skew_offset = driver.m;
-                while group_offset + driver.m <= data_shards {
-                    #[cfg(feature = "std")]
+            let mut group_offset = driver.m;
+            for plan in &later_ifft_plans {
+                #[cfg(feature = "std")]
+                {
                     PROFILE8.encode_later_group_calls.fetch_add(1, Ordering::Relaxed);
-                    let (xor_dst, temp_work) = work[..work_size].split_at_mut(driver.m);
-                    ifft_dit_encoder8(
-                        &data[group_offset..],
-                        driver.m,
-                        temp_work,
-                        Some(xor_dst),
-                        driver.m,
-                        &skew[skew_offset..],
-                        offset,
-                        end,
-                        tables,
-                        zero_slice,
-                        false,
-                    );
-                    group_offset += driver.m;
-                    skew_offset += driver.m;
+                    PROFILE8.encode_full_groups.fetch_add(1, Ordering::Relaxed);
                 }
-
-                if driver.last_count != 0 {
-                    #[cfg(feature = "std")]
-                    PROFILE8.encode_remainder_groups.fetch_add(1, Ordering::Relaxed);
-                    let (xor_dst, temp_work) = work[..work_size].split_at_mut(driver.m);
-                    ifft_dit_encoder8(
-                        &data[group_offset..],
-                        driver.last_count,
-                        temp_work,
-                        Some(xor_dst),
-                        driver.m,
-                        &skew[skew_offset..],
-                        offset,
-                        end,
-                        tables,
-                        zero_slice,
-                        false,
-                    );
-                }
+                let (xor_dst, temp_work) = work[..work_size].split_at_mut(driver.m);
+                ifft_dit_encoder8_with_plan(
+                    &data[group_offset..],
+                    plan,
+                    temp_work,
+                    Some(xor_dst),
+                    offset,
+                    end,
+                    tables,
+                    zero_slice,
+                    false,
+                );
+                group_offset += driver.m;
             }
 
-            fft_dit8(&mut work[..driver.m], parity_shards, driver.m, &tables.fft_skew, tables);
+            if let Some(plan) = remainder_ifft_plan.as_ref() {
+                #[cfg(feature = "std")]
+                PROFILE8.encode_remainder_groups.fetch_add(1, Ordering::Relaxed);
+                let (xor_dst, temp_work) = work[..work_size].split_at_mut(driver.m);
+                ifft_dit_encoder8_with_plan(
+                    &data[group_offset..],
+                    plan,
+                    temp_work,
+                    Some(xor_dst),
+                    offset,
+                    end,
+                    tables,
+                    zero_slice,
+                    false,
+                );
+            }
+
+            fft_dit8_with_plan(&mut work[..driver.m], &fft_plan, tables);
 
             for (idx, output) in parity.iter_mut().enumerate() {
                 output.as_mut()[offset..end].copy_from_slice(&work[idx][..size]);
@@ -688,6 +654,125 @@ fn ifft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256]) {
     }
 }
 
+#[inline(always)]
+fn fft_dit4_full_lut(
+    a: &mut [u8],
+    b: &mut [u8],
+    c: &mut [u8],
+    d: &mut [u8],
+    lut01: &[u8; 256],
+    lut23: &[u8; 256],
+    lut02: &[u8; 256],
+) {
+    assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), c.len());
+    assert_eq!(a.len(), d.len());
+
+    #[inline(always)]
+    fn step(
+        a: &mut u8,
+        b: &mut u8,
+        c: &mut u8,
+        d: &mut u8,
+        lut01: &[u8; 256],
+        lut23: &[u8; 256],
+        lut02: &[u8; 256],
+    ) {
+        let c0 = *c;
+        let d0 = *d;
+        let b1 = *b ^ lut02[d0 as usize];
+        let a1 = *a ^ lut02[c0 as usize];
+        *a = a1 ^ lut01[b1 as usize];
+        *b = b1;
+        *c = c0 ^ lut23[d0 as usize];
+    }
+
+    let (a4, a_tail) = a.as_chunks_mut::<4>();
+    let (b4, b_tail) = b.as_chunks_mut::<4>();
+    let (c4, c_tail) = c.as_chunks_mut::<4>();
+    let (d4, d_tail) = d.as_chunks_mut::<4>();
+
+    for (((a_chunk, b_chunk), c_chunk), d_chunk) in a4
+        .iter_mut()
+        .zip(b4.iter_mut())
+        .zip(c4.iter_mut())
+        .zip(d4.iter_mut())
+    {
+        step(&mut a_chunk[0], &mut b_chunk[0], &mut c_chunk[0], &mut d_chunk[0], lut01, lut23, lut02);
+        step(&mut a_chunk[1], &mut b_chunk[1], &mut c_chunk[1], &mut d_chunk[1], lut01, lut23, lut02);
+        step(&mut a_chunk[2], &mut b_chunk[2], &mut c_chunk[2], &mut d_chunk[2], lut01, lut23, lut02);
+        step(&mut a_chunk[3], &mut b_chunk[3], &mut c_chunk[3], &mut d_chunk[3], lut01, lut23, lut02);
+    }
+
+    for (((a_byte, b_byte), c_byte), d_byte) in a_tail
+        .iter_mut()
+        .zip(b_tail.iter_mut())
+        .zip(c_tail.iter_mut())
+        .zip(d_tail.iter_mut())
+    {
+        step(a_byte, b_byte, c_byte, d_byte, lut01, lut23, lut02);
+    }
+}
+
+#[inline(always)]
+fn ifft_dit4_full_lut(
+    a: &mut [u8],
+    b: &mut [u8],
+    c: &mut [u8],
+    d: &mut [u8],
+    lut01: &[u8; 256],
+    lut23: &[u8; 256],
+    lut02: &[u8; 256],
+) {
+    assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), c.len());
+    assert_eq!(a.len(), d.len());
+
+    #[inline(always)]
+    fn step(
+        a: &mut u8,
+        b: &mut u8,
+        c: &mut u8,
+        d: &mut u8,
+        lut01: &[u8; 256],
+        lut23: &[u8; 256],
+        lut02: &[u8; 256],
+    ) {
+        let a0 = *a;
+        let c0 = *c;
+        let b1 = *b ^ lut01[a0 as usize];
+        *c = c0 ^ lut02[a0 as usize];
+        *b = b1;
+        *d ^= lut23[c0 as usize] ^ lut02[b1 as usize];
+    }
+
+    let (a4, a_tail) = a.as_chunks_mut::<4>();
+    let (b4, b_tail) = b.as_chunks_mut::<4>();
+    let (c4, c_tail) = c.as_chunks_mut::<4>();
+    let (d4, d_tail) = d.as_chunks_mut::<4>();
+
+    for (((a_chunk, b_chunk), c_chunk), d_chunk) in a4
+        .iter_mut()
+        .zip(b4.iter_mut())
+        .zip(c4.iter_mut())
+        .zip(d4.iter_mut())
+    {
+        step(&mut a_chunk[0], &mut b_chunk[0], &mut c_chunk[0], &mut d_chunk[0], lut01, lut23, lut02);
+        step(&mut a_chunk[1], &mut b_chunk[1], &mut c_chunk[1], &mut d_chunk[1], lut01, lut23, lut02);
+        step(&mut a_chunk[2], &mut b_chunk[2], &mut c_chunk[2], &mut d_chunk[2], lut01, lut23, lut02);
+        step(&mut a_chunk[3], &mut b_chunk[3], &mut c_chunk[3], &mut d_chunk[3], lut01, lut23, lut02);
+    }
+
+    for (((a_byte, b_byte), c_byte), d_byte) in a_tail
+        .iter_mut()
+        .zip(b_tail.iter_mut())
+        .zip(c_tail.iter_mut())
+        .zip(d_tail.iter_mut())
+    {
+        step(a_byte, b_byte, c_byte, d_byte, lut01, lut23, lut02);
+    }
+}
+
 fn fft_dit4_at<W: AsMut<[u8]>>(
     work: &mut [W],
     base: usize,
@@ -711,20 +796,10 @@ fn fft_dit4_at<W: AsMut<[u8]>>(
             // SAFETY: full 4-lane window is in-bounds and indices are distinct by construction.
             unsafe {
                 let a_ref = (*ptr.add(a)).as_mut();
-                let c_ref = (*ptr.add(c)).as_mut();
-                fft_dit2_lut(a_ref, c_ref, log_m02, lut02);
-
                 let b_ref = (*ptr.add(b)).as_mut();
-                let d_ref = (*ptr.add(d)).as_mut();
-                fft_dit2_lut(b_ref, d_ref, log_m02, lut02);
-
-                let a_ref = (*ptr.add(a)).as_mut();
-                let b_ref = (*ptr.add(b)).as_mut();
-                fft_dit2_lut(a_ref, b_ref, log_m01, lut01);
-
                 let c_ref = (*ptr.add(c)).as_mut();
                 let d_ref = (*ptr.add(d)).as_mut();
-                fft_dit2_lut(c_ref, d_ref, log_m23, lut23);
+                fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
             }
         }
         return;
@@ -784,19 +859,9 @@ fn ifft_dit4_at<W: AsMut<[u8]>>(
             unsafe {
                 let a_ref = (*ptr.add(a)).as_mut();
                 let b_ref = (*ptr.add(b)).as_mut();
-                ifft_dit2_lut(a_ref, b_ref, log_m01, lut01);
-
                 let c_ref = (*ptr.add(c)).as_mut();
                 let d_ref = (*ptr.add(d)).as_mut();
-                ifft_dit2_lut(c_ref, d_ref, log_m23, lut23);
-
-                let a_ref = (*ptr.add(a)).as_mut();
-                let c_ref = (*ptr.add(c)).as_mut();
-                ifft_dit2_lut(a_ref, c_ref, log_m02, lut02);
-
-                let b_ref = (*ptr.add(b)).as_mut();
-                let d_ref = (*ptr.add(d)).as_mut();
-                ifft_dit2_lut(b_ref, d_ref, log_m02, lut02);
+                ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
             }
         }
         return;
@@ -848,53 +913,45 @@ fn get_pair_mut<T>(slice: &mut [T], i: usize, j: usize) -> Option<(&mut T, &mut 
     }
 }
 
-fn fft_dit8<W: AsMut<[u8]>>(
+fn fft_dit8_with_plan<W: AsMut<[u8]>>(
     work: &mut [W],
-    mtrunc: usize,
-    m: usize,
-    skew_lut: &[u8; MODULUS8],
+    plan: &FftDit8Plan,
     tables: &LeopardGf8Tables,
 ) {
     #[cfg(feature = "std")]
     PROFILE8.fft_stage_calls.fetch_add(1, Ordering::Relaxed);
-    let mut dist4 = m;
-    let mut dist = m >> 2;
-    while dist != 0 {
-        let mut r = 0usize;
-        while r < mtrunc {
-            let i_end = r + dist;
-            let log_m01 = skew_lut[i_end - 1];
-            let log_m02 = skew_lut[i_end + dist - 1];
-            let log_m23 = skew_lut[i_end + dist * 2 - 1];
-            let mut i = r;
-            while i < i_end {
-                fft_dit4_at(work, i, dist, log_m01, log_m23, log_m02, tables);
-                i += 1;
-            }
-            r += dist4;
+    for block in &plan.stage4_blocks {
+        let i_end = block.r + block.dist;
+        let mut i = block.r;
+        while i < i_end {
+            fft_dit4_at(
+                work,
+                i,
+                block.dist,
+                block.log_m01,
+                block.log_m23,
+                block.log_m02,
+                tables,
+            );
+            i += 1;
         }
-        dist4 = dist;
-        dist >>= 2;
     }
 
-    if dist4 == 2 {
+    if let Some(stage) = plan.final_stage {
         let mut r = 0usize;
-        while r < mtrunc {
-            let log_m = skew_lut[r];
-            let (left, right) = work[r..r + 2].split_at_mut(1);
-            fft_dit2(left[0].as_mut(), right[0].as_mut(), log_m, tables);
-            r += 2;
+        while r < plan.mtrunc {
+            let (left, right) = work[r..r + stage.dist + 1].split_at_mut(stage.dist);
+            fft_dit2(left[0].as_mut(), right[0].as_mut(), stage.log_m, tables);
+            r += stage.dist * 2;
         }
     }
 }
 
-fn ifft_dit_encoder8<T: AsRef<[u8]>, W: AsMut<[u8]>>(
+fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     data: &[T],
-    mtrunc: usize,
+    plan: &IfftDit8Plan,
     work: &mut [W],
     mut xor_dst: Option<&mut [W]>,
-    m: usize,
-    skew_lut: &[u8],
     start: usize,
     end: usize,
     tables: &LeopardGf8Tables,
@@ -903,100 +960,119 @@ fn ifft_dit_encoder8<T: AsRef<[u8]>, W: AsMut<[u8]>>(
 ) {
     #[cfg(feature = "std")]
     PROFILE8.ifft_stage_calls.fetch_add(1, Ordering::Relaxed);
-    let mut dist = 1usize;
-    let mut dist4 = 4usize;
     let size = end - start;
 
-    if dist4 <= m {
-        let full_groups = mtrunc & !3usize;
-        let mut r = 0usize;
-        while r < full_groups {
-            let i_end = r + dist;
-            let log_m01 = skew_lut[i_end];
-            let log_m02 = skew_lut[i_end + dist];
-            let log_m23 = skew_lut[i_end + dist * 2];
-
-            work[r].as_mut().copy_from_slice(&data[r].as_ref()[start..end]);
-            work[r + 1]
-                .as_mut()
-                .copy_from_slice(&data[r + 1].as_ref()[start..end]);
-            work[r + 2]
-                .as_mut()
-                .copy_from_slice(&data[r + 2].as_ref()[start..end]);
-            work[r + 3]
-                .as_mut()
-                .copy_from_slice(&data[r + 3].as_ref()[start..end]);
-
-            ifft_dit4_at(work, r, dist, log_m01, log_m23, log_m02, tables);
-            r += dist4;
+    if plan.initial_blocks.is_empty() {
+        for (idx, slot) in work.iter_mut().take(plan.mtrunc).enumerate() {
+            slot.as_mut().copy_from_slice(&data[idx].as_ref()[start..end]);
         }
-
-        if full_groups < mtrunc {
-            let r = full_groups;
-            let rem = mtrunc - full_groups;
-            for i in 0..rem {
-                work[r + i]
+        for slot in work.iter_mut().take(plan.m).skip(plan.mtrunc) {
+            slot.as_mut().fill(0);
+        }
+    } else {
+        for block in &plan.initial_blocks {
+            let available = core::cmp::min(plan.mtrunc.saturating_sub(block.r), 4);
+            for i in 0..available {
+                work[block.r + i]
                     .as_mut()
-                    .copy_from_slice(&data[full_groups + i].as_ref()[start..end]);
+                    .copy_from_slice(&data[block.r + i].as_ref()[start..end]);
             }
-            for slot in work.iter_mut().skip(r + rem).take(4usize.saturating_sub(rem)) {
+            for slot in work
+                .iter_mut()
+                .skip(block.r + available)
+                .take(4usize.saturating_sub(available))
+            {
                 slot.as_mut().copy_from_slice(&zero[..size]);
             }
 
-            let i_end = r + dist;
-            let log_m01 = skew_lut[i_end];
-            let log_m02 = skew_lut[i_end + dist];
-            let log_m23 = skew_lut[i_end + dist * 2];
-            ifft_dit4_at(work, r, dist, log_m01, log_m23, log_m02, tables);
+            ifft_dit4_at(
+                work,
+                block.r,
+                block.dist,
+                block.log_m01,
+                block.log_m23,
+                block.log_m02,
+                tables,
+            );
         }
 
-        let clear_start = (mtrunc + 3) & !3usize;
-        for slot in work.iter_mut().take(m).skip(clear_start) {
+        for slot in work.iter_mut().take(plan.m).skip(plan.clear_start) {
             slot.as_mut().fill(0);
         }
 
-        dist = dist4;
-        dist4 <<= 2;
-        while dist4 <= m {
-            let mut r = 0usize;
-            while r < mtrunc {
-                let i_end = r + dist;
-                let log_m01 = skew_lut[i_end];
-                let log_m02 = skew_lut[i_end + dist];
-                let log_m23 = skew_lut[i_end + dist * 2];
-                let mut i = r;
-                while i < i_end {
-                    ifft_dit4_at(work, i, dist, log_m01, log_m23, log_m02, tables);
-                    i += 1;
-                }
-                r += dist4;
+        for block in &plan.later_blocks {
+            let i_end = block.r + block.dist;
+            let mut i = block.r;
+            while i < i_end {
+                ifft_dit4_at(
+                    work,
+                    i,
+                    block.dist,
+                    block.log_m01,
+                    block.log_m23,
+                    block.log_m02,
+                    tables,
+                );
+                i += 1;
             }
-            dist = dist4;
-            dist4 <<= 2;
-        }
-    } else {
-        for (idx, slot) in work.iter_mut().take(mtrunc).enumerate() {
-            slot.as_mut().copy_from_slice(&data[idx].as_ref()[start..end]);
-        }
-        for slot in work.iter_mut().take(m).skip(mtrunc) {
-            slot.as_mut().fill(0);
         }
     }
 
-    if dist < m {
-        let log_m = skew_lut[dist];
-        for i in 0..dist {
-            let (left, right) = work[i..i + dist + 1].split_at_mut(dist);
-            ifft_dit2(left[0].as_mut(), right[0].as_mut(), log_m, tables);
+    if let Some(stage) = plan.final_stage {
+        for i in 0..stage.dist {
+            let (left, right) = work[i..i + stage.dist + 1].split_at_mut(stage.dist);
+            ifft_dit2(left[0].as_mut(), right[0].as_mut(), stage.log_m, tables);
         }
     }
 
     if let Some(xor_dst) = xor_dst.as_mut() {
-        for idx in 0..m {
+        for idx in 0..plan.m {
             let src = &*work[idx].as_mut();
+            if use_xor_clone && idx < xor_dst.len() {
+                xor_dst[idx].as_mut().copy_from_slice(src);
+                continue;
+            }
             slice_xor(src, xor_dst[idx].as_mut());
         }
     }
+}
+
+fn fft_dit8<W: AsMut<[u8]>>(
+    work: &mut [W],
+    mtrunc: usize,
+    m: usize,
+    skew_lut: &[u8; MODULUS8],
+    tables: &LeopardGf8Tables,
+) {
+    let plan = build_fft_dit8_plan(mtrunc, m, skew_lut);
+    fft_dit8_with_plan(work, &plan, tables);
+}
+
+fn ifft_dit_encoder8<T: AsRef<[u8]>, W: AsMut<[u8]>>(
+    data: &[T],
+    mtrunc: usize,
+    work: &mut [W],
+    xor_dst: Option<&mut [W]>,
+    m: usize,
+    skew_lut: &[u8],
+    start: usize,
+    end: usize,
+    tables: &LeopardGf8Tables,
+    zero: &[u8],
+    use_xor_clone: bool,
+) {
+    let plan = build_ifft_dit8_plan(mtrunc, m, skew_lut);
+    ifft_dit_encoder8_with_plan(
+        data,
+        &plan,
+        work,
+        xor_dst,
+        start,
+        end,
+        tables,
+        zero,
+        use_xor_clone,
+    );
 }
 
 fn ceil_pow2(n: usize) -> usize {

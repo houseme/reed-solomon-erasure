@@ -1,4 +1,4 @@
-use reed_solomon_erasure::{Error, galois_8::ReedSolomon};
+use reed_solomon_erasure::{galois_8::ReedSolomon, Error};
 use wasm_bindgen::prelude::*;
 
 #[global_allocator]
@@ -35,6 +35,9 @@ fn result_to_number(result: Result<(), Error>) -> u8 {
         Err(Error::EmptyShard) => RESULT_ERROR_EMPTY_SHARD,
         Err(Error::InvalidShardFlags) => RESULT_ERROR_INVALID_SHARD_FLAGS,
         Err(Error::InvalidIndex) => RESULT_ERROR_INVALID_INDEX,
+        Err(Error::InvalidCustomMatrix)
+        | Err(Error::UnsupportedCodecFamily)
+        | Err(Error::UnsupportedLeopardPrototype) => todo!(),
     }
 }
 
