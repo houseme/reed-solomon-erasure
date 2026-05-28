@@ -1,0 +1,797 @@
+extern crate alloc;
+
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+
+use smallvec::SmallVec;
+
+use crate::errors::Error;
+use crate::{Field, ReconstructShard};
+
+#[cfg(feature = "std")]
+use rayon::prelude::*;
+#[cfg(feature = "std")]
+use std::sync::atomic::Ordering;
+
+use super::{ParallelPolicy, ReedSolomon};
+
+impl<F: Field> ReedSolomon<F> {
+    #[cfg(feature = "std")]
+    pub(crate) fn code_some_slices_par_raw(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[&[F::Elem]],
+        outputs: &mut [&mut [F::Elem]],
+    ) where
+        F::Elem: Send + Sync,
+    {
+        let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
+        if shard_len == 0 {
+            return;
+        }
+
+        if outputs.len() <= 2 {
+            self.code_some_slices_one_or_two_outputs_reconstruct_data_par_raw(
+                matrix_rows,
+                inputs,
+                outputs,
+            );
+            return;
+        }
+
+        let decision = self.parallel_policy(shard_len, outputs.len());
+        if !decision.use_parallel {
+            self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+            return;
+        }
+        self.code_some_slices_par_chunked(matrix_rows, inputs, outputs, decision.chunk_len);
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn code_some_slices_with_policy_raw(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[&[F::Elem]],
+        outputs: &mut [&mut [F::Elem]],
+        policy: ParallelPolicy,
+    ) where
+        F::Elem: Send + Sync,
+    {
+        let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
+        if shard_len == 0 {
+            return;
+        }
+
+        if outputs.len() <= 2 {
+            self.code_some_slices_one_or_two_outputs_reconstruct_data_par_raw(
+                matrix_rows,
+                inputs,
+                outputs,
+            );
+            return;
+        }
+
+        let decision = policy.decide(
+            shard_len,
+            self.data_shard_count,
+            outputs.len(),
+            std::thread::available_parallelism()
+                .map(|parallelism| parallelism.get())
+                .unwrap_or(1),
+        );
+        self.runtime_profile_metrics
+            .record_parallel_policy(decision);
+        if !decision.use_parallel {
+            self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+            return;
+        }
+        self.code_some_slices_par_chunked(matrix_rows, inputs, outputs, decision.chunk_len);
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn code_some_slices_two_outputs_reconstruct_data_par_raw(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[&[F::Elem]],
+        outputs: &mut [&mut [F::Elem]],
+    ) where
+        F::Elem: Send + Sync,
+    {
+        debug_assert_eq!(2, matrix_rows.len());
+        debug_assert_eq!(2, outputs.len());
+
+        let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
+        if shard_len == 0 {
+            return;
+        }
+
+        let decision = self.parallel_policy(shard_len, outputs.len());
+        self.runtime_profile_metrics
+            .record_parallel_policy(decision);
+        if !decision.use_parallel {
+            self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+            return;
+        }
+
+        let chunk_len = if self.data_shard_count <= 16 {
+            core::cmp::min(shard_len, core::cmp::max(decision.chunk_len, 512 * 1024))
+        } else {
+            decision.chunk_len
+        };
+        self.runtime_profile_metrics.record_code_some(
+            true,
+            shard_len,
+            inputs.len(),
+            outputs.len(),
+            chunk_len,
+        );
+
+        let data_shard_count = self.data_shard_count;
+        outputs
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i_row, output)| {
+                let matrix_row = matrix_rows[i_row];
+                let output = output.as_mut();
+
+                let mut start = 0;
+                while start < shard_len {
+                    let end = core::cmp::min(start + chunk_len, shard_len);
+                    let output_chunk = &mut output[start..end];
+
+                    F::mul_slice(matrix_row[0], &inputs[0][start..end], output_chunk);
+                    for i_input in 1..data_shard_count {
+                        F::mul_slice_add(
+                            matrix_row[i_input],
+                            &inputs[i_input][start..end],
+                            output_chunk,
+                        );
+                    }
+
+                    start = end;
+                }
+            });
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn code_some_slices_one_or_two_outputs_reconstruct_data_par_raw(
+        &self,
+        matrix_rows: &[&[F::Elem]],
+        inputs: &[&[F::Elem]],
+        outputs: &mut [&mut [F::Elem]],
+    ) where
+        F::Elem: Send + Sync,
+    {
+        debug_assert!((1..=2).contains(&outputs.len()));
+
+        if outputs.len() == 1 {
+            let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
+            if shard_len == 0 {
+                return;
+            }
+
+            let decision = self.parallel_policy(shard_len, outputs.len());
+            self.runtime_profile_metrics
+                .record_parallel_policy(decision);
+            if !decision.use_parallel {
+                self.code_some_slices_chunked(matrix_rows, inputs, outputs);
+                return;
+            }
+
+            self.runtime_profile_metrics.record_code_some(
+                true,
+                shard_len,
+                inputs.len(),
+                outputs.len(),
+                decision.chunk_len,
+            );
+
+            let data_shard_count = self.data_shard_count;
+            let matrix_row = matrix_rows[0];
+            outputs[0]
+                .par_chunks_mut(decision.chunk_len)
+                .enumerate()
+                .for_each(|(chunk_idx, output_chunk)| {
+                    let start = chunk_idx * decision.chunk_len;
+                    let end = start + output_chunk.len();
+
+                    F::mul_slice(matrix_row[0], &inputs[0][start..end], output_chunk);
+                    for i_input in 1..data_shard_count {
+                        F::mul_slice_add(
+                            matrix_row[i_input],
+                            &inputs[i_input][start..end],
+                            output_chunk,
+                        );
+                    }
+                });
+            return;
+        }
+
+        self.code_some_slices_two_outputs_reconstruct_data_par_raw(matrix_rows, inputs, outputs);
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn reconstruct_internal_option_vec_par(
+        &self,
+        shards: &mut [Option<Vec<F::Elem>>],
+        data_only: bool,
+    ) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+    {
+        let (data_policy, parity_policy) = self.policy_cache.reconstruct_stage_policies(data_only);
+        self.reconstruct_internal_option_vec_par_with_stage_policies(
+            shards,
+            data_only,
+            data_policy,
+            parity_policy,
+        )
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn reconstruct_internal_option_vec_par_with_stage_policies(
+        &self,
+        shards: &mut [Option<Vec<F::Elem>>],
+        data_only: bool,
+        data_policy: ParallelPolicy,
+        parity_policy: ParallelPolicy,
+    ) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+    {
+        check_piece_count!(all => self, shards);
+
+        let data_shard_count = self.data_shard_count;
+
+        let mut number_present = 0;
+        let mut shard_len = None;
+        for shard in shards.iter() {
+            if let Some(shard) = shard.as_ref() {
+                let len = shard.len();
+                if len == 0 {
+                    return Err(Error::EmptyShard);
+                }
+                number_present += 1;
+                if let Some(old_len) = shard_len
+                    && len != old_len
+                {
+                    return Err(Error::IncorrectShardSize);
+                }
+                shard_len = Some(len);
+            }
+        }
+
+        if number_present == self.total_shard_count {
+            self.runtime_profile_metrics
+                .record_reconstruct(data_only, 0, 0, true);
+            return Ok(());
+        }
+        if number_present < data_shard_count {
+            return Err(Error::TooFewShardsPresent);
+        }
+
+        let shard_len = shard_len.expect("at least one shard present; qed");
+
+        let mut valid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(data_shard_count);
+        let mut invalid_indices: SmallVec<[usize; 32]> =
+            SmallVec::with_capacity(self.total_shard_count);
+        let mut missing_data_indices: SmallVec<[usize; 32]> = SmallVec::new();
+        let mut missing_parity_indices: SmallVec<[usize; 32]> = SmallVec::new();
+
+        for (matrix_row, shard) in shards.iter().enumerate() {
+            match shard.as_ref() {
+                Some(_shard) => {
+                    if valid_indices.len() < data_shard_count {
+                        valid_indices.push(matrix_row);
+                    }
+                }
+                None => {
+                    invalid_indices.push(matrix_row);
+                    if matrix_row < data_shard_count {
+                        missing_data_indices.push(matrix_row);
+                    } else if !data_only {
+                        missing_parity_indices.push(matrix_row);
+                    }
+                }
+            }
+        }
+
+        self.runtime_profile_metrics.record_reconstruct(
+            data_only,
+            missing_data_indices.len(),
+            missing_parity_indices.len(),
+            false,
+        );
+
+        let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+
+        if !missing_data_indices.is_empty() {
+            #[cfg(feature = "std")]
+            self.runtime_profile_metrics
+                .record_reconstruct_data_stage(shard_len, missing_data_indices.len());
+            let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+                SmallVec::with_capacity(missing_data_indices.len());
+            for &idx in &missing_data_indices {
+                matrix_rows.push(data_decode_matrix.get_row(idx));
+            }
+
+            let mut recovered_data: Vec<Vec<F::Elem>> = missing_data_indices
+                .iter()
+                .map(|_| vec![F::zero(); shard_len])
+                .collect();
+
+            {
+                let mut sub_shards: SmallVec<[&[F::Elem]; 32]> =
+                    SmallVec::with_capacity(data_shard_count);
+                for &idx in &valid_indices {
+                    let shard = shards[idx].as_deref().ok_or(Error::TooFewShardsPresent)?;
+                    sub_shards.push(shard);
+                }
+
+                let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_data
+                    .iter_mut()
+                    .map(|shard| shard.as_mut_slice())
+                    .collect();
+
+                if data_only && outputs.len() <= 2 {
+                    self.code_some_slices_one_or_two_outputs_reconstruct_data_par_raw(
+                        &matrix_rows,
+                        &sub_shards,
+                        &mut outputs,
+                    );
+                } else {
+                    self.code_some_slices_with_policy_raw(
+                        &matrix_rows,
+                        &sub_shards,
+                        &mut outputs,
+                        data_policy,
+                    );
+                }
+            }
+
+            for (idx, recovered) in missing_data_indices.into_iter().zip(recovered_data) {
+                shards[idx] = Some(recovered);
+            }
+        }
+
+        if data_only {
+            return Ok(());
+        }
+
+        if missing_parity_indices.is_empty() {
+            return Ok(());
+        }
+
+        #[cfg(feature = "std")]
+        self.runtime_profile_metrics
+            .record_reconstruct_parity_stage(shard_len, missing_parity_indices.len());
+        let parity_rows = self.get_parity_rows();
+        let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+            SmallVec::with_capacity(missing_parity_indices.len());
+        for &idx in &missing_parity_indices {
+            matrix_rows.push(parity_rows[idx - data_shard_count]);
+        }
+
+        let mut recovered_parity: Vec<Vec<F::Elem>> = missing_parity_indices
+            .iter()
+            .map(|_| vec![F::zero(); shard_len])
+            .collect();
+
+        {
+            let mut all_data: SmallVec<[&[F::Elem]; 32]> =
+                SmallVec::with_capacity(data_shard_count);
+            for shard in shards.iter().take(data_shard_count) {
+                let shard = shard.as_deref().ok_or(Error::TooFewShardsPresent)?;
+                all_data.push(shard);
+            }
+
+            let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_parity
+                .iter_mut()
+                .map(|shard| shard.as_mut_slice())
+                .collect();
+
+            self.code_some_slices_with_policy_raw(
+                &matrix_rows,
+                &all_data,
+                &mut outputs,
+                parity_policy,
+            );
+        }
+        for (idx, recovered) in missing_parity_indices.into_iter().zip(recovered_parity) {
+            shards[idx] = Some(recovered);
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn reconstruct_internal_option_vec_par_with_policy(
+        &self,
+        shards: &mut [Option<Vec<F::Elem>>],
+        data_only: bool,
+        policy: ParallelPolicy,
+    ) -> Result<(), Error>
+    where
+        F::Elem: Send + Sync,
+    {
+        self.reconstruct_internal_option_vec_par_with_stage_policies(
+            shards, data_only, policy, policy,
+        )
+    }
+
+    pub fn reconstruct<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
+        self.ensure_classic_family_execution()?;
+        self.reconstruct_internal(slices, false)
+    }
+
+    pub fn reconstruct_data<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
+        self.ensure_classic_family_execution()?;
+        self.reconstruct_internal(slices, true)
+    }
+
+    pub fn reconstruct_some<T: ReconstructShard<F>>(
+        &self,
+        shards: &mut [T],
+        required: &[bool],
+    ) -> Result<(), Error> {
+        self.ensure_classic_family_execution()?;
+        if required.len() != self.total_shard_count {
+            return Err(Error::InvalidShardFlags);
+        }
+
+        check_piece_count!(all => self, shards);
+
+        let mut number_present = 0;
+        let mut shard_len = None;
+
+        for shard in shards.iter_mut() {
+            if let Some(len) = shard.len() {
+                if len == 0 {
+                    return Err(Error::EmptyShard);
+                }
+                number_present += 1;
+                if let Some(old_len) = shard_len
+                    && len != old_len
+                {
+                    return Err(Error::IncorrectShardSize);
+                }
+                shard_len = Some(len);
+            }
+        }
+
+        if number_present == self.total_shard_count {
+            return Ok(());
+        }
+
+        if number_present < self.data_shard_count {
+            return Err(Error::TooFewShardsPresent);
+        }
+
+        let shard_len = shard_len.expect("at least one shard present; qed");
+        let required_data_only = required
+            .iter()
+            .enumerate()
+            .all(|(i, required)| !*required || i < self.data_shard_count);
+
+        let originally_missing: Vec<bool> = shards
+            .iter_mut()
+            .map(|shard| shard.get().is_none())
+            .collect();
+
+        if required_data_only {
+            let mut valid_indices: SmallVec<[usize; 32]> =
+                SmallVec::with_capacity(self.data_shard_count);
+            let mut invalid_indices: SmallVec<[usize; 32]> =
+                SmallVec::with_capacity(self.total_shard_count);
+            let mut required_missing_data_indices: SmallVec<[usize; 32]> = SmallVec::new();
+
+            for (index, is_missing) in originally_missing.iter().copied().enumerate() {
+                if is_missing {
+                    invalid_indices.push(index);
+                    if index < self.data_shard_count && required[index] {
+                        required_missing_data_indices.push(index);
+                    }
+                } else if valid_indices.len() < self.data_shard_count {
+                    valid_indices.push(index);
+                }
+            }
+
+            if required_missing_data_indices.is_empty() {
+                return Ok(());
+            }
+
+            let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+            let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+                SmallVec::with_capacity(required_missing_data_indices.len());
+            for &idx in &required_missing_data_indices {
+                matrix_rows.push(data_decode_matrix.get_row(idx));
+            }
+
+            let sub_shards_snapshot: Vec<Vec<F::Elem>> = valid_indices
+                .iter()
+                .map(|&idx| {
+                    shards[idx]
+                        .get()
+                        .expect("valid shard index must be present")
+                        .to_vec()
+                })
+                .collect();
+            let sub_shards: SmallVec<[&[F::Elem]; 32]> = sub_shards_snapshot
+                .iter()
+                .map(|shard| shard.as_slice())
+                .collect();
+
+            let mut recovered_data: Vec<Vec<F::Elem>> = required_missing_data_indices
+                .iter()
+                .map(|_| vec![F::zero(); shard_len])
+                .collect();
+            let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_data
+                .iter_mut()
+                .map(|shard| shard.as_mut_slice())
+                .collect();
+            self.code_some_slices(&matrix_rows, &sub_shards, &mut outputs);
+            drop(outputs);
+
+            for (idx, recovered) in required_missing_data_indices
+                .into_iter()
+                .zip(recovered_data.into_iter())
+            {
+                match shards[idx].get_or_initialize(shard_len) {
+                    Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(&recovered),
+                    Err(Err(err)) => return Err(err),
+                }
+            }
+        } else {
+            let mut working: Vec<Option<Vec<F::Elem>>> = shards
+                .iter_mut()
+                .map(|shard| shard.get().map(|data| data.to_vec()))
+                .collect();
+            self.reconstruct(&mut working)?;
+
+            for (i, shard) in shards.iter_mut().enumerate() {
+                if !required[i] || !originally_missing[i] {
+                    continue;
+                }
+
+                let recovered = working[i]
+                    .as_ref()
+                    .expect("recovered shard must be present");
+                match shard.get_or_initialize(shard_len) {
+                    Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(recovered),
+                    Err(Err(err)) => return Err(err),
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn get_data_decode_matrix(
+        &self,
+        valid_indices: &[usize],
+        invalid_indices: &[usize],
+    ) -> Arc<crate::matrix::Matrix<F>> {
+        if self.options.inversion_cache {
+            #[cfg(feature = "std")]
+            self.reconstruction_cache_metrics
+                .requests
+                .fetch_add(1, Ordering::Relaxed);
+
+            let mut cache = self.data_decode_matrix_cache.lock();
+            if let Some(entry) = cache.get(invalid_indices) {
+                #[cfg(feature = "std")]
+                self.reconstruction_cache_metrics
+                    .hits
+                    .fetch_add(1, Ordering::Relaxed);
+                return entry.clone();
+            }
+
+            #[cfg(feature = "std")]
+            self.reconstruction_cache_metrics
+                .misses
+                .fetch_add(1, Ordering::Relaxed);
+        }
+        let mut sub_matrix = crate::matrix::Matrix::new(self.data_shard_count, self.data_shard_count);
+        for (sub_matrix_row, &valid_index) in valid_indices.iter().enumerate() {
+            for c in 0..self.data_shard_count {
+                sub_matrix.set(sub_matrix_row, c, self.matrix.get(valid_index, c));
+            }
+        }
+        let data_decode_matrix = match sub_matrix.invert() {
+            Ok(inverted) => Arc::new(inverted),
+            Err(_) => panic!(
+                "selected shard submatrix must remain invertible when enough shards are present"
+            ),
+        };
+        if self.options.inversion_cache {
+            let data_decode_matrix = data_decode_matrix.clone();
+            let mut cache = self.data_decode_matrix_cache.lock();
+            #[cfg(feature = "std")]
+            let before_len = cache.len();
+            #[cfg(feature = "std")]
+            let capacity = cache.capacity();
+            cache.insert(Vec::from(invalid_indices), data_decode_matrix);
+            #[cfg(feature = "std")]
+            if capacity > 0 && before_len >= capacity {
+                self.reconstruction_cache_metrics
+                    .evictions
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            #[cfg(feature = "std")]
+            self.reconstruction_cache_metrics
+                .inserts
+                .fetch_add(1, Ordering::Relaxed);
+        }
+        data_decode_matrix
+    }
+
+    fn reconstruct_internal<T: ReconstructShard<F>>(
+        &self,
+        shards: &mut [T],
+        data_only: bool,
+    ) -> Result<(), Error> {
+        check_piece_count!(all => self, shards);
+
+        let data_shard_count = self.data_shard_count;
+
+        let mut number_present = 0;
+        let mut shard_len = None;
+
+        for shard in shards.iter_mut() {
+            if let Some(len) = shard.len() {
+                if len == 0 {
+                    return Err(Error::EmptyShard);
+                }
+                number_present += 1;
+                if let Some(old_len) = shard_len
+                    && len != old_len
+                {
+                    return Err(Error::IncorrectShardSize);
+                }
+                shard_len = Some(len);
+            }
+        }
+
+        if number_present == self.total_shard_count {
+            #[cfg(feature = "std")]
+            self.runtime_profile_metrics
+                .record_reconstruct(data_only, 0, 0, true);
+            return Ok(());
+        }
+
+        if number_present < data_shard_count {
+            return Err(Error::TooFewShardsPresent);
+        }
+
+        let shard_len = shard_len.expect("at least one shard present; qed");
+
+        let mut sub_shards: SmallVec<[&[F::Elem]; 32]> = SmallVec::with_capacity(data_shard_count);
+        let mut missing_data_slices: SmallVec<[&mut [F::Elem]; 32]> =
+            SmallVec::with_capacity(self.parity_shard_count);
+        let mut missing_parity_slices: SmallVec<[&mut [F::Elem]; 32]> =
+            SmallVec::with_capacity(self.parity_shard_count);
+        let mut valid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(data_shard_count);
+        let mut invalid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(data_shard_count);
+
+        for (matrix_row, shard) in shards.iter_mut().enumerate() {
+            let shard_data = if matrix_row >= data_shard_count && data_only {
+                shard.get().ok_or(None)
+            } else {
+                shard.get_or_initialize(shard_len).map_err(Some)
+            };
+
+            match shard_data {
+                Ok(shard) => {
+                    if sub_shards.len() < data_shard_count {
+                        sub_shards.push(shard);
+                        valid_indices.push(matrix_row);
+                    }
+                }
+                Err(None) => {
+                    invalid_indices.push(matrix_row);
+                }
+                Err(Some(x)) => {
+                    let shard = x?;
+                    if matrix_row < data_shard_count {
+                        missing_data_slices.push(shard);
+                    } else {
+                        missing_parity_slices.push(shard);
+                    }
+
+                    invalid_indices.push(matrix_row);
+                }
+            }
+        }
+
+        #[cfg(feature = "std")]
+        {
+            let missing_data_count = invalid_indices
+                .iter()
+                .filter(|&&i| i < data_shard_count)
+                .count();
+            let missing_parity_count = if data_only {
+                0
+            } else {
+                invalid_indices
+                    .iter()
+                    .filter(|&&i| i >= data_shard_count)
+                    .count()
+            };
+            self.runtime_profile_metrics.record_reconstruct(
+                data_only,
+                missing_data_count,
+                missing_parity_count,
+                false,
+            );
+        }
+
+        let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+
+        let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+            SmallVec::with_capacity(self.parity_shard_count);
+
+        for i_slice in invalid_indices
+            .iter()
+            .cloned()
+            .take_while(|i| i < &data_shard_count)
+        {
+            matrix_rows.push(data_decode_matrix.get_row(i_slice));
+        }
+
+        #[cfg(feature = "std")]
+        self.runtime_profile_metrics
+            .record_reconstruct_data_stage(shard_len, matrix_rows.len());
+        self.code_some_slices(&matrix_rows, &sub_shards, &mut missing_data_slices);
+
+        if data_only {
+            Ok(())
+        } else {
+            let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
+                SmallVec::with_capacity(self.parity_shard_count);
+            let parity_rows = self.get_parity_rows();
+
+            for i_slice in invalid_indices
+                .iter()
+                .cloned()
+                .skip_while(|i| i < &data_shard_count)
+            {
+                matrix_rows.push(parity_rows[i_slice - data_shard_count]);
+            }
+            #[cfg(feature = "std")]
+            self.runtime_profile_metrics
+                .record_reconstruct_parity_stage(shard_len, matrix_rows.len());
+            {
+                let mut i_old_data_slice = 0;
+                let mut i_new_data_slice = 0;
+
+                let mut all_data_slices: SmallVec<[&[F::Elem]; 32]> =
+                    SmallVec::with_capacity(data_shard_count);
+
+                let mut next_maybe_good = 0;
+                let mut push_good_up_to = move |data_slices: &mut SmallVec<_>, up_to| {
+                    for _ in next_maybe_good..up_to {
+                        data_slices.push(sub_shards[i_old_data_slice]);
+                        i_old_data_slice += 1;
+                    }
+
+                    next_maybe_good = up_to + 1;
+                };
+
+                for i_slice in invalid_indices
+                    .iter()
+                    .cloned()
+                    .take_while(|i| i < &data_shard_count)
+                {
+                    push_good_up_to(&mut all_data_slices, i_slice);
+                    all_data_slices.push(missing_data_slices[i_new_data_slice]);
+                    i_new_data_slice += 1;
+                }
+                push_good_up_to(&mut all_data_slices, data_shard_count);
+
+                self.code_some_slices(&matrix_rows, &all_data_slices, &mut missing_parity_slices);
+            }
+
+            Ok(())
+        }
+    }
+}

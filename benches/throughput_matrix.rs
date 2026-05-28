@@ -9,7 +9,9 @@ use std::sync::Mutex;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use reed_solomon_erasure::galois_8::{ReedSolomon, RustNeonProfileStats, rust_neon_profile_stats};
-use reed_solomon_erasure::{ReconstructionCacheStats, RuntimeProfileStats};
+use reed_solomon_erasure::{
+    CodecFamily, CodecOptions, ReconstructionCacheStats, RuntimeProfileStats,
+};
 
 use self::common::{BenchCase, Operation, SMOKE_CASES, case_name, derived_seed, make_full_shards};
 
@@ -178,6 +180,54 @@ fn bench_encode(c: &mut Criterion, case: BenchCase) {
     push_profile_record("encode", case, &rs, neon_after.saturating_sub(neon_before));
 }
 
+fn bench_leopard_setup(c: &mut Criterion, case: BenchCase) {
+    let name = case_name(Operation::LeopardSetup, case);
+    let throughput = case.shard_size * case.data_shards;
+
+    let mut group = c.benchmark_group("throughput_matrix_leopard_setup");
+    group.throughput(Throughput::Bytes(throughput.try_into().unwrap()));
+    group.bench_function(name, |b| {
+        b.iter(|| {
+            let codec = ReedSolomon::with_options(
+                case.data_shards,
+                case.parity_shards,
+                CodecOptions {
+                    codec_family: CodecFamily::LeopardGF8,
+                    ..CodecOptions::default()
+                },
+            )
+            .unwrap();
+            black_box(codec.leopard_setup_matrix_shape());
+        });
+    });
+    group.finish();
+}
+
+fn bench_leopard_encode(c: &mut Criterion, case: BenchCase) {
+    let name = case_name(Operation::LeopardEncode, case);
+    let throughput = case.shard_size * case.data_shards;
+    let seed = derived_seed(Operation::LeopardEncode, case);
+    let rs = ReedSolomon::with_options(
+        case.data_shards,
+        case.parity_shards,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut group = c.benchmark_group("throughput_matrix_leopard_encode");
+    group.throughput(Throughput::Bytes(throughput.try_into().unwrap()));
+    group.bench_function(name, |b| {
+        let mut shards = make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+        b.iter(|| {
+            rs.encode_opt(black_box(&mut shards)).unwrap();
+        });
+    });
+    group.finish();
+}
+
 fn bench_verify(c: &mut Criterion, case: BenchCase) {
     let name = case_name(Operation::Verify, case);
     let throughput = case.shard_size * case.data_shards;
@@ -198,6 +248,51 @@ fn bench_verify(c: &mut Criterion, case: BenchCase) {
     group.finish();
     let neon_after = rust_neon_profile_stats();
     push_profile_record("verify", case, &rs, neon_after.saturating_sub(neon_before));
+}
+
+fn bench_update(c: &mut Criterion, case: BenchCase, changed_indices: &[usize], label: &str) {
+    let name = format!("{}_{}_{}", Operation::Update.as_str(), case.label, label);
+    let throughput = case.shard_size * case.data_shards;
+    let seed = derived_seed(Operation::Update, case);
+    let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
+    let mut original =
+        make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+    rs.encode_opt(&mut original).unwrap();
+
+    let mut updated_data = original[..case.data_shards].to_vec();
+    for &idx in changed_indices {
+        if idx < updated_data.len() && !updated_data[idx].is_empty() {
+            updated_data[idx][0] ^= 0x5a;
+        }
+    }
+
+    let mut group = c.benchmark_group("throughput_matrix_update");
+    group.throughput(Throughput::Bytes(throughput.try_into().unwrap()));
+    rs.reset_runtime_profile_stats();
+    let neon_before = rust_neon_profile_stats();
+    group.bench_function(name, |b| {
+        let old_data = original[..case.data_shards].to_vec();
+        let old_refs = old_data.iter().collect::<Vec<_>>();
+        let changes = (0..case.data_shards)
+            .map(|idx| {
+                if changed_indices.contains(&idx) {
+                    Some(&updated_data[idx])
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        b.iter(|| {
+            let mut parity = original[case.data_shards..].to_vec();
+            let mut parity_refs = parity.iter_mut().collect::<Vec<_>>();
+            rs.update(black_box(&old_refs), black_box(&changes), black_box(&mut parity_refs))
+                .unwrap();
+        });
+    });
+    group.finish();
+    let neon_after = rust_neon_profile_stats();
+    push_profile_record("update", case, &rs, neon_after.saturating_sub(neon_before));
 }
 
 fn bench_reconstruct(c: &mut Criterion, case: BenchCase) {
@@ -265,9 +360,19 @@ fn bench_reconstruct_data(c: &mut Criterion, case: BenchCase) {
 fn smoke_matrix(c: &mut Criterion) {
     for case in SMOKE_CASES {
         bench_encode(c, *case);
+        bench_update(c, *case, &[0], "1_change");
+        if case.data_shards >= 2 {
+            bench_update(c, *case, &[0, 1], "2_changes");
+        }
         bench_verify(c, *case);
         bench_reconstruct(c, *case);
         bench_reconstruct_data(c, *case);
+    }
+    for case in SMOKE_CASES {
+        if case.data_shards + case.parity_shards <= 256 {
+            bench_leopard_setup(c, *case);
+            bench_leopard_encode(c, *case);
+        }
     }
     write_profile_report();
 }

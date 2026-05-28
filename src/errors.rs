@@ -15,6 +15,9 @@ pub enum Error {
     EmptyShard,
     InvalidShardFlags,
     InvalidIndex,
+    InvalidCustomMatrix,
+    UnsupportedCodecFamily,
+    UnsupportedLeopardPrototype,
 }
 
 impl Error {
@@ -54,6 +57,15 @@ impl Error {
             }
             Error::InvalidIndex => {
                 "The data shard index provided is greater or equal to the number of data shards in codec"
+            }
+            Error::InvalidCustomMatrix => {
+                "The supplied custom matrix is invalid or missing for MatrixMode::Custom"
+            }
+            Error::UnsupportedCodecFamily => {
+                "The selected codec family is not supported for this field or configuration"
+            }
+            Error::UnsupportedLeopardPrototype => {
+                "The selected Leopard codec family is only available as a prototype skeleton in this build"
             }
         }
     }
@@ -162,6 +174,18 @@ mod tests {
         assert_eq!(
             alloc::format!("{}", Error::InvalidIndex),
             "The data shard index provided is greater or equal to the number of data shards in codec"
+        );
+        assert_eq!(
+            alloc::format!("{}", Error::InvalidCustomMatrix),
+            "The supplied custom matrix is invalid or missing for MatrixMode::Custom"
+        );
+        assert_eq!(
+            alloc::format!("{}", Error::UnsupportedCodecFamily),
+            "The selected codec family is not supported for this field or configuration"
+        );
+        assert_eq!(
+            alloc::format!("{}", Error::UnsupportedLeopardPrototype),
+            "The selected Leopard codec family is only available as a prototype skeleton in this build"
         );
     }
 

@@ -16,6 +16,9 @@ pub struct BenchCase {
 #[derive(Clone, Copy, Debug)]
 pub enum Operation {
     Encode,
+    LeopardSetup,
+    LeopardEncode,
+    Update,
     Verify,
     Reconstruct,
     ReconstructData,
@@ -25,6 +28,9 @@ impl Operation {
     pub fn as_str(self) -> &'static str {
         match self {
             Operation::Encode => "encode",
+            Operation::LeopardSetup => "leopard_setup",
+            Operation::LeopardEncode => "leopard_encode",
+            Operation::Update => "update",
             Operation::Verify => "verify",
             Operation::Reconstruct => "reconstruct",
             Operation::ReconstructData => "reconstruct_data",
@@ -190,6 +196,9 @@ pub const FULL_CASES: &[BenchCase] = &[
 pub fn derived_seed(operation: Operation, case: BenchCase) -> u64 {
     let op_tag = match operation {
         Operation::Encode => 0x11u64,
+        Operation::LeopardSetup => 0x66u64,
+        Operation::LeopardEncode => 0x77u64,
+        Operation::Update => 0x55u64,
         Operation::Verify => 0x22u64,
         Operation::Reconstruct => 0x33u64,
         Operation::ReconstructData => 0x44u64,

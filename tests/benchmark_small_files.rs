@@ -370,6 +370,55 @@ fn run_operation(case: BenchCase, operation: SmallFileOp, iterations: usize) -> 
                 rs.encode(&mut shards).unwrap();
             }
         }
+        SmallFileOp::Standard(Operation::LeopardSetup) => {
+            for _ in 0..iterations {
+                let codec = ReedSolomon::with_options(
+                    case.data_shards,
+                    case.parity_shards,
+                    reed_solomon_erasure::CodecOptions {
+                        codec_family: reed_solomon_erasure::CodecFamily::LeopardGF8,
+                        ..reed_solomon_erasure::CodecOptions::default()
+                    },
+                )
+                .unwrap();
+                let _ = codec.leopard_setup_matrix_shape();
+            }
+        }
+        SmallFileOp::Standard(Operation::LeopardEncode) => {
+            let codec = ReedSolomon::with_options(
+                case.data_shards,
+                case.parity_shards,
+                reed_solomon_erasure::CodecOptions {
+                    codec_family: reed_solomon_erasure::CodecFamily::LeopardGF8,
+                    ..reed_solomon_erasure::CodecOptions::default()
+                },
+            )
+            .unwrap();
+            for _ in 0..iterations {
+                let mut shards =
+                    make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+                codec.encode(&mut shards).unwrap();
+            }
+        }
+        SmallFileOp::Standard(Operation::Update) => {
+            let mut original =
+                make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+            rs.encode(&mut original).unwrap();
+            let old_data = original[..case.data_shards].to_vec();
+            let mut updated = old_data.clone();
+            if case.data_shards > 0 && case.shard_size > 0 {
+                updated[0][0] ^= 0x5a;
+            }
+            let old_refs = old_data.iter().collect::<Vec<_>>();
+            let changes = (0..case.data_shards)
+                .map(|idx| if idx == 0 { Some(&updated[0]) } else { None })
+                .collect::<Vec<_>>();
+            for _ in 0..iterations {
+                let mut parity = original[case.data_shards..].to_vec();
+                let mut parity_refs = parity.iter_mut().collect::<Vec<_>>();
+                rs.update(&old_refs, &changes, &mut parity_refs).unwrap();
+            }
+        }
         SmallFileOp::Standard(Operation::Verify) => {
             let mut shards =
                 make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);

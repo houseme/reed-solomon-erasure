@@ -40,6 +40,7 @@ pub mod galois_8;
 pub use crate::errors::Error;
 pub use crate::errors::SBSError;
 
+pub use crate::core::CodecFamily;
 pub use crate::core::CodecOptions;
 pub use crate::core::MatrixMode;
 #[cfg(feature = "std")]

@@ -4,8 +4,9 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
+use core::iter;
 
-use super::{CodecOptions, Error, MatrixMode, SBSError, galois_8};
+use super::{CodecFamily, CodecOptions, Error, MatrixMode, SBSError, galois_8};
 #[cfg(feature = "std")]
 use super::{ParallelDecision, ParallelPolicy};
 use rand::{self, RngExt, rng};
@@ -188,6 +189,186 @@ fn test_codec_options_default_matches_new() {
     assert_eq!(r1.data_shard_count(), r2.data_shard_count());
     assert_eq!(r1.parity_shard_count(), r2.parity_shard_count());
     assert_eq!(r1.total_shard_count(), r2.total_shard_count());
+    assert_eq!(CodecFamily::Classic, r1.codec_family());
+    assert_eq!(CodecFamily::Classic, r2.codec_family());
+}
+
+#[test]
+fn test_codec_options_default_uses_classic_family() {
+    assert_eq!(CodecFamily::Classic, CodecOptions::default().codec_family);
+}
+
+#[test]
+fn test_codec_options_accepts_explicit_classic_family() {
+    let r = ReedSolomon::with_options(
+        10,
+        3,
+        CodecOptions {
+            codec_family: CodecFamily::Classic,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(CodecFamily::Classic, r.codec_family());
+}
+
+#[test]
+fn test_leopard_gf8_prototype_is_explicit_but_not_executed_yet() {
+    let codec = ReedSolomon::with_options(
+        32,
+        16,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(CodecFamily::LeopardGF8, codec.codec_family());
+    assert_eq!(Some((48, 32)), codec.leopard_setup_matrix_shape());
+
+    let mut shards = make_random_shards!(1024, 48);
+    codec.encode(&mut shards).unwrap();
+    assert_eq!(
+        Error::UnsupportedLeopardPrototype,
+        codec.verify(&shards).unwrap_err()
+    );
+}
+
+#[test]
+fn test_leopard_gf16_prototype_is_explicit_but_not_executed_yet() {
+    let err = ReedSolomon::with_options(
+        32,
+        16,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(Error::UnsupportedLeopardPrototype, err);
+}
+
+#[test]
+fn test_leopard_custom_matrix_path_is_rejected_for_now() {
+    let rows = vec![vec![1u8, 1, 1], vec![1u8, 2, 4]];
+    let err = ReedSolomon::with_custom_matrix(
+        3,
+        2,
+        &rows,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(Error::UnsupportedLeopardPrototype, err);
+}
+
+#[test]
+fn test_leopard_gf8_encode_opt_populates_parity() {
+    let codec = ReedSolomon::with_options(
+        32,
+        16,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut shards = make_random_shards!(4096, 48);
+    let before = shards[32..].to_vec();
+    codec.encode_opt(&mut shards).unwrap();
+
+    assert_ne!(before, shards[32..].to_vec());
+    assert_eq!(Some((48, 32)), codec.leopard_setup_matrix_shape());
+}
+
+#[test]
+fn test_leopard_gf8_encode_rejects_non_64_byte_shard_size() {
+    let codec = ReedSolomon::with_options(
+        32,
+        16,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut shards = make_random_shards!(1025, 48);
+    assert_eq!(Error::IncorrectShardSize, codec.encode(&mut shards).unwrap_err());
+}
+
+#[test]
+fn test_leopard_gf8_is_rejected_for_galois_16_field() {
+    let err = crate::galois_16::ReedSolomon::with_options(
+        32,
+        16,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(Error::UnsupportedCodecFamily, err);
+}
+
+#[test]
+fn test_alloc_aligned_shards_zeroed_and_aligned() {
+    let shards = galois_8::alloc_aligned_shards(6, 1024);
+
+    assert_eq!(6, shards.len());
+    for shard in &shards {
+        assert_eq!(1024, shard.len());
+        assert!(shard.iter().all(|&byte| byte == 0));
+        assert_eq!(0, (shard.as_ptr() as usize) % galois_8::SHARD_ALIGNMENT);
+    }
+}
+
+#[test]
+fn test_aligned_shard_from_iter_preserves_alignment() {
+    let shard: galois_8::AlignedShard = iter::repeat_n(0xAB, 257).collect();
+
+    assert_eq!(257, shard.len());
+    assert!(shard.iter().all(|&byte| byte == 0xAB));
+    assert_eq!(0, (shard.as_ptr() as usize) % galois_8::SHARD_ALIGNMENT);
+}
+
+#[test]
+fn test_alloc_aligned_roundtrip_encode_verify_and_reconstruct() {
+    let r = ReedSolomon::new(3, 2).unwrap();
+    let mut shards = r.alloc_aligned(4096);
+
+    for (idx, shard) in shards.iter_mut().take(3).enumerate() {
+        for (offset, byte) in shard.iter_mut().enumerate() {
+            *byte = ((idx * 17 + offset) & 0xFF) as u8;
+        }
+    }
+
+    r.encode(&mut shards).unwrap();
+    assert!(r.verify(&shards).unwrap());
+
+    let mut option_shards: Vec<Option<galois_8::AlignedShard>> =
+        shards.iter().cloned().map(Some).collect();
+    option_shards[1] = None;
+    option_shards[4] = None;
+
+    r.reconstruct(&mut option_shards).unwrap();
+    let reconstructed = option_shards
+        .iter()
+        .map(|shard| shard.as_ref().expect("reconstructed shard missing"))
+        .collect::<Vec<_>>();
+
+    assert!(r.verify(&reconstructed).unwrap());
+    for shard in &reconstructed {
+        assert_eq!(0, (shard.as_ptr() as usize) % galois_8::SHARD_ALIGNMENT);
+    }
 }
 
 #[test]
@@ -255,7 +436,7 @@ fn test_codec_options_disable_inversion_cache_keeps_reconstruction_correct() {
 }
 
 #[test]
-fn test_codec_options_accepts_non_default_matrix_mode_placeholder() {
+fn test_codec_options_accepts_cauchy_matrix_mode() {
     let options = CodecOptions {
         matrix_mode: MatrixMode::Cauchy,
         ..CodecOptions::default()
@@ -265,6 +446,284 @@ fn test_codec_options_accepts_non_default_matrix_mode_placeholder() {
 
     assert_eq!(3, r.data_shard_count());
     assert_eq!(2, r.parity_shard_count());
+}
+
+#[test]
+fn test_codec_options_custom_matrix_without_payload_errors() {
+    let options = CodecOptions {
+        matrix_mode: MatrixMode::Custom,
+        ..CodecOptions::default()
+    };
+
+    assert_eq!(
+        Error::InvalidCustomMatrix,
+        ReedSolomon::with_options(3, 2, options).unwrap_err()
+    );
+}
+
+#[test]
+fn test_cauchy_matrix_mode_roundtrips_and_differs_from_vandermonde() {
+    let regular = ReedSolomon::new(4, 2).unwrap();
+    let cauchy = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions {
+            matrix_mode: MatrixMode::Cauchy,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut regular_shards = make_random_shards!(1024, 6);
+    let mut cauchy_shards = regular_shards.clone();
+
+    regular.encode(&mut regular_shards).unwrap();
+    cauchy.encode(&mut cauchy_shards).unwrap();
+
+    assert_ne!(regular_shards[4], cauchy_shards[4]);
+    assert!(cauchy.verify(&cauchy_shards).unwrap());
+
+    let original = cauchy_shards.clone();
+    let mut option_shards = shards_to_option_shards(&cauchy_shards);
+    option_shards[1] = None;
+    option_shards[5] = None;
+    cauchy.reconstruct(&mut option_shards).unwrap();
+
+    assert_eq!(original, option_shards_to_shards(&option_shards));
+}
+
+#[test]
+fn test_jerasure_like_matrix_mode_roundtrips_and_differs_from_vandermonde() {
+    let regular = ReedSolomon::new(4, 2).unwrap();
+    let jerasure = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions {
+            matrix_mode: MatrixMode::JerasureLike,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut regular_shards = make_random_shards!(1024, 6);
+    let mut jerasure_shards = regular_shards.clone();
+
+    regular.encode(&mut regular_shards).unwrap();
+    jerasure.encode(&mut jerasure_shards).unwrap();
+
+    assert_ne!(regular_shards[4], jerasure_shards[4]);
+    assert!(jerasure.verify(&jerasure_shards).unwrap());
+
+    let original = jerasure_shards.clone();
+    let mut option_shards = shards_to_option_shards(&jerasure_shards);
+    option_shards[0] = None;
+    option_shards[4] = None;
+    jerasure.reconstruct(&mut option_shards).unwrap();
+
+    assert_eq!(original, option_shards_to_shards(&option_shards));
+}
+
+#[test]
+fn test_with_custom_matrix_roundtrips_and_uses_supplied_rows() {
+    let regular = ReedSolomon::new(3, 2).unwrap();
+    let classic_matrix = ReedSolomon::build_matrix(3, 5);
+    let custom_rows = vec![
+        classic_matrix.get_row(3).to_vec(),
+        classic_matrix.get_row(4).to_vec(),
+    ];
+
+    let custom = ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default())
+        .unwrap();
+
+    let mut regular_shards = make_random_shards!(1024, 5);
+    let mut custom_shards = regular_shards.clone();
+    regular.encode(&mut regular_shards).unwrap();
+    custom.encode(&mut custom_shards).unwrap();
+
+    assert_eq!(regular_shards, custom_shards);
+
+    let original = custom_shards.clone();
+    let mut option_shards = shards_to_option_shards(&custom_shards);
+    option_shards[2] = None;
+    option_shards[3] = None;
+    custom.reconstruct(&mut option_shards).unwrap();
+    assert_eq!(original, option_shards_to_shards(&option_shards));
+}
+
+#[test]
+fn test_with_custom_matrix_rejects_too_few_rows() {
+    let rows = vec![vec![1u8, 2, 3]];
+    let err = ReedSolomon::with_custom_matrix(3, 2, &rows, CodecOptions::default()).unwrap_err();
+    assert_eq!(Error::InvalidCustomMatrix, err);
+}
+
+#[test]
+fn test_with_custom_matrix_rejects_short_rows() {
+    let rows = vec![vec![1u8, 2], vec![3u8, 4]];
+    let err = ReedSolomon::with_custom_matrix(3, 2, &rows, CodecOptions::default()).unwrap_err();
+    assert_eq!(Error::InvalidCustomMatrix, err);
+}
+
+#[test]
+fn test_update_with_no_changes_keeps_existing_parity() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut shards = make_random_shards!(1024, 6);
+    r.encode(&mut shards).unwrap();
+
+    let original_parity = shards[4..].to_vec();
+    let changes: Vec<Option<&Vec<u8>>> = vec![None, None, None, None];
+    let (data, parity) = shards.split_at_mut(4);
+    let old_data_refs = data.iter().collect::<Vec<_>>();
+    let mut parity_refs = parity.iter_mut().collect::<Vec<_>>();
+
+    r.update(&old_data_refs, &changes, &mut parity_refs).unwrap();
+    assert_eq!(original_parity, shards[4..].to_vec());
+}
+
+#[test]
+fn test_update_matches_full_encode_for_single_changed_data_shard() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut baseline = make_random_shards!(1024, 6);
+    r.encode(&mut baseline).unwrap();
+
+    let old_data = baseline[..4].to_vec();
+    let mut updated = baseline.clone();
+    fill_random(&mut updated[1]);
+
+    let mut parity_only = baseline[4..].to_vec();
+    let old_refs = old_data.iter().collect::<Vec<_>>();
+    let changes = vec![None, Some(&updated[1]), None, None];
+    let mut parity_refs = parity_only.iter_mut().collect::<Vec<_>>();
+    r.update(&old_refs, &changes, &mut parity_refs).unwrap();
+
+    let mut full = old_data.clone();
+    full.push(parity_only[0].clone());
+    full.push(parity_only[1].clone());
+    full[1] = updated[1].clone();
+    r.encode(&mut full).unwrap();
+
+    assert_eq!(full[4], parity_only[0]);
+    assert_eq!(full[5], parity_only[1]);
+}
+
+#[test]
+fn test_update_matches_full_encode_for_multiple_changed_data_shards() {
+    let r = ReedSolomon::new(6, 3).unwrap();
+    let mut baseline = make_random_shards!(2048, 9);
+    r.encode(&mut baseline).unwrap();
+
+    let old_data = baseline[..6].to_vec();
+    let mut parity_only = baseline[6..].to_vec();
+    let mut new_data = old_data.clone();
+    fill_random(&mut new_data[0]);
+    fill_random(&mut new_data[4]);
+
+    let old_refs = old_data.iter().collect::<Vec<_>>();
+    let changes = vec![Some(&new_data[0]), None, None, None, Some(&new_data[4]), None];
+    let mut parity_refs = parity_only.iter_mut().collect::<Vec<_>>();
+    r.update(&old_refs, &changes, &mut parity_refs).unwrap();
+
+    let mut full = new_data.clone();
+    full.extend(parity_only.clone());
+    r.encode(&mut full).unwrap();
+
+    assert_eq!(full[6..], parity_only[..]);
+}
+
+#[test]
+fn test_update_fast_one_parity_matches_full_encode() {
+    let r = ReedSolomon::with_options(
+        4,
+        1,
+        CodecOptions {
+            fast_one_parity: true,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut baseline = make_random_shards!(1024, 5);
+    r.encode(&mut baseline).unwrap();
+
+    let old_data = baseline[..4].to_vec();
+    let mut parity_only = baseline[4..].to_vec();
+    let mut new_data = old_data.clone();
+    fill_random(&mut new_data[2]);
+
+    let old_refs = old_data.iter().collect::<Vec<_>>();
+    let changes = vec![None, None, Some(&new_data[2]), None];
+    let mut parity_refs = parity_only.iter_mut().collect::<Vec<_>>();
+    r.update(&old_refs, &changes, &mut parity_refs).unwrap();
+
+    let mut full = new_data.clone();
+    full.extend(parity_only.clone());
+    r.encode(&mut full).unwrap();
+    assert_eq!(full[4], parity_only[0]);
+}
+
+#[test]
+fn test_update_rejects_wrong_changed_shard_count() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut baseline = make_random_shards!(256, 6);
+    r.encode(&mut baseline).unwrap();
+
+    let old_data = baseline[..4].to_vec();
+    let old_refs = old_data.iter().collect::<Vec<_>>();
+    let changes = vec![None, None, None];
+    let mut parity_only = baseline[4..].to_vec();
+    let mut parity_refs = parity_only.iter_mut().collect::<Vec<_>>();
+
+    assert_eq!(
+        Error::TooFewDataShards,
+        r.update(&old_refs, &changes, &mut parity_refs).unwrap_err()
+    );
+}
+
+#[test]
+fn test_update_rejects_wrong_parity_count() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut baseline = make_random_shards!(256, 6);
+    r.encode(&mut baseline).unwrap();
+
+    let old_data = baseline[..4].to_vec();
+    let old_refs = old_data.iter().collect::<Vec<_>>();
+    let changes = vec![None, None, None, None];
+    let mut parity_only = vec![baseline[4].clone()];
+    let mut parity_refs = parity_only.iter_mut().collect::<Vec<_>>();
+
+    assert_eq!(
+        Error::TooFewParityShards,
+        r.update(&old_refs, &changes, &mut parity_refs).unwrap_err()
+    );
+}
+
+#[test]
+fn test_update_rejects_incorrect_changed_shard_size() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut baseline = make_random_shards!(256, 6);
+    r.encode(&mut baseline).unwrap();
+
+    let old_data = baseline[..4].to_vec();
+    let old_refs = old_data.iter().collect::<Vec<_>>();
+    let invalid = vec![1u8; 8];
+    let changes = vec![Some(&invalid), None, None, None];
+    let mut parity_only = baseline[4..].to_vec();
+    let mut parity_refs = parity_only.iter_mut().collect::<Vec<_>>();
+
+    assert_eq!(
+        Error::IncorrectShardSize,
+        r.update(&old_refs, &changes, &mut parity_refs).unwrap_err()
+    );
+}
+
+#[test]
+fn test_update_rejects_empty_old_data_shards() {
+    let r = ReedSolomon::new(2, 1).unwrap();
+    let old_data = vec![Vec::<u8>::new(), Vec::<u8>::new()];
+    let changes = vec![None, None];
+    let mut parity = vec![vec![0u8; 0]];
+
+    assert_eq!(Error::EmptyShard, r.update(&old_data, &changes, &mut parity).unwrap_err());
 }
 
 #[test]
@@ -2077,6 +2536,165 @@ fn test_galois_8_reconstruct_some_opt_rejects_invalid_flags_length() {
         Error::InvalidShardFlags,
         r.reconstruct_some_opt(&mut shards, &[true, false])
             .unwrap_err()
+    );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_progressive_matches_reconstruct_some() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 8);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected = shards_to_option_shards(&shards);
+    expected[1] = None;
+    expected[4] = None;
+    let mut required = vec![false; 8];
+    required[1] = true;
+    required[4] = true;
+    r.reconstruct_some(&mut expected, &required).unwrap();
+
+    let mut dst = vec![None; 8];
+    dst[1] = Some(vec![0u8; shards[0].len()]);
+    dst[4] = Some(vec![0u8; shards[0].len()]);
+
+    let expect_input = vec![true, false, true, true, false, true, true, false];
+
+    let mut first_input = vec![None; 8];
+    first_input[0] = Some(shards[0].clone());
+    first_input[2] = Some(shards[2].clone());
+    r.decode_idx(&mut dst, Some(&expect_input), &first_input).unwrap();
+
+    let mut second_input = vec![None; 8];
+    second_input[3] = Some(shards[3].clone());
+    second_input[5] = Some(shards[5].clone());
+    second_input[6] = Some(shards[6].clone());
+    r.decode_idx(&mut dst, Some(&expect_input), &second_input).unwrap();
+
+    assert_eq!(expected[1], dst[1]);
+    assert_eq!(expected[4], dst[4]);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_merge_mode_accumulates_partial_results() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut shards = make_random_shards!(128 * 1024, 8);
+    r.encode(&mut shards).unwrap();
+
+    let expect_input = vec![true, false, true, true, false, true, true, false];
+
+    let mut partial_a = vec![None; 8];
+    partial_a[1] = Some(vec![0u8; shards[0].len()]);
+    partial_a[4] = Some(vec![0u8; shards[0].len()]);
+    let mut input_a = vec![None; 8];
+    input_a[0] = Some(shards[0].clone());
+    input_a[2] = Some(shards[2].clone());
+    r.decode_idx(&mut partial_a, Some(&expect_input), &input_a).unwrap();
+
+    let mut partial_b = vec![None; 8];
+    partial_b[1] = Some(vec![0u8; shards[0].len()]);
+    partial_b[4] = Some(vec![0u8; shards[0].len()]);
+    let mut input_b = vec![None; 8];
+    input_b[3] = Some(shards[3].clone());
+    input_b[5] = Some(shards[5].clone());
+    input_b[6] = Some(shards[6].clone());
+    r.decode_idx(&mut partial_b, Some(&expect_input), &input_b).unwrap();
+
+    r.decode_idx(&mut partial_a, None, &partial_b).unwrap();
+
+    let mut expected = shards_to_option_shards(&shards);
+    expected[1] = None;
+    expected[4] = None;
+    let mut required = vec![false; 8];
+    required[1] = true;
+    required[4] = true;
+    r.reconstruct_some(&mut expected, &required).unwrap();
+
+    assert_eq!(expected[1], partial_a[1]);
+    assert_eq!(expected[4], partial_a[4]);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_rejects_invalid_expect_input_length() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut dst = vec![None; 8];
+    let input = vec![None; 8];
+
+    assert_eq!(
+        Error::InvalidShardFlags,
+        r.decode_idx(&mut dst, Some(&[true, false]), &input).unwrap_err()
+    );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_rejects_incorrect_dst_len() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut dst = vec![None; 7];
+    let input = vec![None; 8];
+    let expect_input = vec![true; 8];
+
+    assert_eq!(
+        Error::TooFewShards,
+        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
+    );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_rejects_incorrect_input_len() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut dst = vec![None; 8];
+    let input = vec![None; 7];
+    let expect_input = vec![true; 8];
+
+    assert_eq!(
+        Error::TooFewShards,
+        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
+    );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_rejects_shard_size_mismatch() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut dst = vec![None; 8];
+    dst[1] = Some(vec![0u8; 16]);
+    let mut input = vec![None; 8];
+    input[0] = Some(vec![1u8; 8]);
+    let expect_input = vec![true, false, true, true, false, true, true, false];
+
+    assert_eq!(
+        Error::IncorrectShardSize,
+        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
+    );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_merge_mode_rejects_missing_dst_target() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut dst = vec![None; 8];
+    let mut input = vec![None; 8];
+    input[1] = Some(vec![1u8; 8]);
+
+    assert_eq!(Error::TooFewShards, r.decode_idx(&mut dst, None, &input).unwrap_err());
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_decode_idx_rejects_too_few_expected_inputs() {
+    let r = ReedSolomon::new(5, 3).unwrap();
+    let mut dst = vec![None; 8];
+    dst[1] = Some(vec![0u8; 8]);
+    let input = vec![None; 8];
+    let expect_input = vec![true, false, true, false, false, false, false, false];
+
+    assert_eq!(
+        Error::TooFewShardsPresent,
+        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
     );
 }
 

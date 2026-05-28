@@ -3,6 +3,7 @@
 include!(concat!(env!("OUT_DIR"), "/table.rs"));
 
 mod aarch64;
+mod aligned;
 mod backend;
 mod legacy;
 mod policy;
@@ -10,6 +11,7 @@ mod profile;
 mod scalar;
 mod x86;
 
+pub use aligned::{AlignedShard, SHARD_ALIGNMENT, alloc_aligned_shards};
 pub use backend::{BackendId, BackendKind};
 #[cfg(feature = "std")]
 pub(crate) use policy::resolve_runtime_parallel_policy_cache;

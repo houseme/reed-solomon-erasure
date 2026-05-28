@@ -1,0 +1,103 @@
+extern crate alloc;
+
+mod codec;
+mod encode;
+mod leopard;
+pub(crate) mod leopard_gf8;
+mod metrics;
+mod options;
+#[cfg(feature = "std")]
+mod parallel;
+mod reconstruct;
+mod shard_by_shard;
+mod verify;
+mod workspace;
+
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+
+use hashlink::LruCache;
+#[cfg(feature = "std")]
+use parking_lot::Mutex;
+#[cfg(not(feature = "std"))]
+use spin::Mutex;
+
+use crate::matrix::Matrix;
+use crate::Field;
+
+use leopard::FamilyState;
+
+pub use metrics::{ReconstructionCacheAnalysis, ReconstructionCacheStats, RuntimeProfileStats};
+pub use options::{CodecFamily, CodecOptions, MatrixMode};
+#[cfg(feature = "std")]
+pub use parallel::{PARALLEL_POLICY_VERSION, ParallelDecision, ParallelPolicy};
+#[cfg(feature = "std")]
+pub(crate) use parallel::RuntimeParallelPolicyCache;
+pub use shard_by_shard::ShardByShard;
+pub use workspace::VerifyWorkspace;
+
+#[cfg(feature = "std")]
+use metrics::{ReconstructionCacheMetrics, RuntimeProfileMetrics};
+
+pub(crate) const DATA_DECODE_MATRIX_CACHE_MIN_CAPACITY: usize = 128;
+pub(crate) const DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY: usize = 4096;
+pub(crate) const CODE_SLICE_MIN_CHUNK_BYTES: usize = 16 * 1024;
+pub(crate) const CODE_SLICE_DEFAULT_CHUNK_BYTES: usize = 64 * 1024;
+pub(crate) const CODE_SLICE_LARGE_CHUNK_BYTES: usize = 256 * 1024;
+pub(crate) const VERIFY_INLINE_SCRATCH_ELEMS: usize = 4 * 1024;
+#[cfg(feature = "std")]
+pub(crate) const PARALLEL_MIN_SHARD_BYTES: usize = 256 * 1024;
+
+#[derive(Debug)]
+pub struct ReedSolomon<F: Field> {
+    data_shard_count: usize,
+    parity_shard_count: usize,
+    total_shard_count: usize,
+    codec_family: CodecFamily,
+    pub(crate) family_state: FamilyState<F>,
+    matrix: Matrix<F>,
+    options: CodecOptions,
+    #[cfg(feature = "std")]
+    pub(crate) policy_cache: RuntimeParallelPolicyCache,
+    data_decode_matrix_cache: Mutex<LruCache<Vec<usize>, Arc<Matrix<F>>>>,
+    #[cfg(feature = "std")]
+    reconstruction_cache_metrics: ReconstructionCacheMetrics,
+    #[cfg(feature = "std")]
+    runtime_profile_metrics: RuntimeProfileMetrics,
+}
+
+impl<F: Field> Clone for ReedSolomon<F> {
+    fn clone(&self) -> ReedSolomon<F> {
+        match ReedSolomon::with_options(
+            self.data_shard_count,
+            self.parity_shard_count,
+            self.options,
+        ) {
+            Ok(codec) => codec,
+            Err(_) => panic!("existing codec invariants must produce a valid clone"),
+        }
+    }
+}
+
+impl<F: Field> PartialEq for ReedSolomon<F> {
+    fn eq(&self, rhs: &ReedSolomon<F>) -> bool {
+        self.data_shard_count == rhs.data_shard_count
+            && self.parity_shard_count == rhs.parity_shard_count
+            && self.codec_family == rhs.codec_family
+    }
+}
+
+impl<F: Field> ReedSolomon<F> {
+    pub(crate) fn ensure_classic_family_execution(&self) -> Result<(), crate::Error> {
+        match self.family_state {
+            FamilyState::Classic => Ok(()),
+            FamilyState::LeopardGF8(_) | FamilyState::LeopardGF16 => {
+                Err(crate::Error::UnsupportedLeopardPrototype)
+            }
+        }
+    }
+
+    pub(crate) fn is_leopard_gf8_family(&self) -> bool {
+        matches!(self.family_state, FamilyState::LeopardGF8(_))
+    }
+}

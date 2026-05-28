@@ -93,6 +93,120 @@ fn main () {
 For repeated verify calls, prefer `verify_with_workspace` or `verify_with_buffer`
 over plain `verify`, so the parity scratch buffer can be reused across calls.
 
+For SIMD-sensitive workloads on `galois_8`, you can allocate 64-byte aligned shards with
+`reed_solomon_erasure::galois_8::alloc_aligned_shards(...)` or `galois_8::ReedSolomon::alloc_aligned(...)`.
+These helpers return `AlignedShard` buffers that implement `AsRef<[u8]>` and `AsMut<[u8]>`, so they can be passed
+directly to the existing encode/verify APIs without changing codec output semantics.
+
+## Codec Families
+
+`CodecOptions::codec_family` makes the algorithm family explicit:
+
+- `CodecFamily::Classic`
+  - default family
+  - preserves the crate's current classic behavior and compatibility assumptions
+- `CodecFamily::LeopardGF8`
+  - reserved for an explicit high-shard-count Leopard GF(2^8) family
+  - can now be constructed as an explicit internal-family prototype
+  - exposes setup metadata such as `leopard_setup_matrix_shape()`
+  - `encode(...)`, `encode_sep(...)`, and `encode_opt(...)` are now wired to an explicit family-specific prototype path
+  - `verify`, `reconstruct`, `update`, and `decode_idx` still return `Error::UnsupportedLeopardPrototype`
+- `CodecFamily::LeopardGF16`
+  - reserved for a future Leopard GF(2^16) family
+  - currently exposed only as a prototype skeleton and returns `Error::UnsupportedLeopardPrototype`
+
+This means classic users do not silently switch families. Any future Leopard use will stay opt-in.
+
+## Matrix Modes
+
+`CodecOptions::matrix_mode` now supports multiple real matrix families:
+
+- `MatrixMode::Vandermonde`
+  - default mode
+  - preserves the crate's classic output behavior
+- `MatrixMode::Cauchy`
+  - alternative coding matrix
+  - output is not compatible with the default mode
+- `MatrixMode::JerasureLike`
+  - alternative coding matrix inspired by Jerasure-style layout
+  - output is not compatible with the default mode
+- `MatrixMode::Custom`
+  - requires explicit parity rows through `ReedSolomon::with_custom_matrix(...)`
+  - `with_options(... MatrixMode::Custom ...)` without matrix payload returns `Error::InvalidCustomMatrix`
+
+If you need compatibility with existing classic Reed-Solomon payloads or MinIO-oriented classic output expectations,
+stay on `MatrixMode::Vandermonde`.
+
+Minimal `with_custom_matrix(...)` example:
+
+```rust
+use reed_solomon_erasure::{CodecOptions, galois_8::ReedSolomon};
+
+// Example custom parity rows for 3 data shards and 2 parity shards.
+// These rows define the parity part of the generator matrix.
+let custom_rows = vec![vec![1u8, 1, 1], vec![1u8, 2, 4]];
+
+let custom = ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default()).unwrap();
+
+let mut shards = vec![
+    vec![1u8, 2, 3, 4],
+    vec![5u8, 6, 7, 8],
+    vec![9u8, 10, 11, 12],
+    vec![0u8; 4],
+    vec![0u8; 4],
+];
+custom.encode(&mut shards).unwrap();
+assert!(custom.verify(&shards).unwrap());
+```
+
+## Progressive Decode
+
+For multi-step recovery flows, `decode_idx(...)` lets you accumulate reconstruction contributions as input shards
+arrive instead of requiring a one-shot `reconstruct(...)` call:
+
+```rust
+use reed_solomon_erasure::galois_8::ReedSolomon;
+
+let rs = ReedSolomon::new(5, 3).unwrap();
+
+let mut shards = vec![
+    vec![1u8, 2, 3, 4],
+    vec![5u8, 6, 7, 8],
+    vec![9u8, 10, 11, 12],
+    vec![13u8, 14, 15, 16],
+    vec![17u8, 18, 19, 20],
+    vec![0u8; 4],
+    vec![0u8; 4],
+    vec![0u8; 4],
+];
+rs.encode(&mut shards).unwrap();
+
+// Reconstruct shards 1 and 4 incrementally.
+let mut dst = vec![None; 8];
+dst[1] = Some(vec![0u8; 4]);
+dst[4] = Some(vec![0u8; 4]);
+
+// Positions marked `true` are expected to arrive as input across calls.
+let expect_input = vec![true, false, true, true, false, true, true, false];
+
+let mut first_input = vec![None; 8];
+first_input[0] = Some(shards[0].clone());
+first_input[2] = Some(shards[2].clone());
+rs.decode_idx(&mut dst, Some(&expect_input), &first_input).unwrap();
+
+let mut second_input = vec![None; 8];
+second_input[3] = Some(shards[3].clone());
+second_input[5] = Some(shards[5].clone());
+second_input[6] = Some(shards[6].clone());
+rs.decode_idx(&mut dst, Some(&expect_input), &second_input).unwrap();
+
+assert_eq!(dst[1].as_deref(), Some(shards[1].as_slice()));
+assert_eq!(dst[4].as_deref(), Some(shards[4].as_slice()));
+```
+
+`decode_idx(...)` also supports a merge mode by passing `expect_input = None`, which XOR-accumulates another partial
+decode result into the destination buffers.
+
 ## Benchmark it yourself
 You can test performance under different configurations quickly (e.g. data parity shards ratio, parallel parameters)
 with standard `cargo bench` command.
