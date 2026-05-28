@@ -6,6 +6,10 @@ use smallvec::SmallVec;
 use spin::Once;
 
 use crate::errors::Error;
+#[cfg(feature = "std")]
+use std::sync::atomic::Ordering;
+#[cfg(feature = "std")]
+use std::sync::atomic::AtomicUsize;
 
 use super::leopard::validate_leopard_shard_len;
 
@@ -14,6 +18,7 @@ const ORDER8: usize = 1 << BITWIDTH8;
 const MODULUS8: usize = ORDER8 - 1;
 const POLYNOMIAL8: usize = 0x11D;
 pub(crate) const WORK_SIZE8: usize = 32 << 10;
+const WORK_SIZE8_HIGH_FANOUT: usize = 128 << 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Mul8Lut {
@@ -40,11 +45,50 @@ pub(crate) struct LeopardGf8EncodeDriver {
     pub(crate) skew_offset: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Stage4Block {
+    r: usize,
+    dist: usize,
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Stage2Block {
+    dist: usize,
+    log_m: u8,
+}
+
 #[derive(Debug)]
 pub(crate) struct FlatWork {
     lanes: usize,
     lane_len: usize,
     buf: Box<[u8]>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Default)]
+pub(crate) struct LeopardGf8ProfileMetrics {
+    encode_calls: AtomicUsize,
+    encode_chunks: AtomicUsize,
+    encode_full_groups: AtomicUsize,
+    encode_remainder_groups: AtomicUsize,
+    encode_later_group_calls: AtomicUsize,
+    fft_stage_calls: AtomicUsize,
+    ifft_stage_calls: AtomicUsize,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LeopardGf8ProfileStats {
+    pub encode_calls: usize,
+    pub encode_chunks: usize,
+    pub encode_full_groups: usize,
+    pub encode_remainder_groups: usize,
+    pub encode_later_group_calls: usize,
+    pub fft_stage_calls: usize,
+    pub ifft_stage_calls: usize,
 }
 
 impl FlatWork {
@@ -102,9 +146,43 @@ impl FlatWork {
 
 static TABLES8: Once<LeopardGf8Tables> = Once::new();
 const LEOPARD_GF8_XOR_CLONE_ENV: &str = "RSE_LEOPARD_GF8_XOR_CLONE";
+#[cfg(feature = "std")]
+static PROFILE8: LeopardGf8ProfileMetrics = LeopardGf8ProfileMetrics {
+    encode_calls: AtomicUsize::new(0),
+    encode_chunks: AtomicUsize::new(0),
+    encode_full_groups: AtomicUsize::new(0),
+    encode_remainder_groups: AtomicUsize::new(0),
+    encode_later_group_calls: AtomicUsize::new(0),
+    fft_stage_calls: AtomicUsize::new(0),
+    ifft_stage_calls: AtomicUsize::new(0),
+};
 
 pub(crate) fn init_leopard_gf8_tables() -> &'static LeopardGf8Tables {
     TABLES8.call_once(build_tables8)
+}
+
+#[cfg(feature = "std")]
+pub(crate) fn leopard_gf8_profile_stats() -> LeopardGf8ProfileStats {
+    LeopardGf8ProfileStats {
+        encode_calls: PROFILE8.encode_calls.load(Ordering::Relaxed),
+        encode_chunks: PROFILE8.encode_chunks.load(Ordering::Relaxed),
+        encode_full_groups: PROFILE8.encode_full_groups.load(Ordering::Relaxed),
+        encode_remainder_groups: PROFILE8.encode_remainder_groups.load(Ordering::Relaxed),
+        encode_later_group_calls: PROFILE8.encode_later_group_calls.load(Ordering::Relaxed),
+        fft_stage_calls: PROFILE8.fft_stage_calls.load(Ordering::Relaxed),
+        ifft_stage_calls: PROFILE8.ifft_stage_calls.load(Ordering::Relaxed),
+    }
+}
+
+#[cfg(feature = "std")]
+pub(crate) fn reset_leopard_gf8_profile_stats() {
+    PROFILE8.encode_calls.store(0, Ordering::Relaxed);
+    PROFILE8.encode_chunks.store(0, Ordering::Relaxed);
+    PROFILE8.encode_full_groups.store(0, Ordering::Relaxed);
+    PROFILE8.encode_remainder_groups.store(0, Ordering::Relaxed);
+    PROFILE8.encode_later_group_calls.store(0, Ordering::Relaxed);
+    PROFILE8.fft_stage_calls.store(0, Ordering::Relaxed);
+    PROFILE8.ifft_stage_calls.store(0, Ordering::Relaxed);
 }
 
 pub(crate) fn build_leopard_gf8_encode_driver(
@@ -119,15 +197,119 @@ pub(crate) fn build_leopard_gf8_encode_driver(
     let mtrunc = core::cmp::min(data_shards, m);
     let last_count = data_shards % m;
 
+    let total_shards = data_shards.saturating_add(parity_shards);
+    let chunk_size = if total_shards >= 192 && shard_size >= WORK_SIZE8_HIGH_FANOUT {
+        WORK_SIZE8_HIGH_FANOUT
+    } else {
+        WORK_SIZE8
+    };
+
     Ok(LeopardGf8EncodeDriver {
         shard_size,
         m,
         mtrunc,
         last_count,
-        chunk_size: WORK_SIZE8,
+        chunk_size,
         work_slices: m * 2,
         skew_offset: m.saturating_sub(1),
     })
+}
+
+fn build_fft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8; MODULUS8]) -> (Vec<Stage4Block>, Option<Stage2Block>) {
+    let mut blocks = Vec::new();
+    let mut dist4 = m;
+    let mut dist = m >> 2;
+    while dist != 0 {
+        let mut r = 0usize;
+        while r < mtrunc {
+            let i_end = r + dist;
+            blocks.push(Stage4Block {
+                r,
+                dist,
+                log_m01: skew_lut[i_end - 1],
+                log_m02: skew_lut[i_end + dist - 1],
+                log_m23: skew_lut[i_end + dist * 2 - 1],
+            });
+            r += dist4;
+        }
+        dist4 = dist;
+        dist >>= 2;
+    }
+
+    let final_stage = if dist4 == 2 {
+        Some(Stage2Block {
+            dist: 1,
+            log_m: skew_lut[0],
+        })
+    } else {
+        None
+    };
+
+    (blocks, final_stage)
+}
+
+fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> (Vec<Stage4Block>, Option<Stage2Block>) {
+    let mut blocks = Vec::new();
+    let mut dist = 1usize;
+    let mut dist4 = 4usize;
+
+    if dist4 <= m {
+        let full_groups = mtrunc & !3usize;
+        let mut r = 0usize;
+        while r < full_groups {
+            let i_end = r + dist;
+            blocks.push(Stage4Block {
+                r,
+                dist,
+                log_m01: skew_lut[i_end],
+                log_m02: skew_lut[i_end + dist],
+                log_m23: skew_lut[i_end + dist * 2],
+            });
+            r += dist4;
+        }
+
+        if full_groups < mtrunc {
+            let r = full_groups;
+            let i_end = r + dist;
+            blocks.push(Stage4Block {
+                r,
+                dist,
+                log_m01: skew_lut[i_end],
+                log_m02: skew_lut[i_end + dist],
+                log_m23: skew_lut[i_end + dist * 2],
+            });
+        }
+
+        dist = dist4;
+        dist4 <<= 2;
+        while dist4 <= m {
+            let mut r = 0usize;
+            while r < mtrunc {
+                let i_end = r + dist;
+                blocks.push(Stage4Block {
+                    r,
+                    dist,
+                    log_m01: skew_lut[i_end],
+                    log_m02: skew_lut[i_end + dist],
+                    log_m23: skew_lut[i_end + dist * 2],
+                });
+                r += dist4;
+            }
+            dist = dist4;
+            dist4 <<= 2;
+        }
+    }
+
+    let final_stage = if dist < m {
+        Some(Stage2Block {
+            dist,
+            log_m: skew_lut[dist],
+        })
+    } else {
+        None
+    };
+
+    (blocks, final_stage)
 }
 
 pub(crate) fn encode_skeleton<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
@@ -144,28 +326,7 @@ pub(crate) fn encode_skeleton<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
         .first()
         .map(|shard| shard.as_ref().len())
         .ok_or(Error::TooFewShards)?;
-    let driver = build_leopard_gf8_encode_driver(data_shards, parity_shards, shard_size)?;
-
-    let chunk_cap = core::cmp::min(shard_size, WORK_SIZE8);
-    let mut work = vec![vec![0u8; chunk_cap]; driver.work_slices];
-    let mut shard_views = vec![&[][..]; data_shards + parity_shards];
-    let mut offset = 0usize;
-
-    while offset < shard_size {
-        let end = core::cmp::min(offset + driver.chunk_size, shard_size);
-        for (idx, shard) in data.iter().enumerate() {
-            shard_views[idx] = &shard.as_ref()[offset..end];
-        }
-        for (idx, shard) in parity.iter().enumerate() {
-            shard_views[data_shards + idx] = &shard.as_ref()[offset..end];
-        }
-        for slice in &mut work {
-            slice.resize(end - offset, 0);
-        }
-        offset = end;
-    }
-
-    Ok(driver)
+    build_leopard_gf8_encode_driver(data_shards, parity_shards, shard_size)
 }
 
 pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
@@ -175,11 +336,16 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
     parity: &mut [U],
 ) -> Result<LeopardGf8EncodeDriver, Error> {
     let tables = init_leopard_gf8_tables();
-    let driver = encode_skeleton(data_shards, parity_shards, data, parity)?;
-
-    for output in parity.iter_mut() {
-        output.as_mut().fill(0);
+    if data.len() != data_shards || parity.len() != parity_shards {
+        return Err(Error::TooFewShards);
     }
+    #[cfg(feature = "std")]
+    PROFILE8.encode_calls.fetch_add(1, Ordering::Relaxed);
+    let shard_size = data
+        .first()
+        .map(|shard| shard.as_ref().len())
+        .ok_or(Error::TooFewShards)?;
+    let driver = build_leopard_gf8_encode_driver(data_shards, parity_shards, shard_size)?;
 
     let chunk_cap = core::cmp::min(driver.shard_size, driver.chunk_size);
     let mut flat_work = FlatWork::new(driver.work_slices, chunk_cap);
@@ -187,6 +353,8 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
     let mut offset = 0usize;
 
     while offset < driver.shard_size {
+        #[cfg(feature = "std")]
+        PROFILE8.encode_chunks.fetch_add(1, Ordering::Relaxed);
         let end = core::cmp::min(offset + driver.chunk_size, driver.shard_size);
         let size = end - offset;
         let skew = &tables.fft_skew[driver.skew_offset..];
@@ -212,6 +380,8 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                 let mut group_offset = driver.m;
                 let mut skew_offset = driver.m;
                 while group_offset + driver.m <= data_shards {
+                    #[cfg(feature = "std")]
+                    PROFILE8.encode_later_group_calls.fetch_add(1, Ordering::Relaxed);
                     let (xor_dst, temp_work) = work[..work_size].split_at_mut(driver.m);
                     ifft_dit_encoder8(
                         &data[group_offset..],
@@ -231,6 +401,8 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                 }
 
                 if driver.last_count != 0 {
+                    #[cfg(feature = "std")]
+                    PROFILE8.encode_remainder_groups.fetch_add(1, Ordering::Relaxed);
                     let (xor_dst, temp_work) = work[..work_size].split_at_mut(driver.m);
                     ifft_dit_encoder8(
                         &data[group_offset..],
@@ -529,6 +701,35 @@ fn fft_dit4_at<W: AsMut<[u8]>>(
     let lut23 = &tables.mul_luts[log_m23 as usize].value;
     let lut02 = &tables.mul_luts[log_m02 as usize].value;
 
+    if base + dist * 4 <= work.len() {
+        let ptr = work.as_mut_ptr();
+        for i in 0..dist {
+            let a = base + i;
+            let b = a + dist;
+            let c = a + dist * 2;
+            let d = a + dist * 3;
+            // SAFETY: full 4-lane window is in-bounds and indices are distinct by construction.
+            unsafe {
+                let a_ref = (*ptr.add(a)).as_mut();
+                let c_ref = (*ptr.add(c)).as_mut();
+                fft_dit2_lut(a_ref, c_ref, log_m02, lut02);
+
+                let b_ref = (*ptr.add(b)).as_mut();
+                let d_ref = (*ptr.add(d)).as_mut();
+                fft_dit2_lut(b_ref, d_ref, log_m02, lut02);
+
+                let a_ref = (*ptr.add(a)).as_mut();
+                let b_ref = (*ptr.add(b)).as_mut();
+                fft_dit2_lut(a_ref, b_ref, log_m01, lut01);
+
+                let c_ref = (*ptr.add(c)).as_mut();
+                let d_ref = (*ptr.add(d)).as_mut();
+                fft_dit2_lut(c_ref, d_ref, log_m23, lut23);
+            }
+        }
+        return;
+    }
+
     for i in 0..dist {
         let a = base + i;
         let b = a + dist;
@@ -571,6 +772,35 @@ fn ifft_dit4_at<W: AsMut<[u8]>>(
     let lut01 = &tables.mul_luts[log_m01 as usize].value;
     let lut23 = &tables.mul_luts[log_m23 as usize].value;
     let lut02 = &tables.mul_luts[log_m02 as usize].value;
+
+    if base + dist * 4 <= work.len() {
+        let ptr = work.as_mut_ptr();
+        for i in 0..dist {
+            let a = base + i;
+            let b = a + dist;
+            let c = a + dist * 2;
+            let d = a + dist * 3;
+            // SAFETY: full 4-lane window is in-bounds and indices are distinct by construction.
+            unsafe {
+                let a_ref = (*ptr.add(a)).as_mut();
+                let b_ref = (*ptr.add(b)).as_mut();
+                ifft_dit2_lut(a_ref, b_ref, log_m01, lut01);
+
+                let c_ref = (*ptr.add(c)).as_mut();
+                let d_ref = (*ptr.add(d)).as_mut();
+                ifft_dit2_lut(c_ref, d_ref, log_m23, lut23);
+
+                let a_ref = (*ptr.add(a)).as_mut();
+                let c_ref = (*ptr.add(c)).as_mut();
+                ifft_dit2_lut(a_ref, c_ref, log_m02, lut02);
+
+                let b_ref = (*ptr.add(b)).as_mut();
+                let d_ref = (*ptr.add(d)).as_mut();
+                ifft_dit2_lut(b_ref, d_ref, log_m02, lut02);
+            }
+        }
+        return;
+    }
 
     for i in 0..dist {
         let a = base + i;
@@ -625,6 +855,8 @@ fn fft_dit8<W: AsMut<[u8]>>(
     skew_lut: &[u8; MODULUS8],
     tables: &LeopardGf8Tables,
 ) {
+    #[cfg(feature = "std")]
+    PROFILE8.fft_stage_calls.fetch_add(1, Ordering::Relaxed);
     let mut dist4 = m;
     let mut dist = m >> 2;
     while dist != 0 {
@@ -669,6 +901,8 @@ fn ifft_dit_encoder8<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     zero: &[u8],
     use_xor_clone: bool,
 ) {
+    #[cfg(feature = "std")]
+    PROFILE8.ifft_stage_calls.fetch_add(1, Ordering::Relaxed);
     let mut dist = 1usize;
     let mut dist4 = 4usize;
     let size = end - start;

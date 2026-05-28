@@ -56,8 +56,20 @@ pub use crate::core::ReconstructionCacheStats;
 pub use crate::core::ReedSolomon;
 #[cfg(feature = "std")]
 pub use crate::core::RuntimeProfileStats;
+#[cfg(feature = "std")]
+pub use crate::core::LeopardGf8ProfileStats;
 pub use crate::core::ShardByShard;
 pub use crate::core::VerifyWorkspace;
+
+#[cfg(feature = "std")]
+pub fn leopard_gf8_profile_stats() -> LeopardGf8ProfileStats {
+    crate::core::leopard_gf8_profile_stats()
+}
+
+#[cfg(feature = "std")]
+pub fn reset_leopard_gf8_profile_stats() {
+    crate::core::reset_leopard_gf8_profile_stats()
+}
 
 // TODO: Can be simplified once https://github.com/rust-lang/rfcs/issues/2505 is resolved
 #[cfg(not(feature = "std"))]

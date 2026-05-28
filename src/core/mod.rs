@@ -28,6 +28,9 @@ use crate::Field;
 use leopard::FamilyState;
 
 pub use metrics::{ReconstructionCacheAnalysis, ReconstructionCacheStats, RuntimeProfileStats};
+#[cfg(feature = "std")]
+pub use leopard_gf8::LeopardGf8ProfileStats;
+pub(crate) use leopard_gf8::{leopard_gf8_profile_stats, reset_leopard_gf8_profile_stats};
 pub use options::{CodecFamily, CodecOptions, MatrixMode};
 #[cfg(feature = "std")]
 pub use parallel::{PARALLEL_POLICY_VERSION, ParallelDecision, ParallelPolicy};
