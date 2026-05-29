@@ -229,7 +229,7 @@ fn test_leopard_gf8_prototype_is_explicit_but_not_executed_yet() {
     assert_eq!(Some((48, 32)), codec.leopard_setup_matrix_shape());
 
     let mut shards = make_random_shards!(1024, 48);
-    codec.encode(&mut shards).unwrap();
+    codec.encode_opt(&mut shards).unwrap();
     assert_eq!(
         Error::UnsupportedLeopardPrototype,
         codec.verify(&shards).unwrap_err()
@@ -301,7 +301,10 @@ fn test_leopard_gf8_encode_rejects_non_64_byte_shard_size() {
     .unwrap();
 
     let mut shards = make_random_shards!(1025, 48);
-    assert_eq!(Error::IncorrectShardSize, codec.encode(&mut shards).unwrap_err());
+    assert_eq!(
+        Error::IncorrectShardSize,
+        codec.encode_opt(&mut shards).unwrap_err()
+    );
 }
 
 #[test]
