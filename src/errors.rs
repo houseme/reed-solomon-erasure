@@ -191,8 +191,14 @@ mod tests {
 
     #[test]
     fn test_sbserror_to_string_is_okay() {
-        assert_eq!(alloc::format!("{}", SBSError::TooManyCalls), "Too many calls");
-        assert_eq!(alloc::format!("{}", SBSError::LeftoverShards), "Leftover shards");
+        assert_eq!(
+            alloc::format!("{}", SBSError::TooManyCalls),
+            "Too many calls"
+        );
+        assert_eq!(
+            alloc::format!("{}", SBSError::LeftoverShards),
+            "Leftover shards"
+        );
     }
 
     #[cfg(feature = "std")]

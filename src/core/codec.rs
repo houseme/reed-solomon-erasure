@@ -4,20 +4,20 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use hashlink::LruCache;
-use smallvec::SmallVec;
 #[cfg(feature = "std")]
 use parking_lot::Mutex;
+use smallvec::SmallVec;
 #[cfg(not(feature = "std"))]
 use spin::Mutex;
 
+use crate::Field;
 use crate::errors::Error;
 use crate::matrix::Matrix;
-use crate::Field;
 
 use super::{
-    CodecFamily, CodecOptions, MatrixMode, ReconstructionCacheMetrics, ReconstructionCacheStats,
-    ReedSolomon, RuntimeProfileMetrics, RuntimeProfileStats, DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY,
-    DATA_DECODE_MATRIX_CACHE_MIN_CAPACITY,
+    CodecFamily, CodecOptions, DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY,
+    DATA_DECODE_MATRIX_CACHE_MIN_CAPACITY, MatrixMode, ReconstructionCacheMetrics,
+    ReconstructionCacheStats, ReedSolomon, RuntimeProfileMetrics, RuntimeProfileStats,
 };
 
 impl<F: Field> ReedSolomon<F> {
@@ -33,7 +33,10 @@ impl<F: Field> ReedSolomon<F> {
         Self::recommended_inversion_cache_capacity(data_shards, parity_shards)
     }
 
-    pub(crate) fn derive_inversion_cache_capacity(data_shards: usize, parity_shards: usize) -> usize {
+    pub(crate) fn derive_inversion_cache_capacity(
+        data_shards: usize,
+        parity_shards: usize,
+    ) -> usize {
         let total_shards = data_shards.saturating_add(parity_shards);
         let heuristic = total_shards
             .saturating_mul(parity_shards.max(1))
@@ -87,10 +90,7 @@ impl<F: Field> ReedSolomon<F> {
         result
     }
 
-    pub(crate) fn build_jerasure_like_matrix(
-        data_shards: usize,
-        total_shards: usize,
-    ) -> Matrix<F> {
+    pub(crate) fn build_jerasure_like_matrix(data_shards: usize, total_shards: usize) -> Matrix<F> {
         let mut vm = Matrix::vandermonde(total_shards, data_shards);
 
         vm.set(0, 0, F::one());
@@ -299,10 +299,7 @@ impl<F: Field> ReedSolomon<F> {
         self.options.inversion_cache_capacity
     }
 
-    pub fn recommended_inversion_cache_capacity(
-        data_shards: usize,
-        parity_shards: usize,
-    ) -> usize {
+    pub fn recommended_inversion_cache_capacity(data_shards: usize, parity_shards: usize) -> usize {
         Self::derive_inversion_cache_capacity(data_shards, parity_shards)
     }
 

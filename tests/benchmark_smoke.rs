@@ -492,14 +492,16 @@ fn run_decode_idx_compare(case: BenchCase, iterations: usize) -> DecodeIdxCompar
         first_input[1] = Some(original[1].clone());
         first_input[3] = Some(original[3].clone());
         first_input[case.data_shards] = Some(original[case.data_shards].clone());
-        rs.decode_idx(&mut dst, Some(&expect_input), &first_input).unwrap();
+        rs.decode_idx(&mut dst, Some(&expect_input), &first_input)
+            .unwrap();
 
         let mut second_input = vec![None; case.data_shards + case.parity_shards];
         for idx in 4..case.data_shards {
             second_input[idx] = Some(original[idx].clone());
         }
         second_input[case.data_shards + 1] = Some(original[case.data_shards + 1].clone());
-        rs.decode_idx(&mut dst, Some(&expect_input), &second_input).unwrap();
+        rs.decode_idx(&mut dst, Some(&expect_input), &second_input)
+            .unwrap();
     }
     let decode_elapsed = decode_start.elapsed();
     let decode_ns_per_iter = decode_elapsed.as_nanos() as f64 / iterations as f64;
@@ -868,8 +870,16 @@ fn benchmark_update_vs_encode_10x4_1m_exports_results() {
         run_update_compare(case, 3, iterations),
         run_update_compare(case, 4, iterations),
     ];
-    assert!(results.iter().all(|result| result.throughput_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.speedup_vs_encode.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_encode.is_finite())
+    );
     write_update_compare_results(case, &results);
 }
 
@@ -887,8 +897,16 @@ fn benchmark_update_vs_encode_4x2_64k_exports_results() {
         run_update_compare(case, 3, iterations),
         run_update_compare(case, 4, iterations),
     ];
-    assert!(results.iter().all(|result| result.throughput_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.speedup_vs_encode.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_encode.is_finite())
+    );
     write_update_compare_results(case, &results);
 }
 
@@ -906,8 +924,16 @@ fn benchmark_update_vs_encode_32x16_1m_exports_results() {
         run_update_compare(case, 3, iterations),
         run_update_compare(case, 4, iterations),
     ];
-    assert!(results.iter().all(|result| result.throughput_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.speedup_vs_encode.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_encode.is_finite())
+    );
     write_update_compare_results(case, &results);
 }
 
@@ -925,8 +951,16 @@ fn benchmark_update_vs_encode_4x2_4m_exports_results() {
         run_update_compare(case, 3, iterations),
         run_update_compare(case, 4, iterations),
     ];
-    assert!(results.iter().all(|result| result.throughput_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.speedup_vs_encode.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_encode.is_finite())
+    );
     write_update_compare_results(case, &results);
 }
 
@@ -944,8 +978,16 @@ fn benchmark_update_vs_encode_10x4_4m_exports_results() {
         run_update_compare(case, 3, iterations),
         run_update_compare(case, 4, iterations),
     ];
-    assert!(results.iter().all(|result| result.throughput_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.speedup_vs_encode.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_encode.is_finite())
+    );
     write_update_compare_results(case, &results);
 }
 
@@ -963,8 +1005,16 @@ fn benchmark_update_vs_encode_32x16_4m_exports_results() {
         run_update_compare(case, 3, iterations),
         run_update_compare(case, 4, iterations),
     ];
-    assert!(results.iter().all(|result| result.throughput_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.speedup_vs_encode.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_encode.is_finite())
+    );
     write_update_compare_results(case, &results);
 }
 
@@ -1187,7 +1237,11 @@ fn benchmark_leopard_encode_ab_64x32_1m_exports_results() {
         run_leopard_encode_ab_variant(case, iterations, "reuse_zero_only", true, false, false),
         run_leopard_encode_ab_variant(case, iterations, "xor_clone_only", false, false, true),
     ];
-    assert!(results.iter().all(|result| result.throughput_mb_s.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
     write_leopard_encode_ab_results(case, &results);
 }
 
@@ -1202,9 +1256,7 @@ fn benchmark_leopard_encode_ab_64x32_1m_exports_results() {
 fn benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides() {
     use std::process::Command;
 
-    if std::env::var("RSE_BENCHMARK_SMOKE_CHILD_CHECK").as_deref()
-        == Ok("aarch64-neon-override")
-    {
+    if std::env::var("RSE_BENCHMARK_SMOKE_CHILD_CHECK").as_deref() == Ok("aarch64-neon-override") {
         println!("child_backend={}", backend());
         println!("child_backend_id={}", backend_id());
         println!("child_backend_kind={}", backend_kind());
@@ -1270,5 +1322,10 @@ fn benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides() {
     assert!(stdout.contains("child_backend_kind=RustSimd"), "{stdout}");
     assert!(stdout.contains("child_override_honored=true"), "{stdout}");
 
-    let _ = (neon_backend, neon_backend_id, neon_backend_kind, neon_honored);
+    let _ = (
+        neon_backend,
+        neon_backend_id,
+        neon_backend_kind,
+        neon_honored,
+    );
 }

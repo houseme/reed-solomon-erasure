@@ -86,7 +86,12 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
         );
         if XOR {
             let out_vec = unsafe { _mm256_loadu_si256(out_chunk.as_ptr().cast()) };
-            unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), _mm256_xor_si256(out_vec, product)) };
+            unsafe {
+                _mm256_storeu_si256(
+                    out_chunk.as_mut_ptr().cast(),
+                    _mm256_xor_si256(out_vec, product),
+                )
+            };
         } else {
             unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), product) };
         }

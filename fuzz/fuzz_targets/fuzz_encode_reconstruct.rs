@@ -43,8 +43,10 @@ fuzz_target!(|data: &[u8]| {
                 }
 
                 {
-                    let mut data_slices: Vec<_> =
-                        data.chunks_mut(shard_size).map(|shard| (shard, true)).collect();
+                    let mut data_slices: Vec<_> = data
+                        .chunks_mut(shard_size)
+                        .map(|shard| (shard, true))
+                        .collect();
                     let mut parity_slices: Vec<_> = parity_buffer
                         .chunks_mut(shard_size)
                         .map(|shard| (shard, true))
@@ -55,7 +57,8 @@ fuzz_target!(|data: &[u8]| {
                     slices.append(&mut parity_slices);
 
                     for i in 0..corrupt_count {
-                        let corrupt = (corrupt_index + i * interval) % (data_shards + parity_shards);
+                        let corrupt =
+                            (corrupt_index + i * interval) % (data_shards + parity_shards);
                         slices[corrupt].1 = false;
                         slices[corrupt].0.fill(0);
                     }
@@ -77,8 +80,10 @@ fuzz_target!(|data: &[u8]| {
                 }
 
                 {
-                    let mut data_slices: Vec<_> =
-                        data.chunks_mut(shard_size).map(|shard| (shard, true)).collect();
+                    let mut data_slices: Vec<_> = data
+                        .chunks_mut(shard_size)
+                        .map(|shard| (shard, true))
+                        .collect();
                     let mut parity_slices: Vec<_> = parity_buffer
                         .chunks_mut(shard_size)
                         .map(|shard| (shard, true))
@@ -89,7 +94,8 @@ fuzz_target!(|data: &[u8]| {
                     slices.append(&mut parity_slices);
 
                     for i in 0..corrupt_count {
-                        let corrupt = (corrupt_index + i * interval) % (data_shards + parity_shards);
+                        let corrupt =
+                            (corrupt_index + i * interval) % (data_shards + parity_shards);
                         slices[corrupt].1 = false;
                     }
 

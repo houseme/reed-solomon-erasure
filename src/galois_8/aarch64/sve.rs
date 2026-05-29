@@ -39,7 +39,7 @@ pub(crate) fn detect_sve_features() -> SveFeatureSet {
     feature = "std"
 ))]
 mod tests {
-    use super::{detect_sve_features, SveFeatureSet};
+    use super::{SveFeatureSet, detect_sve_features};
 
     #[test]
     fn test_detect_sve_features_stub_reports_unavailable() {

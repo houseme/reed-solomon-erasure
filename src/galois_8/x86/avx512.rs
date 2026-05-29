@@ -66,7 +66,8 @@ unsafe fn rust_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [
     };
 
     let (low_half, high_half) = super::load_table_halves(c);
-    let (low_tbl, high_tbl): (__m512i, __m512i) = unsafe { load_tables_avx512(low_half, high_half) };
+    let (low_tbl, high_tbl): (__m512i, __m512i) =
+        unsafe { load_tables_avx512(low_half, high_half) };
     let nibble_mask: __m512i = _mm512_set1_epi8(0x0f);
 
     let bytes_done = input.len() & !63usize;
@@ -86,7 +87,12 @@ unsafe fn rust_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [
         );
         if XOR {
             let out_vec = unsafe { _mm512_loadu_si512(out_chunk.as_ptr().cast()) };
-            unsafe { _mm512_storeu_si512(out_chunk.as_mut_ptr().cast(), _mm512_xor_si512(out_vec, product)) };
+            unsafe {
+                _mm512_storeu_si512(
+                    out_chunk.as_mut_ptr().cast(),
+                    _mm512_xor_si512(out_vec, product),
+                )
+            };
         } else {
             unsafe { _mm512_storeu_si512(out_chunk.as_mut_ptr().cast(), product) };
         }

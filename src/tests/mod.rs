@@ -535,8 +535,8 @@ fn test_with_custom_matrix_roundtrips_and_uses_supplied_rows() {
         classic_matrix.get_row(4).to_vec(),
     ];
 
-    let custom = ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default())
-        .unwrap();
+    let custom =
+        ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default()).unwrap();
 
     let mut regular_shards = make_random_shards!(1024, 5);
     let mut custom_shards = regular_shards.clone();
@@ -579,7 +579,8 @@ fn test_update_with_no_changes_keeps_existing_parity() {
     let old_data_refs = data.iter().collect::<Vec<_>>();
     let mut parity_refs = parity.iter_mut().collect::<Vec<_>>();
 
-    r.update(&old_data_refs, &changes, &mut parity_refs).unwrap();
+    r.update(&old_data_refs, &changes, &mut parity_refs)
+        .unwrap();
     assert_eq!(original_parity, shards[4..].to_vec());
 }
 
@@ -622,7 +623,14 @@ fn test_update_matches_full_encode_for_multiple_changed_data_shards() {
     fill_random(&mut new_data[4]);
 
     let old_refs = old_data.iter().collect::<Vec<_>>();
-    let changes = vec![Some(&new_data[0]), None, None, None, Some(&new_data[4]), None];
+    let changes = vec![
+        Some(&new_data[0]),
+        None,
+        None,
+        None,
+        Some(&new_data[4]),
+        None,
+    ];
     let mut parity_refs = parity_only.iter_mut().collect::<Vec<_>>();
     r.update(&old_refs, &changes, &mut parity_refs).unwrap();
 
@@ -726,7 +734,10 @@ fn test_update_rejects_empty_old_data_shards() {
     let changes = vec![None, None];
     let mut parity = vec![vec![0u8; 0]];
 
-    assert_eq!(Error::EmptyShard, r.update(&old_data, &changes, &mut parity).unwrap_err());
+    assert_eq!(
+        Error::EmptyShard,
+        r.update(&old_data, &changes, &mut parity).unwrap_err()
+    );
 }
 
 #[test]
@@ -1175,14 +1186,18 @@ fn test_reconstruct_data_one_missing_skips_small_output_chunk_parallel_path() {
 #[cfg(feature = "std")]
 #[test]
 fn test_effective_parallel_policy_env_overrides() {
-    let policy = with_env_var("RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES", "131072", || {
-        with_env_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536", || {
-            with_env_var("RS_PARALLEL_POLICY_MAX_JOBS", "3", || {
-                let r = ReedSolomon::new(10, 4).unwrap();
-                r.effective_parallel_policy()
+    let policy = with_env_var(
+        "RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES",
+        "131072",
+        || {
+            with_env_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536", || {
+                with_env_var("RS_PARALLEL_POLICY_MAX_JOBS", "3", || {
+                    let r = ReedSolomon::new(10, 4).unwrap();
+                    r.effective_parallel_policy()
+                })
             })
-        })
-    });
+        },
+    );
 
     assert_eq!(131072, policy.min_parallel_shard_bytes);
     assert_eq!(65536, policy.min_bytes_per_job);
@@ -1261,7 +1276,10 @@ fn shard_index_pattern(data_shards: usize, indices: &[usize]) -> String {
 }
 
 #[cfg(feature = "std")]
-fn option_shards_with_missing(shards: &[Vec<u8>], missing_indices: &[usize]) -> Vec<Option<Vec<u8>>> {
+fn option_shards_with_missing(
+    shards: &[Vec<u8>],
+    missing_indices: &[usize],
+) -> Vec<Option<Vec<u8>>> {
     let mut working = shards_to_option_shards(shards);
     for &index in missing_indices {
         working[index] = None;
@@ -1813,7 +1831,13 @@ fn benchmark_parallel_helpers_quantify_gain() {
 fn benchmark_reconstruction_hotspots() {
     let results = vec![
         bench_reconstruct_data_hotspot(10, 4, 1024 * 1024, "reconstruct_data_missing_1_data", &[0]),
-        bench_reconstruct_data_hotspot(10, 4, 1024 * 1024, "reconstruct_data_missing_2_data", &[0, 2]),
+        bench_reconstruct_data_hotspot(
+            10,
+            4,
+            1024 * 1024,
+            "reconstruct_data_missing_2_data",
+            &[0, 2],
+        ),
         bench_reconstruct_data_hotspot(
             10,
             4,
@@ -1862,8 +1886,16 @@ fn benchmark_reconstruction_hotspots() {
         ),
     ];
 
-    assert!(results.iter().all(|result| result.baseline_mb_s.is_finite()));
-    assert!(results.iter().all(|result| result.candidate_mb_s.is_finite()));
+    assert!(
+        results
+            .iter()
+            .all(|result| result.baseline_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.candidate_mb_s.is_finite())
+    );
     assert!(results.iter().all(|result| result.speedup.is_finite()));
 
     write_reconstruction_hotspot_bench_results(&results);
@@ -2175,8 +2207,7 @@ fn test_encode_single_sep_par_matches_encode_single_sep() {
     let mut actual_parity = parity_src.to_vec();
 
     for (i, shard) in data.iter().enumerate().take(10) {
-        r.encode_single_sep(i, shard, &mut expected_parity)
-            .unwrap();
+        r.encode_single_sep(i, shard, &mut expected_parity).unwrap();
         r.encode_single_sep_par(i, shard, &mut actual_parity)
             .unwrap();
     }
@@ -2211,8 +2242,7 @@ fn test_encode_single_sep_opt_matches_encode_single_sep_for_small_shards() {
     assert!(!r.parallel_policy(8 * 1024, 4).use_parallel);
 
     for (i, shard) in data.iter().enumerate().take(10) {
-        r.encode_single_sep(i, shard, &mut expected_parity)
-            .unwrap();
+        r.encode_single_sep(i, shard, &mut expected_parity).unwrap();
         r.encode_single_sep_opt(i, shard, &mut actual_parity)
             .unwrap();
     }
@@ -2232,8 +2262,7 @@ fn test_encode_single_sep_opt_matches_encode_single_sep_for_large_shards() {
     assert!(r.parallel_policy(256 * 1024, 4).use_parallel);
 
     for (i, shard) in data.iter().enumerate().take(10) {
-        r.encode_single_sep(i, shard, &mut expected_parity)
-            .unwrap();
+        r.encode_single_sep(i, shard, &mut expected_parity).unwrap();
         r.encode_single_sep_opt(i, shard, &mut actual_parity)
             .unwrap();
     }
@@ -2424,7 +2453,9 @@ fn test_galois_8_verify_with_workspace_opt_matches_verify_with_buffer_opt() {
         .unwrap();
 
     let mut workspace = crate::VerifyWorkspace::new(&r, 256 * 1024);
-    let actual = r.verify_with_workspace_opt(&shards, &mut workspace).unwrap();
+    let actual = r
+        .verify_with_workspace_opt(&shards, &mut workspace)
+        .unwrap();
 
     assert_eq!(expected, actual);
 }
@@ -2566,13 +2597,15 @@ fn test_galois_8_decode_idx_progressive_matches_reconstruct_some() {
     let mut first_input = vec![None; 8];
     first_input[0] = Some(shards[0].clone());
     first_input[2] = Some(shards[2].clone());
-    r.decode_idx(&mut dst, Some(&expect_input), &first_input).unwrap();
+    r.decode_idx(&mut dst, Some(&expect_input), &first_input)
+        .unwrap();
 
     let mut second_input = vec![None; 8];
     second_input[3] = Some(shards[3].clone());
     second_input[5] = Some(shards[5].clone());
     second_input[6] = Some(shards[6].clone());
-    r.decode_idx(&mut dst, Some(&expect_input), &second_input).unwrap();
+    r.decode_idx(&mut dst, Some(&expect_input), &second_input)
+        .unwrap();
 
     assert_eq!(expected[1], dst[1]);
     assert_eq!(expected[4], dst[4]);
@@ -2593,7 +2626,8 @@ fn test_galois_8_decode_idx_merge_mode_accumulates_partial_results() {
     let mut input_a = vec![None; 8];
     input_a[0] = Some(shards[0].clone());
     input_a[2] = Some(shards[2].clone());
-    r.decode_idx(&mut partial_a, Some(&expect_input), &input_a).unwrap();
+    r.decode_idx(&mut partial_a, Some(&expect_input), &input_a)
+        .unwrap();
 
     let mut partial_b = vec![None; 8];
     partial_b[1] = Some(vec![0u8; shards[0].len()]);
@@ -2602,7 +2636,8 @@ fn test_galois_8_decode_idx_merge_mode_accumulates_partial_results() {
     input_b[3] = Some(shards[3].clone());
     input_b[5] = Some(shards[5].clone());
     input_b[6] = Some(shards[6].clone());
-    r.decode_idx(&mut partial_b, Some(&expect_input), &input_b).unwrap();
+    r.decode_idx(&mut partial_b, Some(&expect_input), &input_b)
+        .unwrap();
 
     r.decode_idx(&mut partial_a, None, &partial_b).unwrap();
 
@@ -2627,7 +2662,8 @@ fn test_galois_8_decode_idx_rejects_invalid_expect_input_length() {
 
     assert_eq!(
         Error::InvalidShardFlags,
-        r.decode_idx(&mut dst, Some(&[true, false]), &input).unwrap_err()
+        r.decode_idx(&mut dst, Some(&[true, false]), &input)
+            .unwrap_err()
     );
 }
 
@@ -2641,7 +2677,8 @@ fn test_galois_8_decode_idx_rejects_incorrect_dst_len() {
 
     assert_eq!(
         Error::TooFewShards,
-        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
+        r.decode_idx(&mut dst, Some(&expect_input), &input)
+            .unwrap_err()
     );
 }
 
@@ -2655,7 +2692,8 @@ fn test_galois_8_decode_idx_rejects_incorrect_input_len() {
 
     assert_eq!(
         Error::TooFewShards,
-        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
+        r.decode_idx(&mut dst, Some(&expect_input), &input)
+            .unwrap_err()
     );
 }
 
@@ -2671,7 +2709,8 @@ fn test_galois_8_decode_idx_rejects_shard_size_mismatch() {
 
     assert_eq!(
         Error::IncorrectShardSize,
-        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
+        r.decode_idx(&mut dst, Some(&expect_input), &input)
+            .unwrap_err()
     );
 }
 
@@ -2683,7 +2722,10 @@ fn test_galois_8_decode_idx_merge_mode_rejects_missing_dst_target() {
     let mut input = vec![None; 8];
     input[1] = Some(vec![1u8; 8]);
 
-    assert_eq!(Error::TooFewShards, r.decode_idx(&mut dst, None, &input).unwrap_err());
+    assert_eq!(
+        Error::TooFewShards,
+        r.decode_idx(&mut dst, None, &input).unwrap_err()
+    );
 }
 
 #[cfg(feature = "std")]
@@ -2697,7 +2739,8 @@ fn test_galois_8_decode_idx_rejects_too_few_expected_inputs() {
 
     assert_eq!(
         Error::TooFewShardsPresent,
-        r.decode_idx(&mut dst, Some(&expect_input), &input).unwrap_err()
+        r.decode_idx(&mut dst, Some(&expect_input), &input)
+            .unwrap_err()
     );
 }
 

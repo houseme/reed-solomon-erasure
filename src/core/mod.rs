@@ -22,20 +22,20 @@ use parking_lot::Mutex;
 #[cfg(not(feature = "std"))]
 use spin::Mutex;
 
-use crate::matrix::Matrix;
 use crate::Field;
+use crate::matrix::Matrix;
 
 use leopard::FamilyState;
 
-pub use metrics::{ReconstructionCacheAnalysis, ReconstructionCacheStats, RuntimeProfileStats};
 #[cfg(feature = "std")]
 pub use leopard_gf8::LeopardGf8ProfileStats;
 pub(crate) use leopard_gf8::{leopard_gf8_profile_stats, reset_leopard_gf8_profile_stats};
+pub use metrics::{ReconstructionCacheAnalysis, ReconstructionCacheStats, RuntimeProfileStats};
 pub use options::{CodecFamily, CodecOptions, MatrixMode};
 #[cfg(feature = "std")]
-pub use parallel::{PARALLEL_POLICY_VERSION, ParallelDecision, ParallelPolicy};
-#[cfg(feature = "std")]
 pub(crate) use parallel::RuntimeParallelPolicyCache;
+#[cfg(feature = "std")]
+pub use parallel::{PARALLEL_POLICY_VERSION, ParallelDecision, ParallelPolicy};
 pub use shard_by_shard::ShardByShard;
 pub use workspace::VerifyWorkspace;
 

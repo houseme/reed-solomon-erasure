@@ -64,7 +64,12 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
         );
         if XOR {
             let out_vec = unsafe { _mm_loadu_si128(out_chunk.as_ptr().cast()) };
-            unsafe { _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), _mm_xor_si128(out_vec, product)) };
+            unsafe {
+                _mm_storeu_si128(
+                    out_chunk.as_mut_ptr().cast(),
+                    _mm_xor_si128(out_vec, product),
+                )
+            };
         } else {
             unsafe { _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), product) };
         }

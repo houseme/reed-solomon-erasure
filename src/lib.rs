@@ -42,6 +42,8 @@ pub use crate::errors::SBSError;
 
 pub use crate::core::CodecFamily;
 pub use crate::core::CodecOptions;
+#[cfg(feature = "std")]
+pub use crate::core::LeopardGf8ProfileStats;
 pub use crate::core::MatrixMode;
 #[cfg(feature = "std")]
 pub use crate::core::PARALLEL_POLICY_VERSION;
@@ -56,8 +58,6 @@ pub use crate::core::ReconstructionCacheStats;
 pub use crate::core::ReedSolomon;
 #[cfg(feature = "std")]
 pub use crate::core::RuntimeProfileStats;
-#[cfg(feature = "std")]
-pub use crate::core::LeopardGf8ProfileStats;
 pub use crate::core::ShardByShard;
 pub use crate::core::VerifyWorkspace;
 
@@ -165,10 +165,7 @@ pub trait ReconstructShard<F: Field> {
 
     /// Get a mutable reference to the shard data, initializing it to the
     /// given length if it was `None`. Returns an error if initialization fails.
-    fn get_or_initialize(
-        &mut self,
-        len: usize,
-    ) -> ReconstructInitResult<'_, F>;
+    fn get_or_initialize(&mut self, len: usize) -> ReconstructInitResult<'_, F>;
 }
 
 impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]> + FromIterator<F::Elem>> ReconstructShard<F>
@@ -182,10 +179,7 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]> + FromIterator<F::Elem>> R
         self.as_mut().map(|x| x.as_mut())
     }
 
-    fn get_or_initialize(
-        &mut self,
-        len: usize,
-    ) -> ReconstructInitResult<'_, F> {
+    fn get_or_initialize(&mut self, len: usize) -> ReconstructInitResult<'_, F> {
         let is_some = self.is_some();
         let x = self
             .get_or_insert_with(|| ::core::iter::repeat_n(F::zero(), len).collect())
@@ -208,10 +202,7 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]>> ReconstructShard<F> for (
         if !self.1 { None } else { Some(self.0.as_mut()) }
     }
 
-    fn get_or_initialize(
-        &mut self,
-        len: usize,
-    ) -> ReconstructInitResult<'_, F> {
+    fn get_or_initialize(&mut self, len: usize) -> ReconstructInitResult<'_, F> {
         let x = self.0.as_mut();
         if x.len() == len {
             if self.1 { Ok(x) } else { Err(Ok(x)) }

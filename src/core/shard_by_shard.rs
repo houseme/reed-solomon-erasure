@@ -1,5 +1,5 @@
-use crate::errors::{Error, SBSError};
 use crate::Field;
+use crate::errors::{Error, SBSError};
 
 use super::ReedSolomon;
 

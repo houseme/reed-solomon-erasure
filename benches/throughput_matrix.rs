@@ -220,7 +220,8 @@ fn bench_leopard_encode(c: &mut Criterion, case: BenchCase) {
     let mut group = c.benchmark_group("throughput_matrix_leopard_encode");
     group.throughput(Throughput::Bytes(throughput.try_into().unwrap()));
     group.bench_function(name, |b| {
-        let mut shards = make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+        let mut shards =
+            make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
         b.iter(|| {
             rs.encode_opt(black_box(&mut shards)).unwrap();
         });
@@ -286,8 +287,12 @@ fn bench_update(c: &mut Criterion, case: BenchCase, changed_indices: &[usize], l
         b.iter(|| {
             let mut parity = original[case.data_shards..].to_vec();
             let mut parity_refs = parity.iter_mut().collect::<Vec<_>>();
-            rs.update(black_box(&old_refs), black_box(&changes), black_box(&mut parity_refs))
-                .unwrap();
+            rs.update(
+                black_box(&old_refs),
+                black_box(&changes),
+                black_box(&mut parity_refs),
+            )
+            .unwrap();
         });
     });
     group.finish();

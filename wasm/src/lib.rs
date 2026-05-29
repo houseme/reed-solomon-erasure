@@ -1,4 +1,4 @@
-use reed_solomon_erasure::{galois_8::ReedSolomon, Error};
+use reed_solomon_erasure::{Error, galois_8::ReedSolomon};
 use wasm_bindgen::prelude::*;
 
 #[global_allocator]

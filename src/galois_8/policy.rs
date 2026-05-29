@@ -80,7 +80,11 @@ impl crate::ReedSolomon<super::Field> {
                     let end = start + output_chunk.len();
                     super::mul_slice(matrix_row[0], &inputs[0][start..end], output_chunk);
                     for i_input in 1..inputs.len() {
-                        super::mul_slice_xor(matrix_row[i_input], &inputs[i_input][start..end], output_chunk);
+                        super::mul_slice_xor(
+                            matrix_row[i_input],
+                            &inputs[i_input][start..end],
+                            output_chunk,
+                        );
                     }
                 });
             return;
@@ -588,7 +592,11 @@ impl crate::ReedSolomon<super::Field> {
 
             let mut input_positions = smallvec::SmallVec::<[usize; 32]>::new();
             let mut input_refs = smallvec::SmallVec::<[&[u8]; 32]>::new();
-            for (col, &idx) in valid_indices.iter().take(self.data_shard_count()).enumerate() {
+            for (col, &idx) in valid_indices
+                .iter()
+                .take(self.data_shard_count())
+                .enumerate()
+            {
                 if let Some(shard) = input[idx].as_deref() {
                     input_positions.push(col);
                     input_refs.push(shard);
@@ -659,7 +667,10 @@ impl crate::ReedSolomon<super::Field> {
 }
 
 #[cfg(feature = "std")]
-fn reconstruct_parallel_policy_default(base: crate::ParallelPolicy, data_only: bool) -> crate::ParallelPolicy {
+fn reconstruct_parallel_policy_default(
+    base: crate::ParallelPolicy,
+    data_only: bool,
+) -> crate::ParallelPolicy {
     let data_only_min = parse_positive_env_usize(RS_RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES_ENV)
         .unwrap_or(RECONSTRUCT_DATA_MIN_PARALLEL_SHARD_BYTES);
     let full_min = parse_positive_env_usize(RS_RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES_ENV)
@@ -690,9 +701,7 @@ fn parse_positive_env_usize(name: &str) -> Option<usize> {
 }
 
 #[cfg(all(feature = "std", target_arch = "aarch64"))]
-fn reconstruct_policy_cache_aarch64(
-    base: crate::ParallelPolicy,
-) -> RuntimeParallelPolicyCache {
+fn reconstruct_policy_cache_aarch64(base: crate::ParallelPolicy) -> RuntimeParallelPolicyCache {
     let mut reconstruct_full_data = reconstruct_parallel_policy_default(base, false);
     if let Some(value) =
         parse_positive_env_usize(RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES_ENV)

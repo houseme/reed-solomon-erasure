@@ -4,10 +4,10 @@ use alloc::vec;
 
 use smallvec::SmallVec;
 
-use crate::errors::Error;
 use crate::Field;
+use crate::errors::Error;
 
-use super::{ReedSolomon, VerifyWorkspace, VERIFY_INLINE_SCRATCH_ELEMS};
+use super::{ReedSolomon, VERIFY_INLINE_SCRATCH_ELEMS, VerifyWorkspace};
 
 impl<F: Field> ReedSolomon<F> {
     fn check_some_slices_with_buffer<T, U>(

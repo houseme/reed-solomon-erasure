@@ -571,9 +571,21 @@ fn benchmark_small_file_matrix_runs_and_exports_results() {
     let cases = selected_small_file_cases();
 
     for case in cases {
-        results.push(run_operation(case, SmallFileOp::Standard(Operation::Encode), iterations));
-        results.push(run_operation(case, SmallFileOp::Standard(Operation::Verify), iterations));
-        results.push(run_operation(case, SmallFileOp::VerifyWithBuffer, iterations));
+        results.push(run_operation(
+            case,
+            SmallFileOp::Standard(Operation::Encode),
+            iterations,
+        ));
+        results.push(run_operation(
+            case,
+            SmallFileOp::Standard(Operation::Verify),
+            iterations,
+        ));
+        results.push(run_operation(
+            case,
+            SmallFileOp::VerifyWithBuffer,
+            iterations,
+        ));
         results.push(run_operation(
             case,
             SmallFileOp::Standard(Operation::Reconstruct),

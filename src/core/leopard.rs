@@ -2,9 +2,9 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+use crate::Field;
 use crate::errors::Error;
 use crate::matrix::Matrix;
-use crate::Field;
 
 use super::CodecFamily;
 
@@ -60,7 +60,9 @@ impl<F: Field> LeopardGF8Codec<F> {
     }
 
     pub(crate) fn setup_matrix(&self) -> &Matrix<F> {
-        unreachable!("LeopardGF8 prototype only keeps setup metadata, not an executable matrix handle")
+        unreachable!(
+            "LeopardGF8 prototype only keeps setup metadata, not an executable matrix handle"
+        )
     }
 
     pub(crate) fn setup_shape(&self) -> (usize, usize) {

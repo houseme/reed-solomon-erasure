@@ -1,12 +1,12 @@
 #[cfg(feature = "std")]
 use rayon::prelude::*;
 
-use crate::errors::Error;
 use crate::Field;
+use crate::errors::Error;
 
 use super::{
-    leopard, ReedSolomon, CODE_SLICE_DEFAULT_CHUNK_BYTES, CODE_SLICE_LARGE_CHUNK_BYTES,
-    CODE_SLICE_MIN_CHUNK_BYTES,
+    CODE_SLICE_DEFAULT_CHUNK_BYTES, CODE_SLICE_LARGE_CHUNK_BYTES, CODE_SLICE_MIN_CHUNK_BYTES,
+    ReedSolomon, leopard,
 };
 
 impl<F: Field> ReedSolomon<F> {
@@ -277,7 +277,10 @@ impl<F: Field> ReedSolomon<F> {
         self.options.fast_one_parity && self.parity_shard_count == 1
     }
 
-    pub(crate) fn encode_fast_one_parity<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+    pub(crate) fn encode_fast_one_parity<
+        T: AsRef<[F::Elem]>,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
+    >(
         &self,
         data: &[T],
         parity: &mut [U],
@@ -368,7 +371,12 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
-    pub fn update<T, U>(&self, old_data: &[T], new_data: &[Option<T>], parity: &mut [U]) -> Result<(), Error>
+    pub fn update<T, U>(
+        &self,
+        old_data: &[T],
+        new_data: &[Option<T>],
+        parity: &mut [U],
+    ) -> Result<(), Error>
     where
         T: AsRef<[F::Elem]>,
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,

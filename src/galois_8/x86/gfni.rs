@@ -210,7 +210,12 @@ unsafe fn rust_gfni_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mu
         let restored = _mm256_gf2p8affine_epi64_epi8(product, iso256, 0);
         if XOR {
             let out_vec = unsafe { _mm256_loadu_si256(out_chunk.as_ptr().cast()) };
-            unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), _mm256_xor_si256(out_vec, restored)) };
+            unsafe {
+                _mm256_storeu_si256(
+                    out_chunk.as_mut_ptr().cast(),
+                    _mm256_xor_si256(out_vec, restored),
+                )
+            };
         } else {
             unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), restored) };
         }
@@ -252,7 +257,12 @@ unsafe fn rust_gfni_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &
         let restored = _mm512_gf2p8affine_epi64_epi8::<0>(product, iso512);
         if XOR {
             let out_vec = unsafe { _mm512_loadu_si512(out_chunk.as_ptr().cast()) };
-            unsafe { _mm512_storeu_si512(out_chunk.as_mut_ptr().cast(), _mm512_xor_si512(out_vec, restored)) };
+            unsafe {
+                _mm512_storeu_si512(
+                    out_chunk.as_mut_ptr().cast(),
+                    _mm512_xor_si512(out_vec, restored),
+                )
+            };
         } else {
             unsafe { _mm512_storeu_si512(out_chunk.as_mut_ptr().cast(), restored) };
         }

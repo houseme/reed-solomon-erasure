@@ -591,7 +591,8 @@ impl<F: Field> ReedSolomon<F> {
                 .misses
                 .fetch_add(1, Ordering::Relaxed);
         }
-        let mut sub_matrix = crate::matrix::Matrix::new(self.data_shard_count, self.data_shard_count);
+        let mut sub_matrix =
+            crate::matrix::Matrix::new(self.data_shard_count, self.data_shard_count);
         for (sub_matrix_row, &valid_index) in valid_indices.iter().enumerate() {
             for c in 0..self.data_shard_count {
                 sub_matrix.set(sub_matrix_row, c, self.matrix.get(valid_index, c));

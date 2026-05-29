@@ -36,7 +36,8 @@ impl<F: Field> VerifyWorkspace<F> {
 
     pub fn resize(&mut self, codec: &ReedSolomon<F>, shard_len: usize) {
         if self.parity.len() < codec.parity_shard_count {
-            self.parity.reserve(codec.parity_shard_count - self.parity.len());
+            self.parity
+                .reserve(codec.parity_shard_count - self.parity.len());
             while self.parity.len() < codec.parity_shard_count {
                 self.parity.push(Vec::new());
             }

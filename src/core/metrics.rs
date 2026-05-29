@@ -1,7 +1,7 @@
-#[cfg(feature = "std")]
-use std::sync::atomic::Ordering;
 #[cfg(all(feature = "std", feature = "benchmark-metrics"))]
 use std::sync::atomic::AtomicUsize;
+#[cfg(feature = "std")]
+use std::sync::atomic::Ordering;
 
 #[cfg(feature = "std")]
 #[derive(Debug, Default)]
@@ -307,7 +307,11 @@ impl RuntimeProfileMetrics {
             .fetch_add(chunks, Ordering::Relaxed);
     }
 
-    pub(crate) fn record_code_some_small_output_chunk_parallel(&self, outputs: usize, chunks: usize) {
+    pub(crate) fn record_code_some_small_output_chunk_parallel(
+        &self,
+        outputs: usize,
+        chunks: usize,
+    ) {
         self.code_some_small_output_chunk_parallel_calls
             .fetch_add(1, Ordering::Relaxed);
         self.code_some_small_output_chunk_parallel_outputs

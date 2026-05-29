@@ -20,7 +20,8 @@ fn expected_backend_name(override_value: &str) -> Option<&str> {
 #[cfg(test)]
 #[allow(dead_code)]
 pub fn override_honored() -> bool {
-    let override_value = std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string());
+    let override_value =
+        std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string());
     match expected_backend_name(override_value.trim()) {
         Some(expected) => active_backend_name() == expected,
         None => true,
@@ -33,15 +34,14 @@ pub fn assert_backend_override_honored_if_strict() {
         return;
     }
 
-    let override_value = std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string());
+    let override_value =
+        std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string());
     if let Some(expected) = expected_backend_name(override_value.trim()) {
         let actual = active_backend_name();
         assert_eq!(
-            expected,
-            actual,
+            expected, actual,
             "requested backend override '{}' was not honored; actual backend was '{}'",
-            override_value,
-            actual
+            override_value, actual
         );
     }
 }
