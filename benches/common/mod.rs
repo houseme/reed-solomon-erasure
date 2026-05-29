@@ -192,6 +192,18 @@ pub const FULL_CASES: &[BenchCase] = &[
         label: "64x32_4m",
     },
     BenchCase {
+        data_shards: 96,
+        parity_shards: 48,
+        shard_size: 1024 * 1024,
+        label: "96x48_1m",
+    },
+    BenchCase {
+        data_shards: 96,
+        parity_shards: 48,
+        shard_size: 4 * 1024 * 1024,
+        label: "96x48_4m",
+    },
+    BenchCase {
         data_shards: 128,
         parity_shards: 64,
         shard_size: 1024 * 1024,

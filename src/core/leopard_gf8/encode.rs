@@ -12,9 +12,9 @@ use super::ops::{
 };
 use super::work::FlatWork;
 use super::{
-    FftDit8Plan, IfftDit8Plan, LEOPARD_GF8_XOR_CLONE_ENV, LeopardGf8EncodeDriver, LeopardGf8Tables,
-    MODULUS8, PROFILE8, build_fft_dit8_plan, build_ifft_dit8_plan, build_leopard_gf8_encode_driver,
-    init_leopard_gf8_tables,
+    FftDit8Plan, IfftDit8Plan, IfftProfilePhase, LEOPARD_GF8_XOR_CLONE_ENV,
+    LeopardGf8EncodeDriver, LeopardGf8Tables, MODULUS8, PROFILE8, build_fft_dit8_plan,
+    build_ifft_dit8_plan, build_leopard_gf8_encode_driver, init_leopard_gf8_tables,
 };
 
 pub(super) fn encode_skeleton<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
@@ -76,10 +76,8 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
             ));
         }
     }
-
     let chunk_cap = core::cmp::min(driver.shard_size, driver.chunk_size);
     let mut flat_work = FlatWork::new(driver.work_slices, chunk_cap);
-    let zero = vec![0u8; chunk_cap];
     let mut offset = 0usize;
 
     while offset < driver.shard_size {
@@ -87,7 +85,6 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
         PROFILE8.encode_chunks.fetch_add(1, Ordering::Relaxed);
         let end = core::cmp::min(offset + driver.chunk_size, driver.shard_size);
         let size = end - offset;
-        let zero_slice = &zero[..(end - offset)];
         let work_size = core::cmp::min(driver.m * 2, flat_work.lanes());
 
         flat_work.with_lane_views(work_size, size, |work| {
@@ -103,7 +100,7 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                 offset,
                 end,
                 tables,
-                zero_slice,
+                IfftProfilePhase::FirstGroup,
                 false,
             );
 
@@ -125,7 +122,7 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     offset,
                     end,
                     tables,
-                    zero_slice,
+                    IfftProfilePhase::LaterGroup,
                     false,
                 );
                 group_offset += driver.m;
@@ -145,13 +142,22 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     offset,
                     end,
                     tables,
-                    zero_slice,
+                    IfftProfilePhase::RemainderGroup,
                     false,
                 );
             }
 
             fft_dit8_with_plan(&mut work[..driver.m], &fft_plan, tables);
 
+            #[cfg(feature = "std")]
+            {
+                PROFILE8
+                    .output_writeback_calls
+                    .fetch_add(1, Ordering::Relaxed);
+                PROFILE8
+                    .output_writeback_bytes
+                    .fetch_add(parity.len() * size, Ordering::Relaxed);
+            }
             for (idx, output) in parity.iter_mut().enumerate() {
                 output.as_mut()[offset..end].copy_from_slice(&work[idx][..size]);
             }
@@ -310,6 +316,12 @@ fn ifft_dit4_at<W: AsMut<[u8]>>(
     }
 }
 
+fn zero_trailing_lanes<W: AsMut<[u8]>>(work: &mut [W], start_lane: usize, count: usize) {
+    for slot in work.iter_mut().skip(start_lane).take(count) {
+        slot.as_mut().fill(0);
+    }
+}
+
 fn fft_dit8_with_plan<W: AsMut<[u8]>>(
     work: &mut [W],
     plan: &FftDit8Plan,
@@ -352,11 +364,26 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     start: usize,
     end: usize,
     tables: &LeopardGf8Tables,
-    zero: &[u8],
+    phase: IfftProfilePhase,
     use_xor_clone: bool,
 ) {
     #[cfg(feature = "std")]
-    PROFILE8.ifft_stage_calls.fetch_add(1, Ordering::Relaxed);
+    {
+        PROFILE8.ifft_stage_calls.fetch_add(1, Ordering::Relaxed);
+        match phase {
+            IfftProfilePhase::FirstGroup => {
+                PROFILE8.first_group_ifft_calls.fetch_add(1, Ordering::Relaxed);
+            }
+            IfftProfilePhase::LaterGroup => {
+                PROFILE8.later_group_ifft_calls.fetch_add(1, Ordering::Relaxed);
+            }
+            IfftProfilePhase::RemainderGroup => {
+                PROFILE8
+                    .remainder_group_ifft_calls
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
     let size = end - start;
 
     if plan.initial_blocks.is_empty() {
@@ -364,8 +391,51 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
             slot.as_mut()
                 .copy_from_slice(&data[idx].as_ref()[start..end]);
         }
-        for slot in work.iter_mut().take(plan.m).skip(plan.mtrunc) {
-            slot.as_mut().fill(0);
+        #[cfg(feature = "std")]
+        {
+            PROFILE8
+                .input_copy_bytes
+                .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
+            match phase {
+                IfftProfilePhase::FirstGroup => {
+                    PROFILE8
+                        .first_group_input_copy_bytes
+                        .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
+                }
+                IfftProfilePhase::LaterGroup => {
+                    PROFILE8
+                        .later_group_input_copy_bytes
+                        .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
+                }
+                IfftProfilePhase::RemainderGroup => {
+                    PROFILE8
+                        .remainder_group_input_copy_bytes
+                        .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
+                }
+            }
+        }
+        zero_trailing_lanes(work, plan.mtrunc, plan.m - plan.mtrunc);
+        #[cfg(feature = "std")]
+        {
+            let bytes = (plan.m - plan.mtrunc) * size;
+            PROFILE8.zero_fill_bytes.fetch_add(bytes, Ordering::Relaxed);
+            match phase {
+                IfftProfilePhase::FirstGroup => {
+                    PROFILE8
+                        .first_group_zero_fill_bytes
+                        .fetch_add(bytes, Ordering::Relaxed);
+                }
+                IfftProfilePhase::LaterGroup => {
+                    PROFILE8
+                        .later_group_zero_fill_bytes
+                        .fetch_add(bytes, Ordering::Relaxed);
+                }
+                IfftProfilePhase::RemainderGroup => {
+                    PROFILE8
+                        .remainder_group_zero_fill_bytes
+                        .fetch_add(bytes, Ordering::Relaxed);
+                }
+            }
         }
     } else {
         for block in &plan.initial_blocks {
@@ -375,12 +445,56 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                     .as_mut()
                     .copy_from_slice(&data[block.r + i].as_ref()[start..end]);
             }
+            #[cfg(feature = "std")]
+            {
+                let bytes = available * size;
+                PROFILE8.input_copy_bytes.fetch_add(bytes, Ordering::Relaxed);
+                match phase {
+                    IfftProfilePhase::FirstGroup => {
+                        PROFILE8
+                            .first_group_input_copy_bytes
+                            .fetch_add(bytes, Ordering::Relaxed);
+                    }
+                    IfftProfilePhase::LaterGroup => {
+                        PROFILE8
+                            .later_group_input_copy_bytes
+                            .fetch_add(bytes, Ordering::Relaxed);
+                    }
+                    IfftProfilePhase::RemainderGroup => {
+                        PROFILE8
+                            .remainder_group_input_copy_bytes
+                            .fetch_add(bytes, Ordering::Relaxed);
+                    }
+                }
+            }
             for slot in work
                 .iter_mut()
                 .skip(block.r + available)
                 .take(4usize.saturating_sub(available))
             {
-                slot.as_mut().copy_from_slice(&zero[..size]);
+                slot.as_mut().fill(0);
+            }
+            #[cfg(feature = "std")]
+            {
+                let bytes = (4usize.saturating_sub(available)) * size;
+                PROFILE8.zero_fill_bytes.fetch_add(bytes, Ordering::Relaxed);
+                match phase {
+                    IfftProfilePhase::FirstGroup => {
+                        PROFILE8
+                            .first_group_zero_fill_bytes
+                            .fetch_add(bytes, Ordering::Relaxed);
+                    }
+                    IfftProfilePhase::LaterGroup => {
+                        PROFILE8
+                            .later_group_zero_fill_bytes
+                            .fetch_add(bytes, Ordering::Relaxed);
+                    }
+                    IfftProfilePhase::RemainderGroup => {
+                        PROFILE8
+                            .remainder_group_zero_fill_bytes
+                            .fetch_add(bytes, Ordering::Relaxed);
+                    }
+                }
             }
 
             ifft_dit4_at(
@@ -394,8 +508,28 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
             );
         }
 
-        for slot in work.iter_mut().take(plan.m).skip(plan.clear_start) {
-            slot.as_mut().fill(0);
+        zero_trailing_lanes(work, plan.clear_start, plan.m.saturating_sub(plan.clear_start));
+        #[cfg(feature = "std")]
+        {
+            let bytes = plan.m.saturating_sub(plan.clear_start) * size;
+            PROFILE8.zero_fill_bytes.fetch_add(bytes, Ordering::Relaxed);
+            match phase {
+                IfftProfilePhase::FirstGroup => {
+                    PROFILE8
+                        .first_group_zero_fill_bytes
+                        .fetch_add(bytes, Ordering::Relaxed);
+                }
+                IfftProfilePhase::LaterGroup => {
+                    PROFILE8
+                        .later_group_zero_fill_bytes
+                        .fetch_add(bytes, Ordering::Relaxed);
+                }
+                IfftProfilePhase::RemainderGroup => {
+                    PROFILE8
+                        .remainder_group_zero_fill_bytes
+                        .fetch_add(bytes, Ordering::Relaxed);
+                }
+            }
         }
 
         for block in &plan.later_blocks {
@@ -430,6 +564,23 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                 xor_dst[idx].as_mut().copy_from_slice(src);
                 continue;
             }
+            #[cfg(feature = "std")]
+            {
+                PROFILE8.xor_bytes.fetch_add(src.len(), Ordering::Relaxed);
+                match phase {
+                    IfftProfilePhase::LaterGroup => {
+                        PROFILE8
+                            .later_group_xor_bytes
+                            .fetch_add(src.len(), Ordering::Relaxed);
+                    }
+                    IfftProfilePhase::RemainderGroup => {
+                        PROFILE8
+                            .remainder_group_xor_bytes
+                            .fetch_add(src.len(), Ordering::Relaxed);
+                    }
+                    IfftProfilePhase::FirstGroup => {}
+                }
+            }
             slice_xor(src, xor_dst[idx].as_mut());
         }
     }
@@ -458,7 +609,6 @@ pub(super) fn ifft_dit_encoder8<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     start: usize,
     end: usize,
     tables: &LeopardGf8Tables,
-    zero: &[u8],
     use_xor_clone: bool,
 ) {
     let plan = build_ifft_dit8_plan(mtrunc, m, skew_lut);
@@ -470,7 +620,7 @@ pub(super) fn ifft_dit_encoder8<T: AsRef<[u8]>, W: AsMut<[u8]>>(
         start,
         end,
         tables,
-        zero,
+        IfftProfilePhase::FirstGroup,
         use_xor_clone,
     );
 }

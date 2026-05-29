@@ -63,6 +63,34 @@ struct LeopardEncodeAbResult {
     ns_per_iter: f64,
 }
 
+struct LeopardEncodeProfileResult {
+    throughput_mb_s: f64,
+    ns_per_iter: f64,
+    encode_calls: usize,
+    encode_chunks: usize,
+    encode_full_groups: usize,
+    encode_remainder_groups: usize,
+    encode_later_group_calls: usize,
+    fft_stage_calls: usize,
+    ifft_stage_calls: usize,
+    first_group_ifft_calls: usize,
+    later_group_ifft_calls: usize,
+    remainder_group_ifft_calls: usize,
+    first_group_input_copy_bytes: usize,
+    later_group_input_copy_bytes: usize,
+    remainder_group_input_copy_bytes: usize,
+    first_group_zero_fill_bytes: usize,
+    later_group_zero_fill_bytes: usize,
+    remainder_group_zero_fill_bytes: usize,
+    later_group_xor_bytes: usize,
+    remainder_group_xor_bytes: usize,
+    output_writeback_calls: usize,
+    input_copy_bytes: usize,
+    zero_fill_bytes: usize,
+    xor_bytes: usize,
+    output_writeback_bytes: usize,
+}
+
 const ARTIFACT_SCHEMA_VERSION: u32 = 1;
 
 fn git_revision() -> String {
@@ -671,6 +699,60 @@ fn run_leopard_encode(case: BenchCase, iterations: usize) -> LeopardEncodeResult
     }
 }
 
+fn run_leopard_encode_profile(case: BenchCase, iterations: usize) -> LeopardEncodeProfileResult {
+    let seed = derived_seed(Operation::LeopardEncode, case);
+    let bytes = (case.shard_size * case.data_shards) as f64;
+    let codec = ReedSolomon::with_options(
+        case.data_shards,
+        case.parity_shards,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    reed_solomon_erasure::reset_leopard_gf8_profile_stats();
+    let start = Instant::now();
+    for _ in 0..iterations {
+        let mut shards =
+            make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+        codec.encode_opt(&mut shards).unwrap();
+    }
+    let elapsed = start.elapsed();
+    let ns_per_iter = elapsed.as_nanos() as f64 / iterations as f64;
+    let throughput_mb_s = bytes / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0);
+    let stats = reed_solomon_erasure::leopard_gf8_profile_stats();
+
+    LeopardEncodeProfileResult {
+        throughput_mb_s,
+        ns_per_iter,
+        encode_calls: stats.encode_calls,
+        encode_chunks: stats.encode_chunks,
+        encode_full_groups: stats.encode_full_groups,
+        encode_remainder_groups: stats.encode_remainder_groups,
+        encode_later_group_calls: stats.encode_later_group_calls,
+        fft_stage_calls: stats.fft_stage_calls,
+        ifft_stage_calls: stats.ifft_stage_calls,
+        first_group_ifft_calls: stats.first_group_ifft_calls,
+        later_group_ifft_calls: stats.later_group_ifft_calls,
+        remainder_group_ifft_calls: stats.remainder_group_ifft_calls,
+        first_group_input_copy_bytes: stats.first_group_input_copy_bytes,
+        later_group_input_copy_bytes: stats.later_group_input_copy_bytes,
+        remainder_group_input_copy_bytes: stats.remainder_group_input_copy_bytes,
+        first_group_zero_fill_bytes: stats.first_group_zero_fill_bytes,
+        later_group_zero_fill_bytes: stats.later_group_zero_fill_bytes,
+        remainder_group_zero_fill_bytes: stats.remainder_group_zero_fill_bytes,
+        later_group_xor_bytes: stats.later_group_xor_bytes,
+        remainder_group_xor_bytes: stats.remainder_group_xor_bytes,
+        output_writeback_calls: stats.output_writeback_calls,
+        input_copy_bytes: stats.input_copy_bytes,
+        zero_fill_bytes: stats.zero_fill_bytes,
+        xor_bytes: stats.xor_bytes,
+        output_writeback_bytes: stats.output_writeback_bytes,
+    }
+}
+
 fn write_leopard_encode_results(case: BenchCase, result: &LeopardEncodeResult) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
     fs::create_dir_all(&dir).unwrap();
@@ -710,6 +792,105 @@ fn write_leopard_encode_results(case: BenchCase, result: &LeopardEncodeResult) {
         result.throughput_mb_s,
         result.ns_per_iter
     );
+    fs::write(&csv_path, csv).unwrap();
+
+    assert!(json_path.exists());
+    assert!(csv_path.exists());
+}
+
+fn write_leopard_encode_profile_result(case: BenchCase, result: &LeopardEncodeProfileResult) {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
+    fs::create_dir_all(&dir).unwrap();
+
+    let stem = format!("leopard-encode-profile-{}", case.label);
+    let json_path = dir.join(format!("{stem}.json"));
+    let csv_path = dir.join(format!("{stem}.csv"));
+
+    let json = format!(
+        concat!(
+            "{{\"schema_version\":{},\"artifact_kind\":\"leopard-encode-profile\",\"case\":\"{}\",",
+            "\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},",
+            "\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2},",
+            "\"encode_calls\":{},\"encode_chunks\":{},\"encode_full_groups\":{},\"encode_remainder_groups\":{},",
+            "\"encode_later_group_calls\":{},\"fft_stage_calls\":{},\"ifft_stage_calls\":{},",
+            "\"first_group_ifft_calls\":{},\"later_group_ifft_calls\":{},\"remainder_group_ifft_calls\":{},",
+            "\"first_group_input_copy_bytes\":{},\"later_group_input_copy_bytes\":{},\"remainder_group_input_copy_bytes\":{},",
+            "\"first_group_zero_fill_bytes\":{},\"later_group_zero_fill_bytes\":{},\"remainder_group_zero_fill_bytes\":{},",
+            "\"later_group_xor_bytes\":{},\"remainder_group_xor_bytes\":{},\"output_writeback_calls\":{},",
+            "\"input_copy_bytes\":{},\"zero_fill_bytes\":{},\"xor_bytes\":{},\"output_writeback_bytes\":{}}}"
+        ),
+        ARTIFACT_SCHEMA_VERSION,
+        case.label,
+        case.data_shards,
+        case.parity_shards,
+        case.shard_size,
+        result.throughput_mb_s,
+        result.ns_per_iter,
+        result.encode_calls,
+        result.encode_chunks,
+        result.encode_full_groups,
+        result.encode_remainder_groups,
+        result.encode_later_group_calls,
+        result.fft_stage_calls,
+        result.ifft_stage_calls,
+        result.first_group_ifft_calls,
+        result.later_group_ifft_calls,
+        result.remainder_group_ifft_calls,
+        result.first_group_input_copy_bytes,
+        result.later_group_input_copy_bytes,
+        result.remainder_group_input_copy_bytes,
+        result.first_group_zero_fill_bytes,
+        result.later_group_zero_fill_bytes,
+        result.remainder_group_zero_fill_bytes,
+        result.later_group_xor_bytes,
+        result.remainder_group_xor_bytes,
+        result.output_writeback_calls,
+        result.input_copy_bytes,
+        result.zero_fill_bytes,
+        result.xor_bytes,
+        result.output_writeback_bytes
+    );
+    fs::write(&json_path, json).unwrap();
+
+    let csv = [
+        "schema_version,artifact_kind,case,data_shards,parity_shards,shard_size,throughput_mb_s,ns_per_iter,encode_calls,encode_chunks,encode_full_groups,encode_remainder_groups,encode_later_group_calls,fft_stage_calls,ifft_stage_calls,first_group_ifft_calls,later_group_ifft_calls,remainder_group_ifft_calls,first_group_input_copy_bytes,later_group_input_copy_bytes,remainder_group_input_copy_bytes,first_group_zero_fill_bytes,later_group_zero_fill_bytes,remainder_group_zero_fill_bytes,later_group_xor_bytes,remainder_group_xor_bytes,output_writeback_calls,input_copy_bytes,zero_fill_bytes,xor_bytes,output_writeback_bytes".to_string(),
+        vec![
+            ARTIFACT_SCHEMA_VERSION.to_string(),
+            "leopard-encode-profile".to_string(),
+            case.label.to_string(),
+            case.data_shards.to_string(),
+            case.parity_shards.to_string(),
+            case.shard_size.to_string(),
+            format!("{:.4}", result.throughput_mb_s),
+            format!("{:.2}", result.ns_per_iter),
+            result.encode_calls.to_string(),
+            result.encode_chunks.to_string(),
+            result.encode_full_groups.to_string(),
+            result.encode_remainder_groups.to_string(),
+            result.encode_later_group_calls.to_string(),
+            result.fft_stage_calls.to_string(),
+            result.ifft_stage_calls.to_string(),
+            result.first_group_ifft_calls.to_string(),
+            result.later_group_ifft_calls.to_string(),
+            result.remainder_group_ifft_calls.to_string(),
+            result.first_group_input_copy_bytes.to_string(),
+            result.later_group_input_copy_bytes.to_string(),
+            result.remainder_group_input_copy_bytes.to_string(),
+            result.first_group_zero_fill_bytes.to_string(),
+            result.later_group_zero_fill_bytes.to_string(),
+            result.remainder_group_zero_fill_bytes.to_string(),
+            result.later_group_xor_bytes.to_string(),
+            result.remainder_group_xor_bytes.to_string(),
+            result.output_writeback_calls.to_string(),
+            result.input_copy_bytes.to_string(),
+            result.zero_fill_bytes.to_string(),
+            result.xor_bytes.to_string(),
+            result.output_writeback_bytes.to_string(),
+        ]
+        .join(","),
+    ]
+    .join("\n")
+        + "\n";
     fs::write(&csv_path, csv).unwrap();
 
     assert!(json_path.exists());
@@ -1199,6 +1380,45 @@ fn benchmark_leopard_encode_64x32_4m_exports_results() {
 }
 
 #[test]
+fn benchmark_leopard_encode_96x48_1m_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "96x48_1m")
+        .expect("96x48_1m full case must exist");
+    let iterations = smoke_iterations().max(2);
+    let result = run_leopard_encode(case, iterations);
+    assert!(result.throughput_mb_s.is_finite());
+    write_leopard_encode_results(case, &result);
+}
+
+#[test]
+fn benchmark_leopard_encode_profile_96x48_1m_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "96x48_1m")
+        .expect("96x48_1m full case must exist");
+    let iterations = smoke_iterations().max(2);
+    let result = run_leopard_encode_profile(case, iterations);
+    assert!(result.throughput_mb_s.is_finite());
+    write_leopard_encode_profile_result(case, &result);
+}
+
+#[test]
+fn benchmark_leopard_encode_96x48_4m_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "96x48_4m")
+        .expect("96x48_4m full case must exist");
+    let iterations = smoke_iterations().max(2);
+    let result = run_leopard_encode(case, iterations);
+    assert!(result.throughput_mb_s.is_finite());
+    write_leopard_encode_results(case, &result);
+}
+
+#[test]
 fn benchmark_leopard_encode_128x64_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1209,6 +1429,19 @@ fn benchmark_leopard_encode_128x64_1m_exports_results() {
     let result = run_leopard_encode(case, iterations);
     assert!(result.throughput_mb_s.is_finite());
     write_leopard_encode_results(case, &result);
+}
+
+#[test]
+fn benchmark_leopard_encode_profile_128x64_1m_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "128x64_1m")
+        .expect("128x64_1m full case must exist");
+    let iterations = smoke_iterations().max(2);
+    let result = run_leopard_encode_profile(case, iterations);
+    assert!(result.throughput_mb_s.is_finite());
+    write_leopard_encode_profile_result(case, &result);
 }
 
 #[test]

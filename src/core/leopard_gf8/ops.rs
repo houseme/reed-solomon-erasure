@@ -61,7 +61,92 @@ fn fwht2_alt8(a: u8, b: u8) -> (u8, u8) {
 
 pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
     assert_eq!(input.len(), out.len());
-    for (src, dst) in input.iter().zip(out.iter_mut()) {
+
+    let (input64, input_tail64) = input.as_chunks::<64>();
+    let (out64, out_tail64) = out.as_chunks_mut::<64>();
+
+    for (src, dst) in input64.iter().zip(out64.iter_mut()) {
+        dst[0] ^= src[0];
+        dst[1] ^= src[1];
+        dst[2] ^= src[2];
+        dst[3] ^= src[3];
+        dst[4] ^= src[4];
+        dst[5] ^= src[5];
+        dst[6] ^= src[6];
+        dst[7] ^= src[7];
+        dst[8] ^= src[8];
+        dst[9] ^= src[9];
+        dst[10] ^= src[10];
+        dst[11] ^= src[11];
+        dst[12] ^= src[12];
+        dst[13] ^= src[13];
+        dst[14] ^= src[14];
+        dst[15] ^= src[15];
+        dst[16] ^= src[16];
+        dst[17] ^= src[17];
+        dst[18] ^= src[18];
+        dst[19] ^= src[19];
+        dst[20] ^= src[20];
+        dst[21] ^= src[21];
+        dst[22] ^= src[22];
+        dst[23] ^= src[23];
+        dst[24] ^= src[24];
+        dst[25] ^= src[25];
+        dst[26] ^= src[26];
+        dst[27] ^= src[27];
+        dst[28] ^= src[28];
+        dst[29] ^= src[29];
+        dst[30] ^= src[30];
+        dst[31] ^= src[31];
+        dst[32] ^= src[32];
+        dst[33] ^= src[33];
+        dst[34] ^= src[34];
+        dst[35] ^= src[35];
+        dst[36] ^= src[36];
+        dst[37] ^= src[37];
+        dst[38] ^= src[38];
+        dst[39] ^= src[39];
+        dst[40] ^= src[40];
+        dst[41] ^= src[41];
+        dst[42] ^= src[42];
+        dst[43] ^= src[43];
+        dst[44] ^= src[44];
+        dst[45] ^= src[45];
+        dst[46] ^= src[46];
+        dst[47] ^= src[47];
+        dst[48] ^= src[48];
+        dst[49] ^= src[49];
+        dst[50] ^= src[50];
+        dst[51] ^= src[51];
+        dst[52] ^= src[52];
+        dst[53] ^= src[53];
+        dst[54] ^= src[54];
+        dst[55] ^= src[55];
+        dst[56] ^= src[56];
+        dst[57] ^= src[57];
+        dst[58] ^= src[58];
+        dst[59] ^= src[59];
+        dst[60] ^= src[60];
+        dst[61] ^= src[61];
+        dst[62] ^= src[62];
+        dst[63] ^= src[63];
+    }
+
+    let (input8, input_tail) = input_tail64.as_chunks::<8>();
+    let (out8, out_tail) = out_tail64.as_chunks_mut::<8>();
+
+    for (src, dst) in input8.iter().zip(out8.iter_mut()) {
+        dst[0] ^= src[0];
+        dst[1] ^= src[1];
+        dst[2] ^= src[2];
+        dst[3] ^= src[3];
+        dst[4] ^= src[4];
+        dst[5] ^= src[5];
+        dst[6] ^= src[6];
+        dst[7] ^= src[7];
+    }
+
+    for (src, dst) in input_tail.iter().zip(out_tail.iter_mut()) {
         *dst ^= *src;
     }
 }

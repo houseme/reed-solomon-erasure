@@ -16,9 +16,9 @@ pub(super) fn build_leopard_gf8_encode_driver(
     let m = ceil_pow2(parity_shards.max(1));
     let mtrunc = core::cmp::min(data_shards, m);
     let last_count = data_shards % m;
-
     let total_shards = data_shards.saturating_add(parity_shards);
-    let chunk_size = if total_shards >= 192 && shard_size >= WORK_SIZE8_HIGH_FANOUT {
+    let high_fanout_chunk = total_shards >= 192 || (total_shards >= 144 && last_count != 0);
+    let chunk_size = if high_fanout_chunk && shard_size >= WORK_SIZE8_HIGH_FANOUT {
         WORK_SIZE8_HIGH_FANOUT
     } else {
         WORK_SIZE8

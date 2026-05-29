@@ -82,6 +82,13 @@ struct IfftDit8Plan {
     final_stage: Option<Stage2Block>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IfftProfilePhase {
+    FirstGroup,
+    LaterGroup,
+    RemainderGroup,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct LeopardGf8ProfileMetrics {
     encode_calls: AtomicUsize,
@@ -91,6 +98,22 @@ pub(crate) struct LeopardGf8ProfileMetrics {
     encode_later_group_calls: AtomicUsize,
     fft_stage_calls: AtomicUsize,
     ifft_stage_calls: AtomicUsize,
+    first_group_ifft_calls: AtomicUsize,
+    later_group_ifft_calls: AtomicUsize,
+    remainder_group_ifft_calls: AtomicUsize,
+    first_group_input_copy_bytes: AtomicUsize,
+    later_group_input_copy_bytes: AtomicUsize,
+    remainder_group_input_copy_bytes: AtomicUsize,
+    first_group_zero_fill_bytes: AtomicUsize,
+    later_group_zero_fill_bytes: AtomicUsize,
+    remainder_group_zero_fill_bytes: AtomicUsize,
+    later_group_xor_bytes: AtomicUsize,
+    remainder_group_xor_bytes: AtomicUsize,
+    output_writeback_calls: AtomicUsize,
+    input_copy_bytes: AtomicUsize,
+    zero_fill_bytes: AtomicUsize,
+    xor_bytes: AtomicUsize,
+    output_writeback_bytes: AtomicUsize,
 }
 
 #[cfg(feature = "std")]
@@ -103,6 +126,22 @@ pub struct LeopardGf8ProfileStats {
     pub encode_later_group_calls: usize,
     pub fft_stage_calls: usize,
     pub ifft_stage_calls: usize,
+    pub first_group_ifft_calls: usize,
+    pub later_group_ifft_calls: usize,
+    pub remainder_group_ifft_calls: usize,
+    pub first_group_input_copy_bytes: usize,
+    pub later_group_input_copy_bytes: usize,
+    pub remainder_group_input_copy_bytes: usize,
+    pub first_group_zero_fill_bytes: usize,
+    pub later_group_zero_fill_bytes: usize,
+    pub remainder_group_zero_fill_bytes: usize,
+    pub later_group_xor_bytes: usize,
+    pub remainder_group_xor_bytes: usize,
+    pub output_writeback_calls: usize,
+    pub input_copy_bytes: usize,
+    pub zero_fill_bytes: usize,
+    pub xor_bytes: usize,
+    pub output_writeback_bytes: usize,
 }
 
 static TABLES8: Once<LeopardGf8Tables> = Once::new();
@@ -116,6 +155,22 @@ static PROFILE8: LeopardGf8ProfileMetrics = LeopardGf8ProfileMetrics {
     encode_later_group_calls: AtomicUsize::new(0),
     fft_stage_calls: AtomicUsize::new(0),
     ifft_stage_calls: AtomicUsize::new(0),
+    first_group_ifft_calls: AtomicUsize::new(0),
+    later_group_ifft_calls: AtomicUsize::new(0),
+    remainder_group_ifft_calls: AtomicUsize::new(0),
+    first_group_input_copy_bytes: AtomicUsize::new(0),
+    later_group_input_copy_bytes: AtomicUsize::new(0),
+    remainder_group_input_copy_bytes: AtomicUsize::new(0),
+    first_group_zero_fill_bytes: AtomicUsize::new(0),
+    later_group_zero_fill_bytes: AtomicUsize::new(0),
+    remainder_group_zero_fill_bytes: AtomicUsize::new(0),
+    later_group_xor_bytes: AtomicUsize::new(0),
+    remainder_group_xor_bytes: AtomicUsize::new(0),
+    output_writeback_calls: AtomicUsize::new(0),
+    input_copy_bytes: AtomicUsize::new(0),
+    zero_fill_bytes: AtomicUsize::new(0),
+    xor_bytes: AtomicUsize::new(0),
+    output_writeback_bytes: AtomicUsize::new(0),
 };
 
 pub(crate) fn init_leopard_gf8_tables() -> &'static LeopardGf8Tables {
@@ -132,6 +187,38 @@ pub(crate) fn leopard_gf8_profile_stats() -> LeopardGf8ProfileStats {
         encode_later_group_calls: PROFILE8.encode_later_group_calls.load(Ordering::Relaxed),
         fft_stage_calls: PROFILE8.fft_stage_calls.load(Ordering::Relaxed),
         ifft_stage_calls: PROFILE8.ifft_stage_calls.load(Ordering::Relaxed),
+        first_group_ifft_calls: PROFILE8.first_group_ifft_calls.load(Ordering::Relaxed),
+        later_group_ifft_calls: PROFILE8.later_group_ifft_calls.load(Ordering::Relaxed),
+        remainder_group_ifft_calls: PROFILE8
+            .remainder_group_ifft_calls
+            .load(Ordering::Relaxed),
+        first_group_input_copy_bytes: PROFILE8
+            .first_group_input_copy_bytes
+            .load(Ordering::Relaxed),
+        later_group_input_copy_bytes: PROFILE8
+            .later_group_input_copy_bytes
+            .load(Ordering::Relaxed),
+        remainder_group_input_copy_bytes: PROFILE8
+            .remainder_group_input_copy_bytes
+            .load(Ordering::Relaxed),
+        first_group_zero_fill_bytes: PROFILE8
+            .first_group_zero_fill_bytes
+            .load(Ordering::Relaxed),
+        later_group_zero_fill_bytes: PROFILE8
+            .later_group_zero_fill_bytes
+            .load(Ordering::Relaxed),
+        remainder_group_zero_fill_bytes: PROFILE8
+            .remainder_group_zero_fill_bytes
+            .load(Ordering::Relaxed),
+        later_group_xor_bytes: PROFILE8.later_group_xor_bytes.load(Ordering::Relaxed),
+        remainder_group_xor_bytes: PROFILE8
+            .remainder_group_xor_bytes
+            .load(Ordering::Relaxed),
+        output_writeback_calls: PROFILE8.output_writeback_calls.load(Ordering::Relaxed),
+        input_copy_bytes: PROFILE8.input_copy_bytes.load(Ordering::Relaxed),
+        zero_fill_bytes: PROFILE8.zero_fill_bytes.load(Ordering::Relaxed),
+        xor_bytes: PROFILE8.xor_bytes.load(Ordering::Relaxed),
+        output_writeback_bytes: PROFILE8.output_writeback_bytes.load(Ordering::Relaxed),
     }
 }
 
@@ -146,6 +233,38 @@ pub(crate) fn reset_leopard_gf8_profile_stats() {
         .store(0, Ordering::Relaxed);
     PROFILE8.fft_stage_calls.store(0, Ordering::Relaxed);
     PROFILE8.ifft_stage_calls.store(0, Ordering::Relaxed);
+    PROFILE8.first_group_ifft_calls.store(0, Ordering::Relaxed);
+    PROFILE8.later_group_ifft_calls.store(0, Ordering::Relaxed);
+    PROFILE8
+        .remainder_group_ifft_calls
+        .store(0, Ordering::Relaxed);
+    PROFILE8
+        .first_group_input_copy_bytes
+        .store(0, Ordering::Relaxed);
+    PROFILE8
+        .later_group_input_copy_bytes
+        .store(0, Ordering::Relaxed);
+    PROFILE8
+        .remainder_group_input_copy_bytes
+        .store(0, Ordering::Relaxed);
+    PROFILE8
+        .first_group_zero_fill_bytes
+        .store(0, Ordering::Relaxed);
+    PROFILE8
+        .later_group_zero_fill_bytes
+        .store(0, Ordering::Relaxed);
+    PROFILE8
+        .remainder_group_zero_fill_bytes
+        .store(0, Ordering::Relaxed);
+    PROFILE8.later_group_xor_bytes.store(0, Ordering::Relaxed);
+    PROFILE8
+        .remainder_group_xor_bytes
+        .store(0, Ordering::Relaxed);
+    PROFILE8.output_writeback_calls.store(0, Ordering::Relaxed);
+    PROFILE8.input_copy_bytes.store(0, Ordering::Relaxed);
+    PROFILE8.zero_fill_bytes.store(0, Ordering::Relaxed);
+    PROFILE8.xor_bytes.store(0, Ordering::Relaxed);
+    PROFILE8.output_writeback_bytes.store(0, Ordering::Relaxed);
 }
 
 pub(crate) fn build_leopard_gf8_encode_driver(
