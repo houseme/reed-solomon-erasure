@@ -279,16 +279,38 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
     let lut23 = &tables.mul_luts[log_m23 as usize].value;
     let lut02 = &tables.mul_luts[log_m02 as usize].value;
 
-    for i in 0..dist {
+    // Phase 1: bulk — all iterations guaranteed d < work.len(), no bounds check.
+    let bulk_end = dist.min(work.len().saturating_sub(base + dist * 3));
+    for i in 0..bulk_end {
+        let a = base + i;
+        let b = a + dist;
+        let c = a + dist * 2;
+        let d = a + dist * 3;
+        // SAFETY: a < b < c < d < work.len(), all indices are distinct.
+        unsafe {
+            let ptr = work.as_mut_ptr();
+            let a_ref = (*ptr.add(a)).as_mut();
+            let b_ref = (*ptr.add(b)).as_mut();
+            let c_ref = (*ptr.add(c)).as_mut();
+            let d_ref = (*ptr.add(d)).as_mut();
+            match dir {
+                TransformDir::Forward => {
+                    fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                }
+                TransformDir::Inverse => {
+                    ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                }
+            }
+        }
+    }
+
+    // Phase 2: tail — boundary cases with fallback.
+    for i in bulk_end..dist {
         let a = base + i;
         let d = a + dist * 3;
         if d < work.len() {
             let b = a + dist;
             let c = a + dist * 2;
-            // SAFETY: a < b < c < d < work.len(), all indices are distinct.
-            // Each (*ptr.add(idx)) produces a unique &mut W, and .as_mut()
-            // returns a unique &mut [u8] per lane. The four byte slices are
-            // disjoint because each lane is a separate allocation/region.
             unsafe {
                 let ptr = work.as_mut_ptr();
                 let a_ref = (*ptr.add(a)).as_mut();
@@ -412,8 +434,8 @@ fn dit4_pairwise_one<W: AsMut<[u8]>>(
 }
 
 fn zero_trailing_lanes<W: AsMut<[u8]>>(work: &mut [W], start_lane: usize, count: usize) {
-    for slot in work.iter_mut().skip(start_lane).take(count) {
-        slot.as_mut().fill(0);
+    for i in start_lane..start_lane + count {
+        work[i].as_mut().fill(0);
     }
 }
 
