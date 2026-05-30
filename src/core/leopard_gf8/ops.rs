@@ -62,9 +62,23 @@ fn fwht2_alt8(a: u8, b: u8) -> (u8, u8) {
 pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
     debug_assert_eq!(input.len(), out.len());
 
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            // SAFETY: runtime feature detection confirmed AVX2 is available.
+            unsafe {
+                slice_xor_avx2(input, out);
+            }
+            return;
+        }
+    }
+
+    slice_xor_u64(input, out);
+}
+
+/// u64-block XOR fallback (also used on aarch64 and non-AVX2 x86_64).
+fn slice_xor_u64(input: &[u8], out: &mut [u8]) {
     // Process 64 bytes per iteration using u64 blocks.
-    // The compiler auto-vectorizes u64 XOR to SIMD (NEON/AVX2) more reliably
-    // than byte-level unrolled XOR.
     let (input64, input_tail64) = input.as_chunks::<64>();
     let (out64, out_tail64) = out.as_chunks_mut::<64>();
 
@@ -97,10 +111,116 @@ pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
     }
 }
 
+/// AVX2 SIMD XOR: 32 bytes per iteration using `_mm256_xor_si256`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn slice_xor_avx2(input: &[u8], out: &mut [u8]) {
+    use core::arch::x86_64::{_mm256_loadu_si256, _mm256_storeu_si256, _mm256_xor_si256};
+
+    let (in32, in_tail) = input.as_chunks::<32>();
+    let (out32, out_tail) = out.as_chunks_mut::<32>();
+
+    for (src, dst) in in32.iter().zip(out32.iter_mut()) {
+        // SAFETY: chunks_exact(32) guarantees 32 valid bytes for load/store.
+        let s = unsafe { _mm256_loadu_si256(src.as_ptr().cast()) };
+        let d = unsafe { _mm256_loadu_si256(dst.as_ptr().cast()) };
+        unsafe { _mm256_storeu_si256(dst.as_mut_ptr().cast(), _mm256_xor_si256(d, s)) };
+    }
+
+    // Scalar tail (0-31 bytes).
+    for (src, dst) in in_tail.iter().zip(out_tail.iter_mut()) {
+        *dst ^= *src;
+    }
+}
+
 pub(super) fn slices_xor(input: &[Vec<u8>], out: &mut [Vec<u8>]) {
     debug_assert_eq!(input.len(), out.len());
     for (src, dst) in input.iter().zip(out.iter_mut()) {
         slice_xor(src, dst);
+    }
+}
+
+/// SIMD-accelerated LUT-XOR: `dst[i] ^= lut[src[i]]` using nibble-lookup.
+///
+/// Uses AVX2 on x86_64 (32 bytes/iteration), scalar fallback otherwise.
+/// Skips SIMD for small slices (< 32 bytes) where overhead exceeds benefit.
+#[inline]
+fn lut_xor(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
+    debug_assert_eq!(dst.len(), src.len());
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if dst.len() >= 32 && is_x86_feature_detected!("avx2") {
+            // SAFETY: runtime feature detection confirmed AVX2 is available, len >= 32.
+            unsafe {
+                lut_xor_avx2(dst, src, lut);
+            }
+            return;
+        }
+    }
+
+    // Scalar fallback.
+    for (d, s) in dst.iter_mut().zip(src.iter()) {
+        *d ^= lut[*s as usize];
+    }
+}
+
+/// AVX2 nibble-lookup: `dst[i] ^= lut[src[i]]`, 32 bytes per iteration.
+///
+/// Decomposes each byte into low/high nibbles, looks up in 16-byte tables,
+/// and XORs the results. Same algorithm as galois_8 AVX2 mul_slice_xor.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn lut_xor_avx2(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
+    use core::arch::x86_64::{
+        __m256i, _mm256_and_si256, _mm256_loadu_si256, _mm256_set1_epi8, _mm256_shuffle_epi8,
+        _mm256_srli_epi64, _mm256_storeu_si256, _mm256_xor_si256,
+    };
+
+    // Build 16-byte nibble tables: lut_low[i] = lut[i], lut_high[i] = lut[i*16].
+    let mut lut_low = [0u8; 16];
+    let mut lut_high = [0u8; 16];
+    lut_low.copy_from_slice(&lut[..16]);
+    for i in 0..16 {
+        lut_high[i] = lut[i * 16];
+    }
+
+    // Broadcast 16-byte tables to both 128-bit lanes of 256-bit registers.
+    let low_tbl: __m256i = {
+        use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
+        // SAFETY: lut_low is a valid 16-byte array.
+        let lo128: __m128i = unsafe { _mm_loadu_si128(lut_low.as_ptr().cast()) };
+        _mm256_broadcastsi128_si256(lo128)
+    };
+    let high_tbl: __m256i = {
+        use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
+        // SAFETY: lut_high is a valid 16-byte array.
+        let hi128: __m128i = unsafe { _mm_loadu_si128(lut_high.as_ptr().cast()) };
+        _mm256_broadcastsi128_si256(hi128)
+    };
+    let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);
+
+    let (src32, src_tail) = src.as_chunks::<32>();
+    let (dst32, dst_tail) = dst.as_chunks_mut::<32>();
+
+    for (s_chunk, d_chunk) in src32.iter().zip(dst32.iter_mut()) {
+        // SAFETY: chunks_exact(32) guarantees 32 valid bytes for load/store.
+        let sv = unsafe { _mm256_loadu_si256(s_chunk.as_ptr().cast()) };
+        let dv = unsafe { _mm256_loadu_si256(d_chunk.as_ptr().cast()) };
+        let lo = _mm256_and_si256(sv, nibble_mask);
+        let hi = _mm256_and_si256(_mm256_srli_epi64::<4>(sv), nibble_mask);
+        let product = _mm256_xor_si256(
+            _mm256_shuffle_epi8(low_tbl, lo),
+            _mm256_shuffle_epi8(high_tbl, hi),
+        );
+        unsafe {
+            _mm256_storeu_si256(d_chunk.as_mut_ptr().cast(), _mm256_xor_si256(dv, product));
+        }
+    }
+
+    // Scalar tail (0-31 bytes).
+    for (d, s) in dst_tail.iter_mut().zip(src_tail.iter()) {
+        *d ^= lut[*s as usize];
     }
 }
 
@@ -130,9 +250,7 @@ pub(super) fn fft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256
         slice_xor(x, y);
     } else {
         debug_assert_eq!(x.len(), y.len());
-        for (dst, src) in x.iter_mut().zip(y.iter()) {
-            *dst ^= lut[*src as usize];
-        }
+        lut_xor(x, y, lut);
     }
 }
 
@@ -145,9 +263,7 @@ pub(super) fn ifft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 25
         slice_xor(x, y);
     } else {
         debug_assert_eq!(x.len(), y.len());
-        for (dst, src) in y.iter_mut().zip(x.iter()) {
-            *dst ^= lut[*src as usize];
-        }
+        lut_xor(y, x, lut);
     }
 }
 
@@ -165,82 +281,37 @@ pub(super) fn fft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    #[inline(always)]
-    fn step(
-        a: &mut u8,
-        b: &mut u8,
-        c: &mut u8,
-        d: &mut u8,
-        lut01: &[u8; 256],
-        lut23: &[u8; 256],
-        lut02: &[u8; 256],
-    ) {
-        let c0 = *c;
-        let d0 = *d;
-        let b1 = *b ^ lut02[d0 as usize];
-        let a1 = *a ^ lut02[c0 as usize];
-        *a = a1 ^ lut01[b1 as usize];
-        *b = b1;
-        *c = c0 ^ lut23[d0 as usize];
-    }
+    // SIMD fast path: use lut_xor for 32-byte chunked LUT operations.
+    // The step has data dependencies (b1 depends on b,d; a1 depends on a,c,b1),
+    // but each byte position is independent, so we vectorize across positions.
+    //
+    // Forward step per byte:
+    //   c0 = c[i]; d0 = d[i];
+    //   b1 = b[i] ^ lut02[d0]; a1 = a[i] ^ lut02[c0];
+    //   a[i] = a1 ^ lut01[b1]; b[i] = b1; c[i] = c0 ^ lut23[d0];
+    //
+    // Vectorized (reads all inputs before writing any output):
+    //   b1 = b ^ lut02[d]       — reads b, d (both unchanged)
+    //   c_f = c ^ lut23[d]      — reads c, d (d unchanged; c unused after this)
+    //   a_f = a ^ lut02[c] ^ lut01[b1]  — reads a, c (original), b1 (computed)
+    //   Write: a=a_f, b=b1, c=c_f
 
-    let (a4, a_tail) = a.as_chunks_mut::<4>();
-    let (b4, b_tail) = b.as_chunks_mut::<4>();
-    let (c4, c_tail) = c.as_chunks_mut::<4>();
-    let (d4, d_tail) = d.as_chunks_mut::<4>();
+    // Compute all LUT products from original inputs.
+    let mut b1 = b.to_vec();
+    lut_xor(&mut b1, d, lut02); // b1[i] = b[i] ^ lut02[d[i]]
 
-    for (((a_chunk, b_chunk), c_chunk), d_chunk) in a4
-        .iter_mut()
-        .zip(b4.iter_mut())
-        .zip(c4.iter_mut())
-        .zip(d4.iter_mut())
-    {
-        step(
-            &mut a_chunk[0],
-            &mut b_chunk[0],
-            &mut c_chunk[0],
-            &mut d_chunk[0],
-            lut01,
-            lut23,
-            lut02,
-        );
-        step(
-            &mut a_chunk[1],
-            &mut b_chunk[1],
-            &mut c_chunk[1],
-            &mut d_chunk[1],
-            lut01,
-            lut23,
-            lut02,
-        );
-        step(
-            &mut a_chunk[2],
-            &mut b_chunk[2],
-            &mut c_chunk[2],
-            &mut d_chunk[2],
-            lut01,
-            lut23,
-            lut02,
-        );
-        step(
-            &mut a_chunk[3],
-            &mut b_chunk[3],
-            &mut c_chunk[3],
-            &mut d_chunk[3],
-            lut01,
-            lut23,
-            lut02,
-        );
-    }
+    let mut c_f = c.to_vec();
+    lut_xor(&mut c_f, d, lut23); // c_f[i] = c[i] ^ lut23[d[i]]
 
-    for (((a_byte, b_byte), c_byte), d_byte) in a_tail
-        .iter_mut()
-        .zip(b_tail.iter_mut())
-        .zip(c_tail.iter_mut())
-        .zip(d_tail.iter_mut())
-    {
-        step(a_byte, b_byte, c_byte, d_byte, lut01, lut23, lut02);
-    }
+    let mut a_f = a.to_vec();
+    lut_xor(&mut a_f, c, lut02); // a_f[i] = a[i] ^ lut02[c[i]]
+    lut_xor(&mut a_f, &b1, lut01); // a_f[i] ^= lut01[b1[i]]
+
+    // Write results back.
+    a.copy_from_slice(&a_f);
+    b.copy_from_slice(&b1);
+    c.copy_from_slice(&c_f);
+    // d unchanged.
 }
 
 #[inline(always)]
@@ -257,81 +328,34 @@ pub(super) fn ifft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    #[inline(always)]
-    fn step(
-        a: &mut u8,
-        b: &mut u8,
-        c: &mut u8,
-        d: &mut u8,
-        lut01: &[u8; 256],
-        lut23: &[u8; 256],
-        lut02: &[u8; 256],
-    ) {
-        let a0 = *a;
-        let c0 = *c;
-        let b1 = *b ^ lut01[a0 as usize];
-        *c = c0 ^ lut02[a0 as usize];
-        *b = b1;
-        *d ^= lut23[c0 as usize] ^ lut02[b1 as usize];
-    }
+    // SIMD fast path for inverse butterfly.
+    //
+    // Inverse step per byte:
+    //   a0 = a[i]; c0 = c[i];
+    //   b1 = b[i] ^ lut01[a0]; c_f = c0 ^ lut02[a0];
+    //   d_f = d[i] ^ lut23[c0] ^ lut02[b1];
+    //   a unchanged; b=b1; c=c_f; d=d_f
+    //
+    // Vectorized:
+    //   b1 = b ^ lut01[a]        — reads b, a (both unchanged)
+    //   c_f = c ^ lut02[a]       — reads c, a (a unchanged)
+    //   d_f = d ^ lut23[c] ^ lut02[b1]  — reads d, c (original), b1
+    //   Write: b=b1, c=c_f, d=d_f
 
-    let (a4, a_tail) = a.as_chunks_mut::<4>();
-    let (b4, b_tail) = b.as_chunks_mut::<4>();
-    let (c4, c_tail) = c.as_chunks_mut::<4>();
-    let (d4, d_tail) = d.as_chunks_mut::<4>();
+    let mut b1 = b.to_vec();
+    lut_xor(&mut b1, a, lut01); // b1[i] = b[i] ^ lut01[a[i]]
 
-    for (((a_chunk, b_chunk), c_chunk), d_chunk) in a4
-        .iter_mut()
-        .zip(b4.iter_mut())
-        .zip(c4.iter_mut())
-        .zip(d4.iter_mut())
-    {
-        step(
-            &mut a_chunk[0],
-            &mut b_chunk[0],
-            &mut c_chunk[0],
-            &mut d_chunk[0],
-            lut01,
-            lut23,
-            lut02,
-        );
-        step(
-            &mut a_chunk[1],
-            &mut b_chunk[1],
-            &mut c_chunk[1],
-            &mut d_chunk[1],
-            lut01,
-            lut23,
-            lut02,
-        );
-        step(
-            &mut a_chunk[2],
-            &mut b_chunk[2],
-            &mut c_chunk[2],
-            &mut d_chunk[2],
-            lut01,
-            lut23,
-            lut02,
-        );
-        step(
-            &mut a_chunk[3],
-            &mut b_chunk[3],
-            &mut c_chunk[3],
-            &mut d_chunk[3],
-            lut01,
-            lut23,
-            lut02,
-        );
-    }
+    let mut c_f = c.to_vec();
+    lut_xor(&mut c_f, a, lut02); // c_f[i] = c[i] ^ lut02[a[i]]
 
-    for (((a_byte, b_byte), c_byte), d_byte) in a_tail
-        .iter_mut()
-        .zip(b_tail.iter_mut())
-        .zip(c_tail.iter_mut())
-        .zip(d_tail.iter_mut())
-    {
-        step(a_byte, b_byte, c_byte, d_byte, lut01, lut23, lut02);
-    }
+    let mut d_f = d.to_vec();
+    lut_xor(&mut d_f, c, lut23); // d_f[i] = d[i] ^ lut23[c[i]]
+    lut_xor(&mut d_f, &b1, lut02); // d_f[i] ^= lut02[b1[i]]
+
+    // Write results back. a unchanged.
+    b.copy_from_slice(&b1);
+    c.copy_from_slice(&c_f);
+    d.copy_from_slice(&d_f);
 }
 
 pub(super) fn get_pair_mut<T>(slice: &mut [T], i: usize, j: usize) -> Option<(&mut T, &mut T)> {
