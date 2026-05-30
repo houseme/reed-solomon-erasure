@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use alloc::alloc::{alloc_zeroed, dealloc, handle_alloc_error};
+use alloc::alloc::{alloc, alloc_zeroed, dealloc, handle_alloc_error};
 use alloc::vec::Vec;
 use core::alloc::Layout;
 use smallvec::SmallVec;
@@ -20,6 +20,7 @@ unsafe impl Send for FlatWork {}
 unsafe impl Sync for FlatWork {}
 
 impl FlatWork {
+    /// Create a new FlatWork with zeroed memory.
     pub(super) fn new(lanes: usize, lane_len: usize) -> Self {
         let len = lanes * lane_len;
         let layout = Layout::from_size_align(len, WORK_ALIGNMENT)
@@ -36,6 +37,36 @@ impl FlatWork {
             len,
             views: Vec::with_capacity(lanes),
         }
+    }
+
+    /// Create a new FlatWork WITHOUT zeroing (caller must write before read).
+    ///
+    /// # Safety
+    /// All lanes must be fully written before any read. The encode path
+    /// satisfies this: data lanes get `copy_from_slice`, unused lanes get
+    /// `zero_trailing_lanes` or `fill(0)`.
+    pub(super) unsafe fn new_uninit(lanes: usize, lane_len: usize) -> Self {
+        let len = lanes * lane_len;
+        let layout = Layout::from_size_align(len, WORK_ALIGNMENT)
+            .expect("FlatWork layout overflow");
+        // SAFETY: layout is non-zero (lanes > 0, lane_len > 0).
+        let ptr = unsafe { alloc(layout) };
+        if ptr.is_null() {
+            handle_alloc_error(layout);
+        }
+        Self {
+            lanes,
+            lane_len,
+            ptr,
+            len,
+            views: Vec::with_capacity(lanes),
+        }
+    }
+
+    /// Reuse this buffer for a new encode call with the same dimensions.
+    /// Returns true if the buffer was reused, false if it needs replacement.
+    pub(super) fn can_reuse(&self, lanes: usize, lane_len: usize) -> bool {
+        self.lanes == lanes && self.lane_len == lane_len
     }
 
     pub(super) fn lanes(&self) -> usize {

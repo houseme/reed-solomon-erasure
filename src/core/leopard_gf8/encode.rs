@@ -8,6 +8,14 @@ use std::sync::atomic::Ordering;
 
 use super::ops::{fft_dit2, fft_dit4_full_lut, get_pair_mut, ifft_dit2, ifft_dit4_full_lut, slice_xor};
 use super::work::FlatWork;
+
+// Thread-local FlatWork cache to avoid repeated large heap allocations.
+// Reuses the buffer when the encode configuration (lanes × lane_len) matches.
+#[cfg(feature = "std")]
+thread_local! {
+    static FLAT_WORK_CACHE: std::cell::RefCell<Option<FlatWork>> =
+        std::cell::RefCell::new(None);
+}
 use super::{
     FftDit8Plan, IfftDit8Plan, IfftProfilePhase, LeopardGf8EncodeDriver, LeopardGf8Tables,
     MODULUS8, PROFILE8, build_fft_dit8_plan, build_ifft_dit8_plan, build_leopard_gf8_encode_driver,
@@ -129,7 +137,25 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
         }
     }
     let chunk_cap = core::cmp::min(driver.shard_size, driver.chunk_size);
-    let mut flat_work = FlatWork::new(driver.work_slices, chunk_cap);
+    let needed_lanes = driver.work_slices;
+    let needed_lane_len = chunk_cap;
+
+    // Try to reuse cached FlatWork to avoid repeated large heap allocations.
+    #[cfg(feature = "std")]
+    let mut flat_work = FLAT_WORK_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some(fw) = cache.take() {
+            if fw.can_reuse(needed_lanes, needed_lane_len) {
+                return fw;
+            }
+            // Size mismatch — drop old, allocate new.
+            drop(fw);
+        }
+        // SAFETY: encode path writes all lanes before reading.
+        unsafe { FlatWork::new_uninit(needed_lanes, needed_lane_len) }
+    });
+    #[cfg(not(feature = "std"))]
+    let mut flat_work = FlatWork::new(needed_lanes, needed_lane_len);
     let mut offset = 0usize;
 
     while offset < driver.shard_size {
@@ -209,6 +235,12 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
         });
         offset = end;
     }
+
+    // Return FlatWork to cache for reuse by next encode call.
+    #[cfg(feature = "std")]
+    FLAT_WORK_CACHE.with(|cache| {
+        *cache.borrow_mut() = Some(flat_work);
+    });
 
     Ok(driver)
 }
