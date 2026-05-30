@@ -79,20 +79,20 @@ pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
 /// u64-block XOR fallback (also used on aarch64 and non-AVX2 x86_64).
 fn slice_xor_u64(input: &[u8], out: &mut [u8]) {
     // Process 64 bytes per iteration using u64 blocks.
+    // Uses unaligned reads to avoid UB on sub-slice pointers.
     let (input64, input_tail64) = input.as_chunks::<64>();
     let (out64, out_tail64) = out.as_chunks_mut::<64>();
 
     for (src, dst) in input64.iter().zip(out64.iter_mut()) {
-        let src_u64: &[u64; 8] = unsafe { &*(src.as_ptr() as *const [u64; 8]) };
-        let dst_u64: &mut [u64; 8] = unsafe { &mut *(dst.as_mut_ptr() as *mut [u64; 8]) };
-        dst_u64[0] ^= src_u64[0];
-        dst_u64[1] ^= src_u64[1];
-        dst_u64[2] ^= src_u64[2];
-        dst_u64[3] ^= src_u64[3];
-        dst_u64[4] ^= src_u64[4];
-        dst_u64[5] ^= src_u64[5];
-        dst_u64[6] ^= src_u64[6];
-        dst_u64[7] ^= src_u64[7];
+        for i in 0..8 {
+            let off = i * 8;
+            // SAFETY: 8 bytes guaranteed by as_chunks::<64>().
+            let s = unsafe { core::ptr::read_unaligned(src[off..].as_ptr().cast::<u64>()) };
+            let d = unsafe { core::ptr::read_unaligned(dst[off..].as_ptr().cast::<u64>()) };
+            unsafe {
+                core::ptr::write_unaligned(dst[off..].as_mut_ptr().cast::<u64>(), d ^ s);
+            }
+        }
     }
 
     // Process remaining bytes in 8-byte chunks.
@@ -281,36 +281,30 @@ pub(super) fn fft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    // SIMD fast path: use lut_xor for 32-byte chunked LUT operations.
-    // The step has data dependencies (b1 depends on b,d; a1 depends on a,c,b1),
-    // but each byte position is independent, so we vectorize across positions.
-    //
     // Forward step per byte:
-    //   c0 = c[i]; d0 = d[i];
-    //   b1 = b[i] ^ lut02[d0]; a1 = a[i] ^ lut02[c0];
-    //   a[i] = a1 ^ lut01[b1]; b[i] = b1; c[i] = c0 ^ lut23[d0];
+    //   b1 = b[i] ^ lut02[d[i]];  a_f = a[i] ^ lut02[c[i]] ^ lut01[b1];
+    //   c_f = c[i] ^ lut23[d[i]];
+    //   a=a_f, b=b1, c=c_f, d unchanged
     //
-    // Vectorized (reads all inputs before writing any output):
-    //   b1 = b ^ lut02[d]       — reads b, d (both unchanged)
-    //   c_f = c ^ lut23[d]      — reads c, d (d unchanged; c unused after this)
-    //   a_f = a ^ lut02[c] ^ lut01[b1]  — reads a, c (original), b1 (computed)
-    //   Write: a=a_f, b=b1, c=c_f
+    // In-place order (1 allocation):
+    //   1. b  ^= lut02[d]        (b is now b1, reads d unchanged)
+    //   2. save a                (1 alloc — needed because a_f reads original a)
+    //   3. a   = a_saved ^ lut02[c] ^ lut01[b]  (reads original c, b=b1)
+    //   4. c  ^= lut23[d]        (c is now c_f, reads d unchanged)
 
-    // Compute all LUT products from original inputs.
-    let mut b1 = b.to_vec();
-    lut_xor(&mut b1, d, lut02); // b1[i] = b[i] ^ lut02[d[i]]
+    // Step 1: b1 in-place.
+    lut_xor(b, d, lut02);
 
-    let mut c_f = c.to_vec();
-    lut_xor(&mut c_f, d, lut23); // c_f[i] = c[i] ^ lut23[d[i]]
+    // Step 2: save a before overwriting.
+    let a_saved = a.to_vec();
 
-    let mut a_f = a.to_vec();
-    lut_xor(&mut a_f, c, lut02); // a_f[i] = a[i] ^ lut02[c[i]]
-    lut_xor(&mut a_f, &b1, lut01); // a_f[i] ^= lut01[b1[i]]
+    // Step 3: a_f = a_saved ^ lut02[c] ^ lut01[b1].
+    a.copy_from_slice(&a_saved);
+    lut_xor(a, c, lut02);
+    lut_xor(a, b, lut01);
 
-    // Write results back.
-    a.copy_from_slice(&a_f);
-    b.copy_from_slice(&b1);
-    c.copy_from_slice(&c_f);
+    // Step 4: c_f in-place.
+    lut_xor(c, d, lut23);
     // d unchanged.
 }
 
@@ -328,34 +322,31 @@ pub(super) fn ifft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    // SIMD fast path for inverse butterfly.
-    //
     // Inverse step per byte:
-    //   a0 = a[i]; c0 = c[i];
-    //   b1 = b[i] ^ lut01[a0]; c_f = c0 ^ lut02[a0];
-    //   d_f = d[i] ^ lut23[c0] ^ lut02[b1];
-    //   a unchanged; b=b1; c=c_f; d=d_f
+    //   b1 = b[i] ^ lut01[a[i]];  c_f = c[i] ^ lut02[a[i]];
+    //   d_f = d[i] ^ lut23[c[i]] ^ lut02[b1];
+    //   a unchanged, b=b1, c=c_f, d=d_f
     //
-    // Vectorized:
-    //   b1 = b ^ lut01[a]        — reads b, a (both unchanged)
-    //   c_f = c ^ lut02[a]       — reads c, a (a unchanged)
-    //   d_f = d ^ lut23[c] ^ lut02[b1]  — reads d, c (original), b1
-    //   Write: b=b1, c=c_f, d=d_f
+    // In-place order (1 allocation):
+    //   1. b  ^= lut01[a]         (b is now b1, a unchanged)
+    //   2. save d                 (1 alloc — d_f needs original c)
+    //   3. d_f = d_saved ^ lut23[c] ^ lut02[b1]  (reads original c, b=b1)
+    //   4. c  ^= lut02[a]         (c is now c_f, a unchanged)
 
-    let mut b1 = b.to_vec();
-    lut_xor(&mut b1, a, lut01); // b1[i] = b[i] ^ lut01[a[i]]
+    // Step 1: b1 in-place.
+    lut_xor(b, a, lut01);
 
-    let mut c_f = c.to_vec();
-    lut_xor(&mut c_f, a, lut02); // c_f[i] = c[i] ^ lut02[a[i]]
+    // Step 2: save d before c is overwritten (d_f needs original c).
+    let d_saved = d.to_vec();
 
-    let mut d_f = d.to_vec();
-    lut_xor(&mut d_f, c, lut23); // d_f[i] = d[i] ^ lut23[c[i]]
-    lut_xor(&mut d_f, &b1, lut02); // d_f[i] ^= lut02[b1[i]]
+    // Step 3: d_f = d_saved ^ lut23[c] ^ lut02[b1].
+    d.copy_from_slice(&d_saved);
+    lut_xor(d, c, lut23);
+    lut_xor(d, b, lut02);
 
-    // Write results back. a unchanged.
-    b.copy_from_slice(&b1);
-    c.copy_from_slice(&c_f);
-    d.copy_from_slice(&d_f);
+    // Step 4: c_f in-place.
+    lut_xor(c, a, lut02);
+    // a unchanged.
 }
 
 pub(super) fn get_pair_mut<T>(slice: &mut [T], i: usize, j: usize) -> Option<(&mut T, &mut T)> {
