@@ -6,16 +6,48 @@ use crate::errors::Error;
 #[cfg(feature = "std")]
 use std::sync::atomic::Ordering;
 
-use super::ops::{
-    fft_dit2, fft_dit2_lut, fft_dit4_full_lut, get_pair_mut, ifft_dit2, ifft_dit2_lut,
-    ifft_dit4_full_lut, slice_xor,
-};
+use super::ops::{fft_dit2, fft_dit4_full_lut, get_pair_mut, ifft_dit2, ifft_dit4_full_lut, slice_xor};
 use super::work::FlatWork;
 use super::{
-    FftDit8Plan, IfftDit8Plan, IfftProfilePhase, LEOPARD_GF8_XOR_CLONE_ENV,
-    LeopardGf8EncodeDriver, LeopardGf8Tables, MODULUS8, PROFILE8, build_fft_dit8_plan,
-    build_ifft_dit8_plan, build_leopard_gf8_encode_driver, init_leopard_gf8_tables,
+    FftDit8Plan, IfftDit8Plan, IfftProfilePhase, LeopardGf8EncodeDriver, LeopardGf8Tables,
+    MODULUS8, PROFILE8, build_fft_dit8_plan, build_ifft_dit8_plan, build_leopard_gf8_encode_driver,
+    init_leopard_gf8_tables,
 };
+
+/// DIT-4 butterfly implementation strategy.
+///
+/// Selected via `RSE_DIT4_STRATEGY` env var (default: `direct`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Dit4Strategy {
+    /// Safe pairwise decomposition: 4x fft_dit2 per radix-4 group.
+    Decomposed,
+    /// Direct 4-lane butterfly with unsafe fast path + safe boundary fallback.
+    Direct,
+    /// Direct 4-lane butterfly, fully safe via split_at_mut + fft_dit4_full_lut.
+    DirectSafe,
+}
+
+fn active_dit4_strategy() -> Dit4Strategy {
+    #[cfg(feature = "std")]
+    {
+        static STRATEGY: std::sync::OnceLock<Dit4Strategy> = std::sync::OnceLock::new();
+        *STRATEGY.get_or_init(|| {
+            std::env::var("RSE_DIT4_STRATEGY")
+                .ok()
+                .and_then(|v| match v.trim().to_ascii_lowercase().as_str() {
+                    "decomposed" => Some(Dit4Strategy::Decomposed),
+                    "direct" => Some(Dit4Strategy::Direct),
+                    "direct-safe" => Some(Dit4Strategy::DirectSafe),
+                    _ => None,
+                })
+                .unwrap_or(Dit4Strategy::Direct)
+        })
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        Dit4Strategy::Direct
+    }
+}
 
 pub(super) fn encode_skeleton<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
     data_shards: usize,
@@ -101,7 +133,6 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                 end,
                 tables,
                 IfftProfilePhase::FirstGroup,
-                false,
             );
 
             let mut group_offset = driver.m;
@@ -123,7 +154,6 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     end,
                     tables,
                     IfftProfilePhase::LaterGroup,
-                    false,
                 );
                 group_offset += driver.m;
             }
@@ -143,21 +173,13 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     end,
                     tables,
                     IfftProfilePhase::RemainderGroup,
-                    false,
                 );
             }
 
             fft_dit8_with_plan(&mut work[..driver.m], &fft_plan, tables);
 
             #[cfg(feature = "std")]
-            {
-                PROFILE8
-                    .output_writeback_calls
-                    .fetch_add(1, Ordering::Relaxed);
-                PROFILE8
-                    .output_writeback_bytes
-                    .fetch_add(parity.len() * size, Ordering::Relaxed);
-            }
+            PROFILE8.add_output_writeback(parity.len() * size);
             for (idx, output) in parity.iter_mut().enumerate() {
                 output.as_mut()[offset..end].copy_from_slice(&work[idx][..size]);
             }
@@ -168,7 +190,15 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
     Ok(driver)
 }
 
-fn fft_dit4_at<W: AsMut<[u8]>>(
+#[derive(Clone, Copy)]
+enum TransformDir {
+    Forward,
+    Inverse,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dit4_at<W: AsMut<[u8]>>(
+    dir: TransformDir,
     work: &mut [W],
     base: usize,
     dist: usize,
@@ -177,72 +207,41 @@ fn fft_dit4_at<W: AsMut<[u8]>>(
     log_m02: u8,
     tables: &LeopardGf8Tables,
 ) {
-    let lut01 = &tables.mul_luts[log_m01 as usize].value;
-    let lut23 = &tables.mul_luts[log_m23 as usize].value;
-    let lut02 = &tables.mul_luts[log_m02 as usize].value;
-
-    if base + dist * 4 <= work.len() {
-        let ptr = work.as_mut_ptr();
-        for i in 0..dist {
-            let a = base + i;
-            let b = a + dist;
-            let c = a + dist * 2;
-            let d = a + dist * 3;
-            // SAFETY: full 4-lane window is in-bounds and indices are distinct by construction.
-            unsafe {
-                let a_ref = (*ptr.add(a)).as_mut();
-                let b_ref = (*ptr.add(b)).as_mut();
-                let c_ref = (*ptr.add(c)).as_mut();
-                let d_ref = (*ptr.add(d)).as_mut();
-                fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
-            }
+    match active_dit4_strategy() {
+        Dit4Strategy::Decomposed => {
+            dit4_at_decomposed(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
         }
-        return;
-    }
-
-    for i in 0..dist {
-        let a = base + i;
-        let b = a + dist;
-        let c = a + dist * 2;
-        let d = a + dist * 3;
-        let has_a = a < work.len();
-        let has_b = b < work.len();
-        let has_c = c < work.len();
-        let has_d = d < work.len();
-
-        let available = has_a as usize + has_b as usize + has_c as usize + has_d as usize;
-        if available < 2 {
-            return;
+        Dit4Strategy::Direct => {
+            dit4_at_direct(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
         }
-
-        if has_a
-            && has_c
-            && let Some((a_ref, c_ref)) = get_pair_mut(work, a, c)
-        {
-            fft_dit2_lut(a_ref.as_mut(), c_ref.as_mut(), log_m02, lut02);
-        }
-        if has_b
-            && has_d
-            && let Some((b_ref, d_ref)) = get_pair_mut(work, b, d)
-        {
-            fft_dit2_lut(b_ref.as_mut(), d_ref.as_mut(), log_m02, lut02);
-        }
-        if has_a
-            && has_b
-            && let Some((a_ref, b_ref)) = get_pair_mut(work, a, b)
-        {
-            fft_dit2_lut(a_ref.as_mut(), b_ref.as_mut(), log_m01, lut01);
-        }
-        if has_c
-            && has_d
-            && let Some((c_ref, d_ref)) = get_pair_mut(work, c, d)
-        {
-            fft_dit2_lut(c_ref.as_mut(), d_ref.as_mut(), log_m23, lut23);
+        Dit4Strategy::DirectSafe => {
+            dit4_at_direct_safe(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
         }
     }
 }
 
-fn ifft_dit4_at<W: AsMut<[u8]>>(
+/// Strategy A: safe pairwise decomposition via get_pair_mut + fft_dit2.
+/// Each byte position is touched 4 times (once per dit2 call).
+fn dit4_at_decomposed<W: AsMut<[u8]>>(
+    dir: TransformDir,
+    work: &mut [W],
+    base: usize,
+    dist: usize,
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
+    tables: &LeopardGf8Tables,
+) {
+    for i in 0..dist {
+        dit4_pairwise_one(dir, work, base + i, dist, log_m01, log_m23, log_m02, tables);
+    }
+}
+
+/// Strategy B: direct 4-lane butterfly with unsafe fast path.
+/// Uses raw pointer arithmetic for the common case (all 4 lanes in bounds),
+/// falls back to safe pairwise decomposition for boundary cases.
+fn dit4_at_direct<W: AsMut<[u8]>>(
+    dir: TransformDir,
     work: &mut [W],
     base: usize,
     dist: usize,
@@ -255,63 +254,134 @@ fn ifft_dit4_at<W: AsMut<[u8]>>(
     let lut23 = &tables.mul_luts[log_m23 as usize].value;
     let lut02 = &tables.mul_luts[log_m02 as usize].value;
 
-    if base + dist * 4 <= work.len() {
-        let ptr = work.as_mut_ptr();
-        for i in 0..dist {
-            let a = base + i;
+    for i in 0..dist {
+        let a = base + i;
+        let d = a + dist * 3;
+        if d < work.len() {
             let b = a + dist;
             let c = a + dist * 2;
-            let d = a + dist * 3;
-            // SAFETY: full 4-lane window is in-bounds and indices are distinct by construction.
+            // SAFETY: a < b < c < d < work.len(), all indices are distinct.
+            // Each (*ptr.add(idx)) produces a unique &mut W, and .as_mut()
+            // returns a unique &mut [u8] per lane. The four byte slices are
+            // disjoint because each lane is a separate allocation/region.
             unsafe {
+                let ptr = work.as_mut_ptr();
                 let a_ref = (*ptr.add(a)).as_mut();
                 let b_ref = (*ptr.add(b)).as_mut();
                 let c_ref = (*ptr.add(c)).as_mut();
                 let d_ref = (*ptr.add(d)).as_mut();
-                ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                match dir {
+                    TransformDir::Forward => {
+                        fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                    }
+                    TransformDir::Inverse => {
+                        ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                    }
+                }
             }
+        } else {
+            dit4_pairwise_one(dir, work, a, dist, log_m01, log_m23, log_m02, tables);
         }
-        return;
     }
+}
+
+/// Strategy C: direct 4-lane butterfly, fully safe via split_at_mut chains.
+/// Each byte position is touched once (single-pass), but has extra index
+/// arithmetic overhead from 3 split_at_mut calls per iteration.
+fn dit4_at_direct_safe<W: AsMut<[u8]>>(
+    dir: TransformDir,
+    work: &mut [W],
+    base: usize,
+    dist: usize,
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
+    tables: &LeopardGf8Tables,
+) {
+    let lut01 = &tables.mul_luts[log_m01 as usize].value;
+    let lut23 = &tables.mul_luts[log_m23 as usize].value;
+    let lut02 = &tables.mul_luts[log_m02 as usize].value;
 
     for i in 0..dist {
         let a = base + i;
-        let b = a + dist;
-        let c = a + dist * 2;
         let d = a + dist * 3;
-        let has_a = a < work.len();
-        let has_b = b < work.len();
-        let has_c = c < work.len();
-        let has_d = d < work.len();
+        if d < work.len() {
+            let b = a + dist;
+            let c = a + dist * 2;
+            // Safe: split_at_mut chains produce 4 disjoint &mut [W] slices.
+            // a < b < c < d guaranteed by dist > 0.
+            let (left_bc, right_d) = work.split_at_mut(d);
+            let (left_b, right_c) = left_bc.split_at_mut(c);
+            let (left_a, right_b) = left_b.split_at_mut(b);
+            let a_ref = left_a[a].as_mut();
+            let b_ref = right_b[0].as_mut();
+            let c_ref = right_c[0].as_mut();
+            let d_ref = right_d[0].as_mut();
+            match dir {
+                TransformDir::Forward => {
+                    fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                }
+                TransformDir::Inverse => {
+                    ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                }
+            }
+        } else {
+            dit4_pairwise_one(dir, work, a, dist, log_m01, log_m23, log_m02, tables);
+        }
+    }
+}
 
-        let available = has_a as usize + has_b as usize + has_c as usize + has_d as usize;
-        if available < 2 {
-            return;
+/// Single-iteration pairwise decomposition for boundary cases.
+/// Used by direct and direct-safe strategies when d >= work.len().
+fn dit4_pairwise_one<W: AsMut<[u8]>>(
+    dir: TransformDir,
+    work: &mut [W],
+    a: usize,
+    dist: usize,
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
+    tables: &LeopardGf8Tables,
+) {
+    let b = a + dist;
+    let c = a + dist * 2;
+    let d = a + dist * 3;
+    let has_a = a < work.len();
+    let has_b = b < work.len();
+    let has_c = c < work.len();
+    let has_d = d < work.len();
+    let available = has_a as usize + has_b as usize + has_c as usize + has_d as usize;
+    if available < 2 {
+        return;
+    }
+    match dir {
+        TransformDir::Forward => {
+            if has_a && has_c && let Some((r1, r2)) = get_pair_mut(work, a, c) {
+                fft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
+            }
+            if has_b && has_d && let Some((r1, r2)) = get_pair_mut(work, b, d) {
+                fft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
+            }
+            if has_a && has_b && let Some((r1, r2)) = get_pair_mut(work, a, b) {
+                fft_dit2(r1.as_mut(), r2.as_mut(), log_m01, tables);
+            }
+            if has_c && has_d && let Some((r1, r2)) = get_pair_mut(work, c, d) {
+                fft_dit2(r1.as_mut(), r2.as_mut(), log_m23, tables);
+            }
         }
-
-        if has_a
-            && has_b
-            && let Some((a_ref, b_ref)) = get_pair_mut(work, a, b)
-        {
-            ifft_dit2_lut(a_ref.as_mut(), b_ref.as_mut(), log_m01, lut01);
-        }
-        if has_c
-            && has_d
-            && let Some((c_ref, d_ref)) = get_pair_mut(work, c, d)
-        {
-            ifft_dit2_lut(c_ref.as_mut(), d_ref.as_mut(), log_m23, lut23);
-        }
-        if has_a
-            && has_c
-            && let Some((a_ref, c_ref)) = get_pair_mut(work, a, c)
-        {
-            ifft_dit2_lut(a_ref.as_mut(), c_ref.as_mut(), log_m02, lut02);
-        }
-        if has_b
-            && has_d
-            && let Some((b_ref, d_ref)) = get_pair_mut(work, b, d)
-        {
-            ifft_dit2_lut(b_ref.as_mut(), d_ref.as_mut(), log_m02, lut02);
+        TransformDir::Inverse => {
+            if has_a && has_b && let Some((r1, r2)) = get_pair_mut(work, a, b) {
+                ifft_dit2(r1.as_mut(), r2.as_mut(), log_m01, tables);
+            }
+            if has_c && has_d && let Some((r1, r2)) = get_pair_mut(work, c, d) {
+                ifft_dit2(r1.as_mut(), r2.as_mut(), log_m23, tables);
+            }
+            if has_a && has_c && let Some((r1, r2)) = get_pair_mut(work, a, c) {
+                ifft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
+            }
+            if has_b && has_d && let Some((r1, r2)) = get_pair_mut(work, b, d) {
+                ifft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
+            }
         }
     }
 }
@@ -333,7 +403,8 @@ fn fft_dit8_with_plan<W: AsMut<[u8]>>(
         let i_end = block.r + block.dist;
         let mut i = block.r;
         while i < i_end {
-            fft_dit4_at(
+            dit4_at(
+                TransformDir::Forward,
                 work,
                 i,
                 block.dist,
@@ -365,25 +436,9 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     end: usize,
     tables: &LeopardGf8Tables,
     phase: IfftProfilePhase,
-    use_xor_clone: bool,
 ) {
     #[cfg(feature = "std")]
-    {
-        PROFILE8.ifft_stage_calls.fetch_add(1, Ordering::Relaxed);
-        match phase {
-            IfftProfilePhase::FirstGroup => {
-                PROFILE8.first_group_ifft_calls.fetch_add(1, Ordering::Relaxed);
-            }
-            IfftProfilePhase::LaterGroup => {
-                PROFILE8.later_group_ifft_calls.fetch_add(1, Ordering::Relaxed);
-            }
-            IfftProfilePhase::RemainderGroup => {
-                PROFILE8
-                    .remainder_group_ifft_calls
-                    .fetch_add(1, Ordering::Relaxed);
-            }
-        }
-    }
+    PROFILE8.add_ifft_calls(phase);
     let size = end - start;
 
     if plan.initial_blocks.is_empty() {
@@ -392,51 +447,10 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                 .copy_from_slice(&data[idx].as_ref()[start..end]);
         }
         #[cfg(feature = "std")]
-        {
-            PROFILE8
-                .input_copy_bytes
-                .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
-            match phase {
-                IfftProfilePhase::FirstGroup => {
-                    PROFILE8
-                        .first_group_input_copy_bytes
-                        .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
-                }
-                IfftProfilePhase::LaterGroup => {
-                    PROFILE8
-                        .later_group_input_copy_bytes
-                        .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
-                }
-                IfftProfilePhase::RemainderGroup => {
-                    PROFILE8
-                        .remainder_group_input_copy_bytes
-                        .fetch_add(plan.mtrunc * size, Ordering::Relaxed);
-                }
-            }
-        }
+        PROFILE8.add_input_copy_bytes(phase, plan.mtrunc * size);
         zero_trailing_lanes(work, plan.mtrunc, plan.m - plan.mtrunc);
         #[cfg(feature = "std")]
-        {
-            let bytes = (plan.m - plan.mtrunc) * size;
-            PROFILE8.zero_fill_bytes.fetch_add(bytes, Ordering::Relaxed);
-            match phase {
-                IfftProfilePhase::FirstGroup => {
-                    PROFILE8
-                        .first_group_zero_fill_bytes
-                        .fetch_add(bytes, Ordering::Relaxed);
-                }
-                IfftProfilePhase::LaterGroup => {
-                    PROFILE8
-                        .later_group_zero_fill_bytes
-                        .fetch_add(bytes, Ordering::Relaxed);
-                }
-                IfftProfilePhase::RemainderGroup => {
-                    PROFILE8
-                        .remainder_group_zero_fill_bytes
-                        .fetch_add(bytes, Ordering::Relaxed);
-                }
-            }
-        }
+        PROFILE8.add_zero_fill_bytes(phase, (plan.m - plan.mtrunc) * size);
     } else {
         for block in &plan.initial_blocks {
             let available = core::cmp::min(plan.mtrunc.saturating_sub(block.r), 4);
@@ -446,27 +460,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                     .copy_from_slice(&data[block.r + i].as_ref()[start..end]);
             }
             #[cfg(feature = "std")]
-            {
-                let bytes = available * size;
-                PROFILE8.input_copy_bytes.fetch_add(bytes, Ordering::Relaxed);
-                match phase {
-                    IfftProfilePhase::FirstGroup => {
-                        PROFILE8
-                            .first_group_input_copy_bytes
-                            .fetch_add(bytes, Ordering::Relaxed);
-                    }
-                    IfftProfilePhase::LaterGroup => {
-                        PROFILE8
-                            .later_group_input_copy_bytes
-                            .fetch_add(bytes, Ordering::Relaxed);
-                    }
-                    IfftProfilePhase::RemainderGroup => {
-                        PROFILE8
-                            .remainder_group_input_copy_bytes
-                            .fetch_add(bytes, Ordering::Relaxed);
-                    }
-                }
-            }
+            PROFILE8.add_input_copy_bytes(phase, available * size);
             for slot in work
                 .iter_mut()
                 .skip(block.r + available)
@@ -475,29 +469,10 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                 slot.as_mut().fill(0);
             }
             #[cfg(feature = "std")]
-            {
-                let bytes = (4usize.saturating_sub(available)) * size;
-                PROFILE8.zero_fill_bytes.fetch_add(bytes, Ordering::Relaxed);
-                match phase {
-                    IfftProfilePhase::FirstGroup => {
-                        PROFILE8
-                            .first_group_zero_fill_bytes
-                            .fetch_add(bytes, Ordering::Relaxed);
-                    }
-                    IfftProfilePhase::LaterGroup => {
-                        PROFILE8
-                            .later_group_zero_fill_bytes
-                            .fetch_add(bytes, Ordering::Relaxed);
-                    }
-                    IfftProfilePhase::RemainderGroup => {
-                        PROFILE8
-                            .remainder_group_zero_fill_bytes
-                            .fetch_add(bytes, Ordering::Relaxed);
-                    }
-                }
-            }
+            PROFILE8.add_zero_fill_bytes(phase, (4usize.saturating_sub(available)) * size);
 
-            ifft_dit4_at(
+            dit4_at(
+                TransformDir::Inverse,
                 work,
                 block.r,
                 block.dist,
@@ -510,33 +485,14 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
 
         zero_trailing_lanes(work, plan.clear_start, plan.m.saturating_sub(plan.clear_start));
         #[cfg(feature = "std")]
-        {
-            let bytes = plan.m.saturating_sub(plan.clear_start) * size;
-            PROFILE8.zero_fill_bytes.fetch_add(bytes, Ordering::Relaxed);
-            match phase {
-                IfftProfilePhase::FirstGroup => {
-                    PROFILE8
-                        .first_group_zero_fill_bytes
-                        .fetch_add(bytes, Ordering::Relaxed);
-                }
-                IfftProfilePhase::LaterGroup => {
-                    PROFILE8
-                        .later_group_zero_fill_bytes
-                        .fetch_add(bytes, Ordering::Relaxed);
-                }
-                IfftProfilePhase::RemainderGroup => {
-                    PROFILE8
-                        .remainder_group_zero_fill_bytes
-                        .fetch_add(bytes, Ordering::Relaxed);
-                }
-            }
-        }
+        PROFILE8.add_zero_fill_bytes(phase, plan.m.saturating_sub(plan.clear_start) * size);
 
         for block in &plan.later_blocks {
             let i_end = block.r + block.dist;
             let mut i = block.r;
             while i < i_end {
-                ifft_dit4_at(
+                dit4_at(
+                    TransformDir::Inverse,
                     work,
                     i,
                     block.dist,
@@ -560,27 +516,8 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     if let Some(xor_dst) = xor_dst.as_mut() {
         for idx in 0..plan.m {
             let src = &*work[idx].as_mut();
-            if use_xor_clone && idx < xor_dst.len() {
-                xor_dst[idx].as_mut().copy_from_slice(src);
-                continue;
-            }
             #[cfg(feature = "std")]
-            {
-                PROFILE8.xor_bytes.fetch_add(src.len(), Ordering::Relaxed);
-                match phase {
-                    IfftProfilePhase::LaterGroup => {
-                        PROFILE8
-                            .later_group_xor_bytes
-                            .fetch_add(src.len(), Ordering::Relaxed);
-                    }
-                    IfftProfilePhase::RemainderGroup => {
-                        PROFILE8
-                            .remainder_group_xor_bytes
-                            .fetch_add(src.len(), Ordering::Relaxed);
-                    }
-                    IfftProfilePhase::FirstGroup => {}
-                }
-            }
+            PROFILE8.add_xor_bytes(phase, src.len());
             slice_xor(src, xor_dst[idx].as_mut());
         }
     }
@@ -598,48 +535,3 @@ pub(super) fn fft_dit8<W: AsMut<[u8]>>(
     fft_dit8_with_plan(work, &plan, tables);
 }
 
-#[allow(dead_code)]
-pub(super) fn ifft_dit_encoder8<T: AsRef<[u8]>, W: AsMut<[u8]>>(
-    data: &[T],
-    mtrunc: usize,
-    work: &mut [W],
-    xor_dst: Option<&mut [W]>,
-    m: usize,
-    skew_lut: &[u8],
-    start: usize,
-    end: usize,
-    tables: &LeopardGf8Tables,
-    use_xor_clone: bool,
-) {
-    let plan = build_ifft_dit8_plan(mtrunc, m, skew_lut);
-    ifft_dit_encoder8_with_plan(
-        data,
-        &plan,
-        work,
-        xor_dst,
-        start,
-        end,
-        tables,
-        IfftProfilePhase::FirstGroup,
-        use_xor_clone,
-    );
-}
-
-#[allow(dead_code)]
-pub(super) fn leopard_env_enabled(key: &str) -> bool {
-    #[cfg(feature = "std")]
-    {
-        return std::env::var(key)
-            .ok()
-            .map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"))
-            .unwrap_or(false);
-    }
-
-    #[allow(unreachable_code)]
-    false
-}
-
-#[allow(dead_code)]
-pub(super) fn should_use_xor_clone() -> bool {
-    leopard_env_enabled(LEOPARD_GF8_XOR_CLONE_ENV)
-}

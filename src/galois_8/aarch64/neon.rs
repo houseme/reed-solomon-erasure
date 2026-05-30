@@ -47,6 +47,8 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
     let low_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_LOW[c as usize].as_ptr()) };
     let high_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_HIGH[c as usize].as_ptr()) };
     let nibble_mask = vdupq_n_u8(0x0f);
+    // `bytes_done` rounds down to the largest multiple of 16 (NEON register width),
+    // ensuring all SIMD loads/stores operate on in-bounds, 16-byte-aligned chunks.
     let bytes_done = input.len() & !15usize;
     let bytes_done_unrolled = input.len() & !63usize;
     #[cfg(feature = "std")]
@@ -72,6 +74,7 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         .chunks_exact(64)
         .zip(unrolled_out.chunks_exact_mut(64))
     {
+        // SAFETY: `chunks_exact(64)` guarantees the pointer spans 64 valid bytes.
         let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input_chunk.as_ptr()) };
         let input0 = inputs.0;
         let input1 = inputs.1;
@@ -93,6 +96,7 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         let result2: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
         let result3: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
 
+        // SAFETY: `chunks_exact(64)` guarantees 64 valid bytes for the store.
         unsafe {
             vst1q_u8_x4(
                 out_chunk.as_mut_ptr(),
@@ -101,14 +105,17 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         };
     }
 
+    // Scalar-tail fallback for remaining 0..15 bytes after SIMD processing.
     for (input_chunk, out_chunk) in remainder_input
         .chunks_exact(16)
         .zip(remainder_out.chunks_exact_mut(16))
     {
+        // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes.
         let input_vec = unsafe { vld1q_u8(input_chunk.as_ptr()) };
         let low = vandq_u8(input_vec, nibble_mask);
         let high = vshrq_n_u8::<4>(input_vec);
         let result: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low), vqtbl1q_u8(high_tbl, high));
+        // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes for the store.
         unsafe { vst1q_u8(out_chunk.as_mut_ptr(), result) };
     }
 

@@ -26,9 +26,10 @@ impl AlignedShard {
         }
 
         let layout = Layout::from_size_align(len, SHARD_ALIGNMENT)
-            .expect("aligned shard layout must be valid");
-        // SAFETY: `layout` is constructed above and `alloc_zeroed` returns a
-        // uniquely owned allocation or null on OOM.
+            .expect("aligned shard layout must be valid: len or alignment overflow");
+        // SAFETY: `layout` is valid (checked above). `alloc_zeroed` returns a
+        // uniquely owned, zero-filled allocation or null on OOM. The returned
+        // pointer is valid for `layout.size()` bytes.
         let ptr = unsafe { alloc_zeroed(layout) };
         let ptr = NonNull::new(ptr).unwrap_or_else(|| handle_alloc_error(layout));
 
@@ -80,9 +81,10 @@ impl Drop for AlignedShard {
         }
 
         let layout = Layout::from_size_align(self.len, SHARD_ALIGNMENT)
-            .expect("aligned shard layout must be valid");
+            .expect("aligned shard layout must be valid: len or alignment overflow");
         // SAFETY: `self.ptr` was allocated from `alloc_zeroed` with the same
-        // layout in `new_zeroed`, and this value owns the allocation uniquely.
+        // layout in `new_zeroed`. This type owns the allocation uniquely
+        // (no cloning without explicit Clone impl that creates a new allocation).
         unsafe {
             dealloc(self.ptr.as_ptr(), layout);
         }
@@ -105,16 +107,18 @@ impl DerefMut for AlignedShard {
 
 impl AsRef<[u8]> for AlignedShard {
     fn as_ref(&self) -> &[u8] {
-        // SAFETY: `self.ptr` points to `self.len` bytes owned by this value,
-        // or is a non-null dangling pointer when `self.len == 0`.
+        // SAFETY: `self.ptr` points to `self.len` bytes allocated via `alloc_zeroed`
+        // with SHARD_ALIGNMENT, or is `NonNull::dangling()` when `self.len == 0`
+        // (which produces a valid empty slice). The allocation is uniquely owned
+        // by this value and outlives the returned reference.
         unsafe { slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
     }
 }
 
 impl AsMut<[u8]> for AlignedShard {
     fn as_mut(&mut self) -> &mut [u8] {
-        // SAFETY: same allocation guarantees as `as_ref`, with unique mutable
-        // access enforced by `&mut self`.
+        // SAFETY: same as `as_ref`. `&mut self` guarantees unique mutable access
+        // — no other reference to the same memory can exist concurrently.
         unsafe { slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
     }
 }
@@ -126,11 +130,14 @@ impl FromIterator<u8> for AlignedShard {
     }
 }
 
-// SAFETY: `AlignedShard` owns its allocation and moving it across threads does
-// not violate aliasing. Shared access only exposes immutable `u8` slices.
+// SAFETY: `AlignedShard` owns a heap allocation of plain `u8` bytes with no
+// interior mutability. Moving it across threads transfers ownership and cannot
+// create aliased mutable references. The `NonNull<u8>` pointer is not shared
+// across threads — it follows the value.
 unsafe impl Send for AlignedShard {}
-// SAFETY: shared references expose immutable bytes, and mutable access still
-// requires `&mut self`.
+// SAFETY: Shared `&AlignedShard` only exposes immutable `[u8]` slices via
+// `as_ref()`. Mutable access requires `&mut self`, which the borrow checker
+// ensures is exclusive. No interior mutability or shared mutable state exists.
 unsafe impl Sync for AlignedShard {}
 
 pub fn alloc_aligned_shards(total_shards: usize, shard_len: usize) -> Vec<AlignedShard> {

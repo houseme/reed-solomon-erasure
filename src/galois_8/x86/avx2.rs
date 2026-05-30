@@ -66,9 +66,11 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
     };
 
     let (low_half, high_half) = super::load_table_halves(c);
+    // SAFETY: `low_half`/`high_half` are 16-byte table halves; broadcast to 256-bit.
     let (low_tbl, high_tbl): (__m256i, __m256i) = unsafe { load_tables_avx2(low_half, high_half) };
     let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);
 
+    // Round down to 32-byte boundary so all SIMD loads/stores are in-bounds.
     let bytes_done = input.len() & !31usize;
     let (simd_input, tail_input) = input.split_at(bytes_done);
     let (simd_out, tail_out) = out.split_at_mut(bytes_done);
@@ -77,6 +79,7 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
         .chunks_exact(32)
         .zip(simd_out.chunks_exact_mut(32))
     {
+        // SAFETY: `chunks_exact(32)` guarantees 32 valid bytes for load/store.
         let input_vec = unsafe { _mm256_loadu_si256(input_chunk.as_ptr().cast()) };
         let low = _mm256_and_si256(input_vec, nibble_mask);
         let high = _mm256_and_si256(_mm256_srli_epi64::<4>(input_vec), nibble_mask);
@@ -85,6 +88,7 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
             _mm256_shuffle_epi8(high_tbl, high),
         );
         if XOR {
+            // SAFETY: `chunks_exact(32)` guarantees 32 valid bytes for load/store.
             let out_vec = unsafe { _mm256_loadu_si256(out_chunk.as_ptr().cast()) };
             unsafe {
                 _mm256_storeu_si256(
@@ -93,6 +97,7 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
                 )
             };
         } else {
+            // SAFETY: `chunks_exact(32)` guarantees 32 valid bytes for the store.
             unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), product) };
         }
     }

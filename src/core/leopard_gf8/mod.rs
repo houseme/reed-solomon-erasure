@@ -117,6 +117,55 @@ pub(crate) struct LeopardGf8ProfileMetrics {
 }
 
 #[cfg(feature = "std")]
+impl LeopardGf8ProfileMetrics {
+    fn add_ifft_calls(&self, phase: IfftProfilePhase) {
+        self.ifft_stage_calls.fetch_add(1, Ordering::Relaxed);
+        match phase {
+            IfftProfilePhase::FirstGroup => &self.first_group_ifft_calls,
+            IfftProfilePhase::LaterGroup => &self.later_group_ifft_calls,
+            IfftProfilePhase::RemainderGroup => &self.remainder_group_ifft_calls,
+        }
+        .fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn add_input_copy_bytes(&self, phase: IfftProfilePhase, bytes: usize) {
+        self.input_copy_bytes.fetch_add(bytes, Ordering::Relaxed);
+        match phase {
+            IfftProfilePhase::FirstGroup => &self.first_group_input_copy_bytes,
+            IfftProfilePhase::LaterGroup => &self.later_group_input_copy_bytes,
+            IfftProfilePhase::RemainderGroup => &self.remainder_group_input_copy_bytes,
+        }
+        .fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    fn add_zero_fill_bytes(&self, phase: IfftProfilePhase, bytes: usize) {
+        self.zero_fill_bytes.fetch_add(bytes, Ordering::Relaxed);
+        match phase {
+            IfftProfilePhase::FirstGroup => &self.first_group_zero_fill_bytes,
+            IfftProfilePhase::LaterGroup => &self.later_group_zero_fill_bytes,
+            IfftProfilePhase::RemainderGroup => &self.remainder_group_zero_fill_bytes,
+        }
+        .fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    fn add_xor_bytes(&self, phase: IfftProfilePhase, bytes: usize) {
+        self.xor_bytes.fetch_add(bytes, Ordering::Relaxed);
+        match phase {
+            IfftProfilePhase::LaterGroup => &self.later_group_xor_bytes,
+            IfftProfilePhase::RemainderGroup => &self.remainder_group_xor_bytes,
+            IfftProfilePhase::FirstGroup => return,
+        }
+        .fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    fn add_output_writeback(&self, bytes: usize) {
+        self.output_writeback_calls.fetch_add(1, Ordering::Relaxed);
+        self.output_writeback_bytes
+            .fetch_add(bytes, Ordering::Relaxed);
+    }
+}
+
+#[cfg(feature = "std")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LeopardGf8ProfileStats {
     pub encode_calls: usize,
@@ -145,7 +194,7 @@ pub struct LeopardGf8ProfileStats {
 }
 
 static TABLES8: Once<LeopardGf8Tables> = Once::new();
-const LEOPARD_GF8_XOR_CLONE_ENV: &str = "RSE_LEOPARD_GF8_XOR_CLONE";
+
 #[cfg(feature = "std")]
 static PROFILE8: LeopardGf8ProfileMetrics = LeopardGf8ProfileMetrics {
     encode_calls: AtomicUsize::new(0),

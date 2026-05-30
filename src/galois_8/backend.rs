@@ -300,6 +300,8 @@ fn supports_rust_avx512(features: X86FeatureSet) -> bool {
     not(any(target_os = "android", target_os = "ios")),
     feature = "std"
 ))]
+/// GFNI backends are override-only: never auto-selected due to limited deployment
+/// and validation. Opt in via `RSE_BACKEND_OVERRIDE=rust-gfni-avx2`.
 fn supports_rust_gfni_avx2(features: X86FeatureSet) -> bool {
     features.gfni && features.avx2
 }
@@ -311,6 +313,7 @@ fn supports_rust_gfni_avx2(features: X86FeatureSet) -> bool {
     not(any(target_os = "android", target_os = "ios")),
     feature = "std"
 ))]
+/// GFNI+AVX-512 backend, override-only. See `supports_rust_gfni_avx2` for rationale.
 fn supports_rust_gfni_avx512(features: X86FeatureSet) -> bool {
     features.gfni && features.avx512f && features.avx512bw
 }
@@ -377,6 +380,15 @@ fn select_x86_override_backend(
     not(any(target_os = "android", target_os = "ios")),
     feature = "std"
 ))]
+/// Selects the best available x86_64 backend via runtime feature detection.
+///
+/// **Priority order**: AVX2 > AVX-512 > SSSE3 > SIMD-C > Scalar.
+///
+/// AVX-512 is intentionally ranked below AVX2 because AVX-512 can cause
+/// frequency throttling on some microarchitectures, and the 512-bit path
+/// offers diminishing returns for the nibble-lookup algorithm (the bottleneck
+/// is typically memory bandwidth, not SIMD width). Users who want AVX-512
+/// or GFNI can opt in via `RSE_BACKEND_OVERRIDE`.
 fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
     if supports_rust_avx2(features) {
         return RUST_AVX2_BACKEND;

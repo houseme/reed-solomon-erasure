@@ -43,10 +43,12 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
     };
 
     let (low_half, high_half) = super::load_table_halves(c);
+    // SAFETY: `low_half`/`high_half` are 16-byte aligned table halves (from MUL_TABLE_LOW/HIGH).
     let low_tbl: __m128i = unsafe { _mm_loadu_si128(low_half.as_ptr().cast()) };
     let high_tbl: __m128i = unsafe { _mm_loadu_si128(high_half.as_ptr().cast()) };
     let nibble_mask: __m128i = _mm_set1_epi8(0x0f);
 
+    // Round down to 16-byte boundary so all SIMD loads/stores are in-bounds.
     let bytes_done = input.len() & !15usize;
     let (simd_input, tail_input) = input.split_at(bytes_done);
     let (simd_out, tail_out) = out.split_at_mut(bytes_done);
@@ -55,6 +57,7 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
         .chunks_exact(16)
         .zip(simd_out.chunks_exact_mut(16))
     {
+        // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes for load/store.
         let input_vec = unsafe { _mm_loadu_si128(input_chunk.as_ptr().cast()) };
         let low = _mm_and_si128(input_vec, nibble_mask);
         let high = _mm_and_si128(_mm_srli_epi64::<4>(input_vec), nibble_mask);
@@ -63,6 +66,7 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
             _mm_shuffle_epi8(high_tbl, high),
         );
         if XOR {
+            // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes for load/store.
             let out_vec = unsafe { _mm_loadu_si128(out_chunk.as_ptr().cast()) };
             unsafe {
                 _mm_storeu_si128(
@@ -71,6 +75,7 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
                 )
             };
         } else {
+            // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes for the store.
             unsafe { _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), product) };
         }
     }

@@ -60,7 +60,7 @@ fn fwht2_alt8(a: u8, b: u8) -> (u8, u8) {
 }
 
 pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
-    assert_eq!(input.len(), out.len());
+    debug_assert_eq!(input.len(), out.len());
 
     let (input64, input_tail64) = input.as_chunks::<64>();
     let (out64, out_tail64) = out.as_chunks_mut::<64>();
@@ -152,7 +152,7 @@ pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
 }
 
 pub(super) fn slices_xor(input: &[Vec<u8>], out: &mut [Vec<u8>]) {
-    assert_eq!(input.len(), out.len());
+    debug_assert_eq!(input.len(), out.len());
     for (src, dst) in input.iter().zip(out.iter_mut()) {
         slice_xor(src, dst);
     }
@@ -161,7 +161,7 @@ pub(super) fn slices_xor(input: &[Vec<u8>], out: &mut [Vec<u8>]) {
 pub(super) fn mul_slice_xor_reference(c: u8, input: &[u8], out: &mut [u8]) {
     let tables = init_leopard_gf8_tables();
     let lut = &tables.mul_luts[c as usize];
-    assert_eq!(input.len(), out.len());
+    debug_assert_eq!(input.len(), out.len());
     for (value, slot) in input.iter().zip(out.iter_mut()) {
         *slot ^= lut.value[*value as usize];
     }
@@ -169,29 +169,21 @@ pub(super) fn mul_slice_xor_reference(c: u8, input: &[u8], out: &mut [u8]) {
 
 pub(super) fn mulgf8(out: &mut [u8], input: &[u8], log_m: u8, tables: &LeopardGf8Tables) {
     let lut = &tables.mul_luts[log_m as usize];
-    assert_eq!(input.len(), out.len());
+    debug_assert_eq!(input.len(), out.len());
     for (src, dst) in input.iter().zip(out.iter_mut()) {
         *dst = lut.value[*src as usize];
     }
 }
 
 pub(super) fn fft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardGf8Tables) {
-    if log_m == MODULUS8 as u8 {
-        slice_xor(x, y);
-    } else {
-        let lut = &tables.mul_luts[log_m as usize];
-        assert_eq!(x.len(), y.len());
-        for (dst, src) in x.iter_mut().zip(y.iter()) {
-            *dst ^= lut.value[*src as usize];
-        }
-    }
+    fft_dit2_lut(x, y, log_m, &tables.mul_luts[log_m as usize].value);
 }
 
 pub(super) fn fft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256]) {
     if log_m == MODULUS8 as u8 {
         slice_xor(x, y);
     } else {
-        assert_eq!(x.len(), y.len());
+        debug_assert_eq!(x.len(), y.len());
         for (dst, src) in x.iter_mut().zip(y.iter()) {
             *dst ^= lut[*src as usize];
         }
@@ -199,22 +191,14 @@ pub(super) fn fft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256
 }
 
 pub(super) fn ifft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardGf8Tables) {
-    if log_m == MODULUS8 as u8 {
-        slice_xor(x, y);
-    } else {
-        let lut = &tables.mul_luts[log_m as usize];
-        assert_eq!(x.len(), y.len());
-        for (dst, src) in y.iter_mut().zip(x.iter()) {
-            *dst ^= lut.value[*src as usize];
-        }
-    }
+    ifft_dit2_lut(x, y, log_m, &tables.mul_luts[log_m as usize].value);
 }
 
 pub(super) fn ifft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256]) {
     if log_m == MODULUS8 as u8 {
         slice_xor(x, y);
     } else {
-        assert_eq!(x.len(), y.len());
+        debug_assert_eq!(x.len(), y.len());
         for (dst, src) in y.iter_mut().zip(x.iter()) {
             *dst ^= lut[*src as usize];
         }
@@ -231,9 +215,9 @@ pub(super) fn fft_dit4_full_lut(
     lut23: &[u8; 256],
     lut02: &[u8; 256],
 ) {
-    assert_eq!(a.len(), b.len());
-    assert_eq!(a.len(), c.len());
-    assert_eq!(a.len(), d.len());
+    debug_assert_eq!(a.len(), b.len());
+    debug_assert_eq!(a.len(), c.len());
+    debug_assert_eq!(a.len(), d.len());
 
     #[inline(always)]
     fn step(
@@ -323,9 +307,9 @@ pub(super) fn ifft_dit4_full_lut(
     lut23: &[u8; 256],
     lut02: &[u8; 256],
 ) {
-    assert_eq!(a.len(), b.len());
-    assert_eq!(a.len(), c.len());
-    assert_eq!(a.len(), d.len());
+    debug_assert_eq!(a.len(), b.len());
+    debug_assert_eq!(a.len(), c.len());
+    debug_assert_eq!(a.len(), d.len());
 
     #[inline(always)]
     fn step(

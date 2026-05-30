@@ -4,14 +4,15 @@ mod common;
 
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Instant;
 
-use reed_solomon_erasure::galois_8::{
-    ReedSolomon, active_backend_id, active_backend_kind, active_backend_name,
-};
+use reed_solomon_erasure::galois_8::ReedSolomon;
 
-use self::bench_common::{BenchCase, Operation, derived_seed, make_full_shards};
+use self::bench_common::{
+    ARTIFACT_SCHEMA_VERSION, BenchCase, Operation, backend, backend_id, backend_kind,
+    backend_override, benchmark_metrics_enabled, derived_seed, features, git_revision,
+    make_full_shards, target_triple,
+};
 use self::common::{assert_backend_override_honored_if_strict, override_honored};
 
 struct SmallFileResult {
@@ -40,8 +41,6 @@ impl SmallFileOp {
         }
     }
 }
-
-const ARTIFACT_SCHEMA_VERSION: u32 = 1;
 
 const QUICK_SMALL_FILE_CASES: &[BenchCase] = &[
     BenchCase {
@@ -237,64 +236,6 @@ const EXTENDED_SMALL_FILE_CASES: &[BenchCase] = &[
         label: "10x4_1m",
     },
 ];
-
-fn git_revision() -> String {
-    Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "unknown".to_string())
-}
-
-fn features() -> String {
-    let mut enabled = Vec::new();
-    if cfg!(feature = "std") {
-        enabled.push("std");
-    }
-    if cfg!(feature = "simd-accel") {
-        enabled.push("simd-accel");
-    }
-    if cfg!(feature = "benchmark-metrics") {
-        enabled.push("benchmark-metrics");
-    }
-    if enabled.is_empty() {
-        "none".to_string()
-    } else {
-        enabled.join("|")
-    }
-}
-
-fn backend() -> &'static str {
-    active_backend_name()
-}
-
-fn backend_id() -> String {
-    format!("{:?}", active_backend_id())
-}
-
-fn backend_kind() -> String {
-    format!("{:?}", active_backend_kind())
-}
-
-fn backend_override() -> String {
-    std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string())
-}
-
-fn benchmark_metrics_enabled() -> bool {
-    cfg!(feature = "benchmark-metrics")
-}
-
-fn target_triple() -> String {
-    format!(
-        "{}-{}-{}",
-        std::env::consts::ARCH,
-        std::env::consts::OS,
-        option_env!("CARGO_CFG_TARGET_ENV").unwrap_or("unknown"),
-    )
-}
 
 fn small_file_profile() -> &'static str {
     std::env::var("RSE_SMALL_FILE_PROFILE")

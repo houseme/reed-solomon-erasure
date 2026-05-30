@@ -29,18 +29,21 @@ impl FlatWork {
     }
 
     pub(super) fn lane(&self, idx: usize) -> &[u8] {
+        debug_assert!(idx < self.lanes, "lane index {idx} out of bounds (lanes={})", self.lanes);
         let start = idx * self.lane_len;
         let end = start + self.lane_len;
         &self.buf[start..end]
     }
 
     pub(super) fn lane_mut(&mut self, idx: usize) -> &mut [u8] {
+        debug_assert!(idx < self.lanes, "lane index {idx} out of bounds (lanes={})", self.lanes);
         let start = idx * self.lane_len;
         let end = start + self.lane_len;
         &mut self.buf[start..end]
     }
 
     pub(super) fn lane_views(&mut self, lanes: usize, size: usize) -> Vec<&mut [u8]> {
+        debug_assert!(size <= self.lane_len, "view size {size} exceeds lane_len {}", self.lane_len);
         self.buf
             .chunks_mut(self.lane_len)
             .take(lanes)
@@ -54,6 +57,7 @@ impl FlatWork {
         size: usize,
         f: impl FnOnce(&mut [&mut [u8]]) -> R,
     ) -> R {
+        debug_assert!(size <= self.lane_len, "view size {size} exceeds lane_len {}", self.lane_len);
         let mut views: SmallVec<[&mut [u8]; 96]> = self
             .buf
             .chunks_mut(self.lane_len)

@@ -1,7 +1,11 @@
 #![allow(dead_code)]
 
+use std::process::Command;
+
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
+
+use reed_solomon_erasure::galois_8::{active_backend_id, active_backend_kind, active_backend_name};
 
 pub const BASE_SEED: u64 = 0x00EC_5EED_2026_0524;
 
@@ -259,4 +263,64 @@ pub fn make_full_shards(
 
 pub fn case_name(operation: Operation, case: BenchCase) -> String {
     format!("{}_{}", operation.as_str(), case.label)
+}
+
+pub const ARTIFACT_SCHEMA_VERSION: u32 = 1;
+
+pub fn git_revision() -> String {
+    Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+pub fn features() -> String {
+    let mut enabled = Vec::new();
+    if cfg!(feature = "std") {
+        enabled.push("std");
+    }
+    if cfg!(feature = "simd-accel") {
+        enabled.push("simd-accel");
+    }
+    if cfg!(feature = "benchmark-metrics") {
+        enabled.push("benchmark-metrics");
+    }
+    if enabled.is_empty() {
+        "none".to_string()
+    } else {
+        enabled.join("|")
+    }
+}
+
+pub fn backend() -> &'static str {
+    active_backend_name()
+}
+
+pub fn backend_id() -> String {
+    format!("{:?}", active_backend_id())
+}
+
+pub fn backend_kind() -> String {
+    format!("{:?}", active_backend_kind())
+}
+
+pub fn backend_override() -> String {
+    std::env::var("RSE_BACKEND_OVERRIDE").unwrap_or_else(|_| "auto".to_string())
+}
+
+pub fn benchmark_metrics_enabled() -> bool {
+    cfg!(feature = "benchmark-metrics")
+}
+
+pub fn target_triple() -> String {
+    format!(
+        "{}-{}-{}",
+        std::env::consts::ARCH,
+        std::env::consts::OS,
+        option_env!("CARGO_CFG_TARGET_ENV").unwrap_or("unknown"),
+    )
 }
