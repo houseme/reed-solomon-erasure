@@ -105,7 +105,11 @@ fn init_fft_skew8(
 }
 
 fn init_mul8_lut(log_lut: &[u8; ORDER8], exp_lut: &[u8; ORDER8]) -> Box<[Mul8Lut; ORDER8]> {
-    let mut mul_luts = Box::new([Mul8Lut { value: [0u8; 256] }; ORDER8]);
+    let mut mul_luts = Box::new([Mul8Lut {
+        value: [0u8; 256],
+        low: [0u8; 16],
+        high: [0u8; 16],
+    }; ORDER8]);
 
     for log_m in 0..ORDER8 {
         let mut tmp = [0u8; 64];
@@ -124,6 +128,14 @@ fn init_mul8_lut(log_lut: &[u8; ORDER8], exp_lut: &[u8; ORDER8]) -> Box<[Mul8Lut
         let lut = &mut mul_luts[log_m];
         for i in 0..256usize {
             lut.value[i] = tmp[i & 15] ^ tmp[(i >> 4) + 16];
+        }
+
+        // Pre-split nibble tables for SIMD nibble-lookup.
+        // low[i] = value[i] (low nibble products)
+        // high[i] = value[i * 16] (high nibble products)
+        lut.low.copy_from_slice(&lut.value[..16]);
+        for i in 0..16 {
+            lut.high[i] = lut.value[i * 16];
         }
     }
 

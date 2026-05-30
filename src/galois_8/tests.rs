@@ -528,7 +528,14 @@ fn test_active_backend_metadata() {
                 && std::is_x86_feature_detected!("avx512bw");
             let has_avx2 = std::is_x86_feature_detected!("avx2");
 
-            if has_avx2 {
+            // GFNI backends are auto-selected with higher priority when available.
+            if has_gfni && has_avx512 {
+                assert_eq!(active_backend_name(), "rust-gfni-avx512");
+                assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+            } else if has_gfni && has_avx2 {
+                assert_eq!(active_backend_name(), "rust-gfni-avx2");
+                assert_eq!(active_backend_kind(), BackendKind::RustSimd);
+            } else if has_avx2 {
                 assert_eq!(active_backend_name(), "rust-avx2");
                 assert_eq!(active_backend_kind(), BackendKind::RustSimd);
             } else if has_avx512 {

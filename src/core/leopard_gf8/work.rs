@@ -1,7 +1,6 @@
 extern crate alloc;
 
 use alloc::alloc::{alloc, alloc_zeroed, dealloc, handle_alloc_error};
-use alloc::vec::Vec;
 use core::alloc::Layout;
 use smallvec::SmallVec;
 
@@ -13,7 +12,6 @@ pub(super) struct FlatWork {
     lane_len: usize,
     ptr: *mut u8,
     len: usize,
-    views: Vec<*mut [u8]>,
 }
 
 unsafe impl Send for FlatWork {}
@@ -35,7 +33,6 @@ impl FlatWork {
             lane_len,
             ptr,
             len,
-            views: Vec::with_capacity(lanes),
         }
     }
 
@@ -59,7 +56,6 @@ impl FlatWork {
             lane_len,
             ptr,
             len,
-            views: Vec::with_capacity(lanes),
         }
     }
 

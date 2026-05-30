@@ -142,10 +142,39 @@ pub(super) fn slices_xor(input: &[Vec<u8>], out: &mut [Vec<u8>]) {
 
 /// SIMD-accelerated LUT-XOR: `dst[i] ^= lut[src[i]]` using nibble-lookup.
 ///
-/// Uses AVX2 on x86_64 (32 bytes/iteration), scalar fallback otherwise.
-/// Skips SIMD for small slices (< 32 bytes) where overhead exceeds benefit.
+/// Uses AVX2 on x86_64 (32 bytes/iteration) for slices >= 32 bytes,
+/// SSSE3 (16 bytes/iteration) for slices >= 16 bytes, scalar fallback otherwise.
+/// The lower SSSE3 threshold helps small-shard workloads where Decomposed
+/// DIT-4 strategy produces many short slices.
 #[inline]
 fn lut_xor(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
+    // Build high nibble table inline (same as Mul8Lut.high).
+    // The compiler should optimize this into a few shuffles.
+    let mut high = [0u8; 16];
+    for i in 0..16 {
+        high[i] = lut[i * 16];
+    }
+    lut_xor_impl(dst, src, &lut[..16].try_into().unwrap(), &high, lut)
+}
+
+/// SIMD-accelerated LUT-XOR with pre-split nibble tables.
+///
+/// Same as `lut_xor` but accepts pre-computed nibble halves to avoid
+/// rebuilding them on every call. `low[i] = lut[i]` for i in 0..16,
+/// `high[i] = lut[i * 16]` for i in 0..16.
+#[inline]
+fn lut_xor_prebuilt(dst: &mut [u8], src: &[u8], low: &[u8; 16], high: &[u8; 16], lut: &[u8; 256]) {
+    lut_xor_impl(dst, src, low, high, lut)
+}
+
+#[inline]
+fn lut_xor_impl(
+    dst: &mut [u8],
+    src: &[u8],
+    low: &[u8; 16],
+    high: &[u8; 16],
+    lut: &[u8; 256],
+) {
     debug_assert_eq!(dst.len(), src.len());
 
     #[cfg(target_arch = "x86_64")]
@@ -153,7 +182,25 @@ fn lut_xor(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
         if dst.len() >= 32 && is_x86_feature_detected!("avx2") {
             // SAFETY: runtime feature detection confirmed AVX2 is available, len >= 32.
             unsafe {
-                lut_xor_avx2(dst, src, lut);
+                lut_xor_avx2_prebuilt(dst, src, low, high, lut);
+            }
+            return;
+        }
+        if dst.len() >= 16 && is_x86_feature_detected!("ssse3") {
+            // SAFETY: runtime feature detection confirmed SSSE3 is available, len >= 16.
+            unsafe {
+                lut_xor_ssse3_prebuilt(dst, src, low, high, lut);
+            }
+            return;
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        if dst.len() >= 16 {
+            // SAFETY: aarch64 always has NEON, len >= 16.
+            unsafe {
+                lut_xor_neon_prebuilt(dst, src, low, high, lut);
             }
             return;
         }
@@ -165,37 +212,32 @@ fn lut_xor(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
     }
 }
 
-/// AVX2 nibble-lookup: `dst[i] ^= lut[src[i]]`, 32 bytes per iteration.
+/// AVX2 nibble-lookup with pre-split tables: `dst[i] ^= lut[src[i]]`, 32 bytes/iter.
 ///
-/// Decomposes each byte into low/high nibbles, looks up in 16-byte tables,
-/// and XORs the results. Same algorithm as galois_8 AVX2 mul_slice_xor.
+/// Accepts pre-computed 16-byte nibble halves to avoid per-call table construction.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-unsafe fn lut_xor_avx2(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
+unsafe fn lut_xor_avx2_prebuilt(
+    dst: &mut [u8],
+    src: &[u8],
+    low: &[u8; 16],
+    high: &[u8; 16],
+    lut: &[u8; 256],
+) {
     use core::arch::x86_64::{
         __m256i, _mm256_and_si256, _mm256_loadu_si256, _mm256_set1_epi8, _mm256_shuffle_epi8,
         _mm256_srli_epi64, _mm256_storeu_si256, _mm256_xor_si256,
     };
 
-    // Build 16-byte nibble tables: lut_low[i] = lut[i], lut_high[i] = lut[i*16].
-    let mut lut_low = [0u8; 16];
-    let mut lut_high = [0u8; 16];
-    lut_low.copy_from_slice(&lut[..16]);
-    for i in 0..16 {
-        lut_high[i] = lut[i * 16];
-    }
-
     // Broadcast 16-byte tables to both 128-bit lanes of 256-bit registers.
     let low_tbl: __m256i = {
         use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
-        // SAFETY: lut_low is a valid 16-byte array.
-        let lo128: __m128i = unsafe { _mm_loadu_si128(lut_low.as_ptr().cast()) };
+        let lo128: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
         _mm256_broadcastsi128_si256(lo128)
     };
     let high_tbl: __m256i = {
         use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
-        // SAFETY: lut_high is a valid 16-byte array.
-        let hi128: __m128i = unsafe { _mm_loadu_si128(lut_high.as_ptr().cast()) };
+        let hi128: __m128i = unsafe { _mm_loadu_si128(high.as_ptr().cast()) };
         _mm256_broadcastsi128_si256(hi128)
     };
     let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);
@@ -219,6 +261,50 @@ unsafe fn lut_xor_avx2(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
     }
 
     // Scalar tail (0-31 bytes).
+    for (d, s) in dst_tail.iter_mut().zip(src_tail.iter()) {
+        *d ^= lut[*s as usize];
+    }
+}
+
+/// SSSE3 nibble-lookup with pre-split tables: `dst[i] ^= lut[src[i]]`, 16 bytes/iter.
+///
+/// Accepts pre-computed 16-byte nibble halves to avoid per-call table construction.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "ssse3")]
+unsafe fn lut_xor_ssse3_prebuilt(
+    dst: &mut [u8],
+    src: &[u8],
+    low: &[u8; 16],
+    high: &[u8; 16],
+    lut: &[u8; 256],
+) {
+    use core::arch::x86_64::{
+        __m128i, _mm_and_si128, _mm_loadu_si128, _mm_set1_epi8, _mm_shuffle_epi8,
+        _mm_srli_epi64, _mm_storeu_si128, _mm_xor_si128,
+    };
+
+    let low_tbl: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
+    let high_tbl: __m128i = unsafe { _mm_loadu_si128(high.as_ptr().cast()) };
+    let nibble_mask: __m128i = _mm_set1_epi8(0x0f);
+
+    let (src16, src_tail) = src.as_chunks::<16>();
+    let (dst16, dst_tail) = dst.as_chunks_mut::<16>();
+
+    for (s_chunk, d_chunk) in src16.iter().zip(dst16.iter_mut()) {
+        let sv = unsafe { _mm_loadu_si128(s_chunk.as_ptr().cast()) };
+        let dv = unsafe { _mm_loadu_si128(d_chunk.as_ptr().cast()) };
+        let lo = _mm_and_si128(sv, nibble_mask);
+        let hi = _mm_and_si128(_mm_srli_epi64::<4>(sv), nibble_mask);
+        let product = _mm_xor_si128(
+            _mm_shuffle_epi8(low_tbl, lo),
+            _mm_shuffle_epi8(high_tbl, hi),
+        );
+        unsafe {
+            _mm_storeu_si128(d_chunk.as_mut_ptr().cast(), _mm_xor_si128(dv, product));
+        }
+    }
+
+    // Scalar tail (0-15 bytes).
     for (d, s) in dst_tail.iter_mut().zip(src_tail.iter()) {
         *d ^= lut[*s as usize];
     }
@@ -281,17 +367,6 @@ pub(super) fn fft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    // Forward step per byte:
-    //   b1 = b[i] ^ lut02[d[i]];  a_f = a[i] ^ lut02[c[i]] ^ lut01[b1];
-    //   c_f = c[i] ^ lut23[d[i]];
-    //   a=a_f, b=b1, c=c_f, d unchanged
-    //
-    // In-place order (1 allocation):
-    //   1. b  ^= lut02[d]        (b is now b1, reads d unchanged)
-    //   2. save a                (1 alloc — needed because a_f reads original a)
-    //   3. a   = a_saved ^ lut02[c] ^ lut01[b]  (reads original c, b=b1)
-    //   4. c  ^= lut23[d]        (c is now c_f, reads d unchanged)
-
     // Step 1: b1 in-place.
     lut_xor(b, d, lut02);
 
@@ -305,6 +380,50 @@ pub(super) fn fft_dit4_full_lut(
 
     // Step 4: c_f in-place.
     lut_xor(c, d, lut23);
+    // d unchanged.
+}
+
+/// Zero-copy forward radix-4 butterfly using pre-allocated scratch buffer
+/// and pre-split nibble tables.
+///
+/// Same algorithm as `fft_dit4_full_lut` but avoids both the per-call `to_vec()`
+/// heap allocation and the per-call nibble table construction.
+#[inline(always)]
+pub(super) fn fft_dit4_full_lut_scratch(
+    a: &mut [u8],
+    b: &mut [u8],
+    c: &mut [u8],
+    d: &mut [u8],
+    lut01: &[u8; 256],
+    lut01_low: &[u8; 16],
+    lut01_high: &[u8; 16],
+    lut23: &[u8; 256],
+    lut23_low: &[u8; 16],
+    lut23_high: &[u8; 16],
+    lut02: &[u8; 256],
+    lut02_low: &[u8; 16],
+    lut02_high: &[u8; 16],
+    scratch: &mut [u8],
+) {
+    debug_assert_eq!(a.len(), b.len());
+    debug_assert_eq!(a.len(), c.len());
+    debug_assert_eq!(a.len(), d.len());
+    debug_assert!(scratch.len() >= a.len());
+
+    // Step 1: b1 in-place (b ^= lut02[d], reads d unchanged).
+    lut_xor_prebuilt(b, d, lut02_low, lut02_high, lut02);
+
+    // Step 2: save a into scratch (zero-copy — no heap allocation).
+    let len = a.len();
+    scratch[..len].copy_from_slice(a);
+
+    // Step 3: a_f = a_saved ^ lut02[c] ^ lut01[b1].
+    a.copy_from_slice(&scratch[..len]);
+    lut_xor_prebuilt(a, c, lut02_low, lut02_high, lut02);
+    lut_xor_prebuilt(a, b, lut01_low, lut01_high, lut01);
+
+    // Step 4: c_f in-place (c ^= lut23[d], reads d unchanged).
+    lut_xor_prebuilt(c, d, lut23_low, lut23_high, lut23);
     // d unchanged.
 }
 
@@ -322,17 +441,6 @@ pub(super) fn ifft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    // Inverse step per byte:
-    //   b1 = b[i] ^ lut01[a[i]];  c_f = c[i] ^ lut02[a[i]];
-    //   d_f = d[i] ^ lut23[c[i]] ^ lut02[b1];
-    //   a unchanged, b=b1, c=c_f, d=d_f
-    //
-    // In-place order (1 allocation):
-    //   1. b  ^= lut01[a]         (b is now b1, a unchanged)
-    //   2. save d                 (1 alloc — d_f needs original c)
-    //   3. d_f = d_saved ^ lut23[c] ^ lut02[b1]  (reads original c, b=b1)
-    //   4. c  ^= lut02[a]         (c is now c_f, a unchanged)
-
     // Step 1: b1 in-place.
     lut_xor(b, a, lut01);
 
@@ -347,6 +455,92 @@ pub(super) fn ifft_dit4_full_lut(
     // Step 4: c_f in-place.
     lut_xor(c, a, lut02);
     // a unchanged.
+}
+
+/// Zero-copy inverse radix-4 butterfly using pre-allocated scratch buffer
+/// and pre-split nibble tables.
+///
+/// Same algorithm as `ifft_dit4_full_lut` but avoids both the per-call `to_vec()`
+/// heap allocation and the per-call nibble table construction.
+#[inline(always)]
+pub(super) fn ifft_dit4_full_lut_scratch(
+    a: &mut [u8],
+    b: &mut [u8],
+    c: &mut [u8],
+    d: &mut [u8],
+    lut01: &[u8; 256],
+    lut01_low: &[u8; 16],
+    lut01_high: &[u8; 16],
+    lut23: &[u8; 256],
+    lut23_low: &[u8; 16],
+    lut23_high: &[u8; 16],
+    lut02: &[u8; 256],
+    lut02_low: &[u8; 16],
+    lut02_high: &[u8; 16],
+    scratch: &mut [u8],
+) {
+    debug_assert_eq!(a.len(), b.len());
+    debug_assert_eq!(a.len(), c.len());
+    debug_assert_eq!(a.len(), d.len());
+    debug_assert!(scratch.len() >= a.len());
+
+    // Step 1: b1 in-place (b ^= lut01[a], a unchanged).
+    lut_xor_prebuilt(b, a, lut01_low, lut01_high, lut01);
+
+    // Step 2: save d into scratch (zero-copy — no heap allocation).
+    let len = d.len();
+    scratch[..len].copy_from_slice(d);
+
+    // Step 3: d_f = d_saved ^ lut23[c] ^ lut02[b1].
+    d.copy_from_slice(&scratch[..len]);
+    lut_xor_prebuilt(d, c, lut23_low, lut23_high, lut23);
+    lut_xor_prebuilt(d, b, lut02_low, lut02_high, lut02);
+
+    // Step 4: c_f in-place (c ^= lut02[a], a unchanged).
+    lut_xor_prebuilt(c, a, lut02_low, lut02_high, lut02);
+    // a unchanged.
+}
+
+/// NEON nibble-lookup with pre-split tables: `dst[i] ^= lut[src[i]]`, 16 bytes/iter.
+///
+/// Accepts pre-computed 16-byte nibble halves to avoid per-call table construction.
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn lut_xor_neon_prebuilt(
+    dst: &mut [u8],
+    src: &[u8],
+    low: &[u8; 16],
+    high: &[u8; 16],
+    lut: &[u8; 256],
+) {
+    use core::arch::aarch64::{
+        uint8x16_t, vandq_u8, vdupq_n_u8, vld1q_u8, vqtbl1q_u8, vshrq_n_u8, vst1q_u8,
+        veorq_u8,
+    };
+
+    let low_tbl: uint8x16_t = vld1q_u8(low.as_ptr());
+    let high_tbl: uint8x16_t = vld1q_u8(high.as_ptr());
+    let nibble_mask: uint8x16_t = vdupq_n_u8(0x0f);
+
+    let (src16, src_tail) = src.as_chunks::<16>();
+    let (dst16, dst_tail) = dst.as_chunks_mut::<16>();
+
+    for (s_chunk, d_chunk) in src16.iter().zip(dst16.iter_mut()) {
+        let sv = vld1q_u8(s_chunk.as_ptr());
+        let dv = vld1q_u8(d_chunk.as_ptr());
+        let lo = vandq_u8(sv, nibble_mask);
+        let hi = vandq_u8(vshrq_n_u8::<4>(sv), nibble_mask);
+        let product = veorq_u8(
+            vqtbl1q_u8(low_tbl, lo),
+            vqtbl1q_u8(high_tbl, hi),
+        );
+        vst1q_u8(d_chunk.as_mut_ptr(), veorq_u8(dv, product));
+    }
+
+    // Scalar tail (0-15 bytes).
+    for (d, s) in dst_tail.iter_mut().zip(src_tail.iter()) {
+        *d ^= lut[*s as usize];
+    }
 }
 
 pub(super) fn get_pair_mut<T>(slice: &mut [T], i: usize, j: usize) -> Option<(&mut T, &mut T)> {

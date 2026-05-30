@@ -6,7 +6,10 @@ use crate::errors::Error;
 #[cfg(feature = "std")]
 use std::sync::atomic::Ordering;
 
-use super::ops::{fft_dit2, fft_dit4_full_lut, get_pair_mut, ifft_dit2, ifft_dit4_full_lut, slice_xor};
+use super::ops::{
+    fft_dit2, fft_dit4_full_lut_scratch, get_pair_mut, ifft_dit2,
+    ifft_dit4_full_lut_scratch, slice_xor,
+};
 use super::work::FlatWork;
 
 // Thread-local FlatWork cache to avoid repeated large heap allocations.
@@ -14,6 +17,15 @@ use super::work::FlatWork;
 #[cfg(feature = "std")]
 thread_local! {
     static FLAT_WORK_CACHE: std::cell::RefCell<Option<FlatWork>> =
+        std::cell::RefCell::new(None);
+}
+
+// Thread-local scratch buffer for zero-copy FFT butterflies.
+// Avoids per-butterfly `to_vec()` heap allocations by reusing a single buffer
+// across all radix-4 butterfly operations within an encode call.
+#[cfg(feature = "std")]
+thread_local! {
+    static SCRATCH_CACHE: std::cell::RefCell<Option<Vec<u8>>> =
         std::cell::RefCell::new(None);
 }
 use super::{
@@ -158,12 +170,25 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
     let mut flat_work = FlatWork::new(needed_lanes, needed_lane_len);
     let mut offset = 0usize;
 
+    // Pre-allocate scratch buffer for zero-copy FFT butterflies.
+    // Reused across all chunks and encode calls (via thread-local on std).
+    // The scratch avoids per-butterfly `to_vec()` heap allocations.
+    #[cfg(feature = "std")]
+    let mut scratch = SCRATCH_CACHE.with(|cache| cache.take().unwrap_or_default());
+    #[cfg(not(feature = "std"))]
+    let mut scratch: Vec<u8> = Vec::new();
+
     while offset < driver.shard_size {
         #[cfg(feature = "std")]
         PROFILE8.encode_chunks.fetch_add(1, Ordering::Relaxed);
         let end = core::cmp::min(offset + driver.chunk_size, driver.shard_size);
         let size = end - offset;
         let work_size = core::cmp::min(driver.m * 2, flat_work.lanes());
+
+        // Ensure scratch is large enough for this chunk.
+        if scratch.len() < size {
+            scratch.resize(size, 0);
+        }
 
         flat_work.with_lane_views(work_size, size, |work| {
             #[cfg(feature = "std")]
@@ -180,6 +205,7 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                 tables,
                 IfftProfilePhase::FirstGroup,
                 driver.shard_size,
+                &mut scratch,
             );
 
             let mut group_offset = driver.m;
@@ -202,6 +228,7 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     tables,
                     IfftProfilePhase::LaterGroup,
                     driver.shard_size,
+                    &mut scratch,
                 );
                 group_offset += driver.m;
             }
@@ -222,10 +249,17 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     tables,
                     IfftProfilePhase::RemainderGroup,
                     driver.shard_size,
+                    &mut scratch,
                 );
             }
 
-            fft_dit8_with_plan(&mut work[..driver.m], &fft_plan, tables, driver.shard_size);
+            fft_dit8_with_plan(
+                &mut work[..driver.m],
+                &fft_plan,
+                tables,
+                driver.shard_size,
+                &mut scratch,
+            );
 
             #[cfg(feature = "std")]
             PROFILE8.add_output_writeback(parity.len() * size);
@@ -235,6 +269,12 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
         });
         offset = end;
     }
+
+    // Return scratch buffer to thread-local cache for reuse.
+    #[cfg(feature = "std")]
+    SCRATCH_CACHE.with(|cache| {
+        *cache.borrow_mut() = Some(scratch);
+    });
 
     // Return FlatWork to cache for reuse by next encode call.
     #[cfg(feature = "std")]
@@ -262,16 +302,17 @@ fn dit4_at<W: AsMut<[u8]>>(
     log_m02: u8,
     tables: &LeopardGf8Tables,
     shard_size: usize,
+    scratch: &mut [u8],
 ) {
     match active_dit4_strategy(shard_size) {
         Dit4Strategy::Decomposed => {
             dit4_at_decomposed(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
         }
         Dit4Strategy::Direct => {
-            dit4_at_direct(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
+            dit4_at_direct(dir, work, base, dist, log_m01, log_m23, log_m02, tables, scratch);
         }
         Dit4Strategy::DirectSafe => {
-            dit4_at_direct_safe(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
+            dit4_at_direct_safe(dir, work, base, dist, log_m01, log_m23, log_m02, tables, scratch);
         }
         Dit4Strategy::Auto => unreachable!("Auto resolved in active_dit4_strategy"),
     }
@@ -297,6 +338,7 @@ fn dit4_at_decomposed<W: AsMut<[u8]>>(
 /// Strategy B: direct 4-lane butterfly with unsafe fast path.
 /// Uses raw pointer arithmetic for the common case (all 4 lanes in bounds),
 /// falls back to safe pairwise decomposition for boundary cases.
+/// Uses pre-allocated `scratch` buffer and pre-split nibble tables.
 fn dit4_at_direct<W: AsMut<[u8]>>(
     dir: TransformDir,
     work: &mut [W],
@@ -306,10 +348,14 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
     log_m23: u8,
     log_m02: u8,
     tables: &LeopardGf8Tables,
+    scratch: &mut [u8],
 ) {
-    let lut01 = &tables.mul_luts[log_m01 as usize].value;
-    let lut23 = &tables.mul_luts[log_m23 as usize].value;
-    let lut02 = &tables.mul_luts[log_m02 as usize].value;
+    let mul01 = &tables.mul_luts[log_m01 as usize];
+    let mul23 = &tables.mul_luts[log_m23 as usize];
+    let mul02 = &tables.mul_luts[log_m02 as usize];
+    let lut01 = &mul01.value;
+    let lut23 = &mul23.value;
+    let lut02 = &mul02.value;
 
     // Phase 1: bulk — all iterations guaranteed d < work.len(), no bounds check.
     let bulk_end = dist.min(work.len().saturating_sub(base + dist * 3));
@@ -327,10 +373,22 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
             let d_ref = (*ptr.add(d)).as_mut();
             match dir {
                 TransformDir::Forward => {
-                    fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                    fft_dit4_full_lut_scratch(
+                        a_ref, b_ref, c_ref, d_ref,
+                        lut01, &mul01.low, &mul01.high,
+                        lut23, &mul23.low, &mul23.high,
+                        lut02, &mul02.low, &mul02.high,
+                        scratch,
+                    );
                 }
                 TransformDir::Inverse => {
-                    ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                    ifft_dit4_full_lut_scratch(
+                        a_ref, b_ref, c_ref, d_ref,
+                        lut01, &mul01.low, &mul01.high,
+                        lut23, &mul23.low, &mul23.high,
+                        lut02, &mul02.low, &mul02.high,
+                        scratch,
+                    );
                 }
             }
         }
@@ -351,10 +409,22 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
                 let d_ref = (*ptr.add(d)).as_mut();
                 match dir {
                     TransformDir::Forward => {
-                        fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                        fft_dit4_full_lut_scratch(
+                            a_ref, b_ref, c_ref, d_ref,
+                            lut01, &mul01.low, &mul01.high,
+                            lut23, &mul23.low, &mul23.high,
+                            lut02, &mul02.low, &mul02.high,
+                            scratch,
+                        );
                     }
                     TransformDir::Inverse => {
-                        ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                        ifft_dit4_full_lut_scratch(
+                            a_ref, b_ref, c_ref, d_ref,
+                            lut01, &mul01.low, &mul01.high,
+                            lut23, &mul23.low, &mul23.high,
+                            lut02, &mul02.low, &mul02.high,
+                            scratch,
+                        );
                     }
                 }
             }
@@ -367,6 +437,7 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
 /// Strategy C: direct 4-lane butterfly, fully safe via split_at_mut chains.
 /// Each byte position is touched once (single-pass), but has extra index
 /// arithmetic overhead from 3 split_at_mut calls per iteration.
+/// Uses pre-allocated `scratch` buffer and pre-split nibble tables.
 fn dit4_at_direct_safe<W: AsMut<[u8]>>(
     dir: TransformDir,
     work: &mut [W],
@@ -376,10 +447,14 @@ fn dit4_at_direct_safe<W: AsMut<[u8]>>(
     log_m23: u8,
     log_m02: u8,
     tables: &LeopardGf8Tables,
+    scratch: &mut [u8],
 ) {
-    let lut01 = &tables.mul_luts[log_m01 as usize].value;
-    let lut23 = &tables.mul_luts[log_m23 as usize].value;
-    let lut02 = &tables.mul_luts[log_m02 as usize].value;
+    let mul01 = &tables.mul_luts[log_m01 as usize];
+    let mul23 = &tables.mul_luts[log_m23 as usize];
+    let mul02 = &tables.mul_luts[log_m02 as usize];
+    let lut01 = &mul01.value;
+    let lut23 = &mul23.value;
+    let lut02 = &mul02.value;
 
     for i in 0..dist {
         let a = base + i;
@@ -387,8 +462,6 @@ fn dit4_at_direct_safe<W: AsMut<[u8]>>(
         if d < work.len() {
             let b = a + dist;
             let c = a + dist * 2;
-            // Safe: split_at_mut chains produce 4 disjoint &mut [W] slices.
-            // a < b < c < d guaranteed by dist > 0.
             let (left_bc, right_d) = work.split_at_mut(d);
             let (left_b, right_c) = left_bc.split_at_mut(c);
             let (left_a, right_b) = left_b.split_at_mut(b);
@@ -398,10 +471,22 @@ fn dit4_at_direct_safe<W: AsMut<[u8]>>(
             let d_ref = right_d[0].as_mut();
             match dir {
                 TransformDir::Forward => {
-                    fft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                    fft_dit4_full_lut_scratch(
+                        a_ref, b_ref, c_ref, d_ref,
+                        lut01, &mul01.low, &mul01.high,
+                        lut23, &mul23.low, &mul23.high,
+                        lut02, &mul02.low, &mul02.high,
+                        scratch,
+                    );
                 }
                 TransformDir::Inverse => {
-                    ifft_dit4_full_lut(a_ref, b_ref, c_ref, d_ref, lut01, lut23, lut02);
+                    ifft_dit4_full_lut_scratch(
+                        a_ref, b_ref, c_ref, d_ref,
+                        lut01, &mul01.low, &mul01.high,
+                        lut23, &mul23.low, &mul23.high,
+                        lut02, &mul02.low, &mul02.high,
+                        scratch,
+                    );
                 }
             }
         } else {
@@ -476,6 +561,7 @@ fn fft_dit8_with_plan<W: AsMut<[u8]>>(
     plan: &FftDit8Plan,
     tables: &LeopardGf8Tables,
     shard_size: usize,
+    scratch: &mut [u8],
 ) {
     #[cfg(feature = "std")]
     PROFILE8.fft_stage_calls.fetch_add(1, Ordering::Relaxed);
@@ -493,6 +579,7 @@ fn fft_dit8_with_plan<W: AsMut<[u8]>>(
                 block.log_m02,
                 tables,
                 shard_size,
+                scratch,
             );
             i += 1;
         }
@@ -518,6 +605,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     tables: &LeopardGf8Tables,
     phase: IfftProfilePhase,
     shard_size: usize,
+    scratch: &mut [u8],
 ) {
     #[cfg(feature = "std")]
     PROFILE8.add_ifft_calls(phase);
@@ -563,6 +651,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                 block.log_m02,
                 tables,
                 shard_size,
+                scratch,
             );
         }
 
@@ -584,6 +673,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                     block.log_m02,
                     tables,
                     shard_size,
+                    scratch,
                 );
                 i += 1;
             }
@@ -608,7 +698,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
 }
 
 #[allow(dead_code)]
-pub(super) fn fft_dit8<W: AsMut<[u8]>>(
+pub(super) fn fft_dit8<W: AsRef<[u8]> + AsMut<[u8]>>(
     work: &mut [W],
     mtrunc: usize,
     m: usize,
@@ -616,6 +706,9 @@ pub(super) fn fft_dit8<W: AsMut<[u8]>>(
     tables: &LeopardGf8Tables,
 ) {
     let plan = build_fft_dit8_plan(mtrunc, m, skew_lut);
-    fft_dit8_with_plan(work, &plan, tables, 0);
+    // Allocate scratch for zero-copy butterfly (not in hot path, so alloc is fine).
+    let lane_len = work.first().map_or(0, |w| w.as_ref().len());
+    let mut scratch = vec![0u8; lane_len];
+    fft_dit8_with_plan(work, &plan, tables, 0, &mut scratch);
 }
 

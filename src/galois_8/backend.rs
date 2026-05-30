@@ -382,14 +382,19 @@ fn select_x86_override_backend(
 ))]
 /// Selects the best available x86_64 backend via runtime feature detection.
 ///
-/// **Priority order**: AVX2 > AVX-512 > SSSE3 > SIMD-C > Scalar.
+/// **Priority order**: GFNI+AVX-512 > GFNI+AVX2 > AVX2 > AVX-512 > SSSE3 > SIMD-C > Scalar.
 ///
-/// AVX-512 is intentionally ranked below AVX2 because AVX-512 can cause
-/// frequency throttling on some microarchitectures, and the 512-bit path
-/// offers diminishing returns for the nibble-lookup algorithm (the bottleneck
-/// is typically memory bandwidth, not SIMD width). Users who want AVX-512
-/// or GFNI can opt in via `RSE_BACKEND_OVERRIDE`.
+/// GFNI backends are preferred when available (Ice Lake+) because they provide
+/// native GF(2^8) multiplication via `_gf2p8mul`, eliminating the nibble-lookup
+/// overhead. AVX2 is ranked above AVX-512 for non-GFNI because AVX-512 can
+/// cause frequency throttling on some microarchitectures.
 fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
+    if supports_rust_gfni_avx512(features) {
+        return RUST_GFNI_AVX512_BACKEND;
+    }
+    if supports_rust_gfni_avx2(features) {
+        return RUST_GFNI_AVX2_BACKEND;
+    }
     if supports_rust_avx2(features) {
         return RUST_AVX2_BACKEND;
     }
@@ -624,14 +629,24 @@ mod tests {
     ))]
     #[test]
     fn test_select_x86_backend_priority() {
-        // The default runtime path stays conservative: AVX2 before AVX512,
-        // and GFNI remains override-only until broader evidence says otherwise.
+        // GFNI backends are preferred when available (native GF multiplication).
+        // Priority: GFNI+AVX-512 > GFNI+AVX2 > AVX2 > AVX-512 > SSSE3 > SIMD-C > Scalar.
         assert_eq!(
-            BackendId::RustAvx2,
+            BackendId::RustGfniAvx512,
             select_x86_backend(X86FeatureSet {
                 gfni: true,
                 avx512f: true,
                 avx512bw: true,
+                avx2: true,
+                ..X86FeatureSet::default()
+            })
+            .id
+        );
+
+        assert_eq!(
+            BackendId::RustGfniAvx2,
+            select_x86_backend(X86FeatureSet {
+                gfni: true,
                 avx2: true,
                 ..X86FeatureSet::default()
             })
