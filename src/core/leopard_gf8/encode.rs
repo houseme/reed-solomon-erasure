@@ -16,7 +16,7 @@ use super::{
 
 /// DIT-4 butterfly implementation strategy.
 ///
-/// Selected via `RSE_DIT4_STRATEGY` env var (default: `direct`).
+/// Selected via `RSE_DIT4_STRATEGY` env var (default: `auto`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Dit4Strategy {
     /// Safe pairwise decomposition: 4x fft_dit2 per radix-4 group.
@@ -25,27 +25,47 @@ enum Dit4Strategy {
     Direct,
     /// Direct 4-lane butterfly, fully safe via split_at_mut + fft_dit4_full_lut.
     DirectSafe,
+    /// Auto-select based on shard_size: < 64K → Decomposed, >= 64K → Direct.
+    Auto,
 }
 
-fn active_dit4_strategy() -> Dit4Strategy {
+/// Resolve user-configured mode (cached in OnceLock for process lifetime).
+fn configured_dit4_mode() -> Dit4Strategy {
     #[cfg(feature = "std")]
     {
-        static STRATEGY: std::sync::OnceLock<Dit4Strategy> = std::sync::OnceLock::new();
-        *STRATEGY.get_or_init(|| {
+        static MODE: std::sync::OnceLock<Dit4Strategy> = std::sync::OnceLock::new();
+        *MODE.get_or_init(|| {
             std::env::var("RSE_DIT4_STRATEGY")
                 .ok()
                 .and_then(|v| match v.trim().to_ascii_lowercase().as_str() {
                     "decomposed" => Some(Dit4Strategy::Decomposed),
                     "direct" => Some(Dit4Strategy::Direct),
                     "direct-safe" => Some(Dit4Strategy::DirectSafe),
+                    "auto" => Some(Dit4Strategy::Auto),
                     _ => None,
                 })
-                .unwrap_or(Dit4Strategy::Direct)
+                .unwrap_or(Dit4Strategy::Auto)
         })
     }
     #[cfg(not(feature = "std"))]
-    {
-        Dit4Strategy::Direct
+    Dit4Strategy::Auto
+}
+
+/// Resolve the final strategy based on shard_size.
+///
+/// For `Auto` mode: shard_size < 64K uses `Decomposed` (cache-friendly for small
+/// data, zero unsafe), shard_size >= 64K uses `Direct` (single-pass optimal).
+/// For explicit modes: returns the user's choice regardless of shard_size.
+fn active_dit4_strategy(shard_size: usize) -> Dit4Strategy {
+    match configured_dit4_mode() {
+        Dit4Strategy::Auto => {
+            if shard_size < 64 * 1024 {
+                Dit4Strategy::Decomposed
+            } else {
+                Dit4Strategy::Direct
+            }
+        }
+        other => other,
     }
 }
 
@@ -133,6 +153,7 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                 end,
                 tables,
                 IfftProfilePhase::FirstGroup,
+                driver.shard_size,
             );
 
             let mut group_offset = driver.m;
@@ -154,6 +175,7 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     end,
                     tables,
                     IfftProfilePhase::LaterGroup,
+                    driver.shard_size,
                 );
                 group_offset += driver.m;
             }
@@ -173,10 +195,11 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
                     end,
                     tables,
                     IfftProfilePhase::RemainderGroup,
+                    driver.shard_size,
                 );
             }
 
-            fft_dit8_with_plan(&mut work[..driver.m], &fft_plan, tables);
+            fft_dit8_with_plan(&mut work[..driver.m], &fft_plan, tables, driver.shard_size);
 
             #[cfg(feature = "std")]
             PROFILE8.add_output_writeback(parity.len() * size);
@@ -206,8 +229,9 @@ fn dit4_at<W: AsMut<[u8]>>(
     log_m23: u8,
     log_m02: u8,
     tables: &LeopardGf8Tables,
+    shard_size: usize,
 ) {
-    match active_dit4_strategy() {
+    match active_dit4_strategy(shard_size) {
         Dit4Strategy::Decomposed => {
             dit4_at_decomposed(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
         }
@@ -217,6 +241,7 @@ fn dit4_at<W: AsMut<[u8]>>(
         Dit4Strategy::DirectSafe => {
             dit4_at_direct_safe(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
         }
+        Dit4Strategy::Auto => unreachable!("Auto resolved in active_dit4_strategy"),
     }
 }
 
@@ -396,6 +421,7 @@ fn fft_dit8_with_plan<W: AsMut<[u8]>>(
     work: &mut [W],
     plan: &FftDit8Plan,
     tables: &LeopardGf8Tables,
+    shard_size: usize,
 ) {
     #[cfg(feature = "std")]
     PROFILE8.fft_stage_calls.fetch_add(1, Ordering::Relaxed);
@@ -412,6 +438,7 @@ fn fft_dit8_with_plan<W: AsMut<[u8]>>(
                 block.log_m23,
                 block.log_m02,
                 tables,
+                shard_size,
             );
             i += 1;
         }
@@ -436,6 +463,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     end: usize,
     tables: &LeopardGf8Tables,
     phase: IfftProfilePhase,
+    shard_size: usize,
 ) {
     #[cfg(feature = "std")]
     PROFILE8.add_ifft_calls(phase);
@@ -480,6 +508,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                 block.log_m23,
                 block.log_m02,
                 tables,
+                shard_size,
             );
         }
 
@@ -500,6 +529,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                     block.log_m23,
                     block.log_m02,
                     tables,
+                    shard_size,
                 );
                 i += 1;
             }
@@ -532,6 +562,6 @@ pub(super) fn fft_dit8<W: AsMut<[u8]>>(
     tables: &LeopardGf8Tables,
 ) {
     let plan = build_fft_dit8_plan(mtrunc, m, skew_lut);
-    fft_dit8_with_plan(work, &plan, tables);
+    fft_dit8_with_plan(work, &plan, tables, 0);
 }
 
