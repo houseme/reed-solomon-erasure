@@ -1431,76 +1431,76 @@ fn benchmark_leopard_encode_ab_64x32_1m_exports_results() {
 fn benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides() {
     use std::process::Command;
 
-    if std::env::var("RSE_BENCHMARK_SMOKE_CHILD_CHECK").as_deref() == Ok("aarch64-neon-override") {
-        println!("child_backend={}", backend());
-        println!("child_backend_id={}", backend_id());
-        println!("child_backend_kind={}", backend_kind());
-        println!("child_override_honored={}", override_honored());
-        return;
+    // Child-process dispatch: each override is validated in a fresh process so
+    // that the `Once`-cached ACTIVE_BACKEND is not poisoned by earlier tests.
+    match std::env::var("RSE_BENCHMARK_SMOKE_CHILD_CHECK").as_deref() {
+        Ok("aarch64-scalar-override") => {
+            // Fresh process: RSE_BACKEND_OVERRIDE is already "scalar".
+            assert_eq!("scalar-rust", backend());
+            assert_eq!("ScalarRust", backend_id());
+            assert_eq!("Scalar", backend_kind());
+            assert!(override_honored());
+            return;
+        }
+        Ok("aarch64-neon-override") => {
+            // Fresh process: RSE_BACKEND_OVERRIDE is already "rust-neon".
+            assert_eq!("rust-neon", backend());
+            assert_eq!("RustNeon", backend_id());
+            assert_eq!("RustSimd", backend_kind());
+            assert!(override_honored());
+            return;
+        }
+        _ => {}
     }
-
-    // SAFETY: scoped test-only env var overrides restored before returning.
-    unsafe {
-        std::env::set_var("RSE_BACKEND_OVERRIDE", "scalar");
-        std::env::set_var("RSE_STRICT_BACKEND_OVERRIDE", "1");
-    }
-    let scalar_override = backend_override();
-    let scalar_backend = backend().to_string();
-    let scalar_backend_id = backend_id();
-    let scalar_backend_kind = backend_kind();
-    let scalar_honored = override_honored();
-
-    // SAFETY: scoped test-only env var overrides restored before returning.
-    unsafe {
-        std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-neon");
-    }
-    let neon_override = backend_override();
-    let neon_backend = backend().to_string();
-    let neon_backend_id = backend_id();
-    let neon_backend_kind = backend_kind();
-    let neon_honored = override_honored();
-
-    // SAFETY: paired cleanup for the scoped env var overrides above.
-    unsafe {
-        std::env::remove_var("RSE_BACKEND_OVERRIDE");
-        std::env::remove_var("RSE_STRICT_BACKEND_OVERRIDE");
-    }
-
-    assert_eq!("scalar", scalar_override);
-    assert_eq!("scalar-rust", scalar_backend);
-    assert_eq!("ScalarRust", scalar_backend_id);
-    assert_eq!("Scalar", scalar_backend_kind);
-    assert!(scalar_honored);
-
-    assert_eq!("rust-neon", neon_override);
 
     let current_exe = std::env::current_exe().unwrap();
-    let output = Command::new(current_exe)
+
+    // Validate scalar override in a child process (fresh `Once`).
+    let scalar_output = Command::new(&current_exe)
+        .env("RSE_BACKEND_OVERRIDE", "scalar")
+        .env("RSE_STRICT_BACKEND_OVERRIDE", "1")
+        .env("RSE_BENCHMARK_SMOKE_CHILD_CHECK", "aarch64-scalar-override")
+        .arg("--exact")
+        .arg("benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides")
+        .arg("--nocapture")
+        .output()
+        .unwrap();
+    assert!(
+        scalar_output.status.success(),
+        "scalar override check failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&scalar_output.stdout),
+        String::from_utf8_lossy(&scalar_output.stderr)
+    );
+
+    // Validate rust-neon override in a child process (fresh `Once`).
+    let neon_output = Command::new(&current_exe)
         .env("RSE_BACKEND_OVERRIDE", "rust-neon")
+        .env("RSE_STRICT_BACKEND_OVERRIDE", "1")
         .env("RSE_BENCHMARK_SMOKE_CHILD_CHECK", "aarch64-neon-override")
         .arg("--exact")
         .arg("benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides")
         .arg("--nocapture")
         .output()
         .unwrap();
-
     assert!(
-        output.status.success(),
-        "child override check failed: stdout={} stderr={}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        neon_output.status.success(),
+        "neon override check failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&neon_output.stdout),
+        String::from_utf8_lossy(&neon_output.stderr)
     );
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("child_backend=rust-neon"), "{stdout}");
-    assert!(stdout.contains("child_backend_id=RustNeon"), "{stdout}");
-    assert!(stdout.contains("child_backend_kind=RustSimd"), "{stdout}");
-    assert!(stdout.contains("child_override_honored=true"), "{stdout}");
-
-    let _ = (
-        neon_backend,
-        neon_backend_id,
-        neon_backend_kind,
-        neon_honored,
-    );
+    // Also verify the env-var reads work in-process (the actual backend is
+    // already cached by `Once`, so we only check `backend_override()`).
+    unsafe {
+        std::env::set_var("RSE_BACKEND_OVERRIDE", "scalar");
+    }
+    assert_eq!("scalar", backend_override());
+    unsafe {
+        std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-neon");
+    }
+    assert_eq!("rust-neon", backend_override());
+    unsafe {
+        std::env::remove_var("RSE_BACKEND_OVERRIDE");
+        std::env::remove_var("RSE_STRICT_BACKEND_OVERRIDE");
+    }
 }
