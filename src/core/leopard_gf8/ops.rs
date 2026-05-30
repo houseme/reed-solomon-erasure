@@ -73,6 +73,16 @@ pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
         }
     }
 
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: NEON is mandatory on aarch64.
+        unsafe {
+            slice_xor_neon(input, out);
+        }
+        return;
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
     slice_xor_u64(input, out);
 }
 
@@ -129,6 +139,50 @@ unsafe fn slice_xor_avx2(input: &[u8], out: &mut [u8]) {
 
     // Scalar tail (0-31 bytes).
     for (src, dst) in in_tail.iter().zip(out_tail.iter_mut()) {
+        *dst ^= *src;
+    }
+}
+
+/// NEON SIMD XOR: 64 bytes per iteration using `vld1q_u8_x4` / `veorq_u8`.
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn slice_xor_neon(input: &[u8], out: &mut [u8]) {
+    use core::arch::aarch64::{
+        uint8x16x4_t, veorq_u8, vld1q_u8, vld1q_u8_x4, vst1q_u8, vst1q_u8_x4,
+    };
+
+    let (in64, in_tail) = input.as_chunks::<64>();
+    let (out64, out_tail) = out.as_chunks_mut::<64>();
+
+    for (src, dst) in in64.iter().zip(out64.iter_mut()) {
+        // SAFETY: chunks_exact(64) guarantees 64 valid bytes for load/store.
+        let s = unsafe { vld1q_u8_x4(src.as_ptr()) };
+        let d = unsafe { vld1q_u8_x4(dst.as_ptr()) };
+        unsafe {
+            vst1q_u8_x4(
+                dst.as_mut_ptr(),
+                uint8x16x4_t(
+                    veorq_u8(d.0, s.0),
+                    veorq_u8(d.1, s.1),
+                    veorq_u8(d.2, s.2),
+                    veorq_u8(d.3, s.3),
+                ),
+            )
+        };
+    }
+
+    // 16-byte tail.
+    let (in16, in_scalar) = in_tail.as_chunks::<16>();
+    let (out16, out_scalar) = out_tail.as_chunks_mut::<16>();
+    for (src, dst) in in16.iter().zip(out16.iter_mut()) {
+        // SAFETY: chunks_exact(16) guarantees 16 valid bytes.
+        let s = unsafe { vld1q_u8(src.as_ptr()) };
+        let d = unsafe { vld1q_u8(dst.as_ptr()) };
+        unsafe { vst1q_u8(dst.as_mut_ptr(), veorq_u8(d, s)) };
+    }
+
+    // Scalar tail (0-15 bytes).
+    for (src, dst) in in_scalar.iter().zip(out_scalar.iter_mut()) {
         *dst ^= *src;
     }
 }
@@ -518,23 +572,25 @@ unsafe fn lut_xor_neon_prebuilt(
         veorq_u8,
     };
 
-    let low_tbl: uint8x16_t = vld1q_u8(low.as_ptr());
-    let high_tbl: uint8x16_t = vld1q_u8(high.as_ptr());
+    // SAFETY: low and high are valid 16-byte arrays.
+    let low_tbl: uint8x16_t = unsafe { vld1q_u8(low.as_ptr()) };
+    let high_tbl: uint8x16_t = unsafe { vld1q_u8(high.as_ptr()) };
     let nibble_mask: uint8x16_t = vdupq_n_u8(0x0f);
 
     let (src16, src_tail) = src.as_chunks::<16>();
     let (dst16, dst_tail) = dst.as_chunks_mut::<16>();
 
     for (s_chunk, d_chunk) in src16.iter().zip(dst16.iter_mut()) {
-        let sv = vld1q_u8(s_chunk.as_ptr());
-        let dv = vld1q_u8(d_chunk.as_ptr());
+        // SAFETY: chunks_exact(16) guarantees 16 valid bytes.
+        let sv = unsafe { vld1q_u8(s_chunk.as_ptr()) };
+        let dv = unsafe { vld1q_u8(d_chunk.as_ptr()) };
         let lo = vandq_u8(sv, nibble_mask);
         let hi = vandq_u8(vshrq_n_u8::<4>(sv), nibble_mask);
         let product = veorq_u8(
             vqtbl1q_u8(low_tbl, lo),
             vqtbl1q_u8(high_tbl, hi),
         );
-        vst1q_u8(d_chunk.as_mut_ptr(), veorq_u8(dv, product));
+        unsafe { vst1q_u8(d_chunk.as_mut_ptr(), veorq_u8(dv, product)) };
     }
 
     // Scalar tail (0-15 bytes).
