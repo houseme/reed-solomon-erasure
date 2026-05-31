@@ -84,7 +84,7 @@
    - `reconstruct_data_missing_2_data`: `-19.31%`
    - `reconstruct_data_missing_data_plus_parity`: `-20.60%`
    - `reconstruct_data_32x16_missing_2_data`: `-29.63%`
-4. 但在“同 backend = rust-avx2” 的公平对比下，没有观察到同等级别的实现回退
+4. 但在“同 backend = rust-avx2”的公平对比下，没有观察到同等级别的实现回退
    - `benchmark_smoke` 的 `rust-avx2` 对 `253ff40` 基线全部通过回归阈值
    - 多数 case 波动在约 `0.1% ~ 4.6%` 之间，属于同机基准常见抖动范围
    - 其中 `verify 32x16 1MiB` 反而提升约 `29.45%`

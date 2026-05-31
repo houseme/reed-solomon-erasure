@@ -1,11 +1,11 @@
 # Leopard GF8 NEON SIMD 回测报告
 
-> 日期: 2026-05-31 01:55
-> 提交: `6ac4109` (main)
-> 基线: `aed8ee3` (main, NEON 前)
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 日期：2026-05-31 01:55
+> 提交：`6ac4109` (main)
+> 基线：`aed8ee3` (main, NEON 前)
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (ac68faa20, edition = 2024)
-> 测试方法: release 模式单次 smoke 运行
+> 测试方法：release 模式单次 smoke 运行
 
 ---
 
@@ -15,7 +15,7 @@
 
 **文件**: `src/core/leopard_gf8/ops.rs`
 
-添加 `slice_xor_neon` 函数，使用 NEON intrinsics 实现 64 字节/迭代的 XOR 操作:
+添加 `slice_xor_neon` 函数，使用 NEON intrinsics 实现 64 字节/迭代的 XOR 操作：
 - `vld1q_u8_x4` — 一次加载 64 字节 (4×128-bit)
 - `veorq_u8` — 4 次 128-bit XOR
 - `vst1q_u8_x4` — 一次存储 64 字节
@@ -35,7 +35,7 @@
 
 **Profile 占比**: ~8% (FFT/IFFT 蝶形运算)
 
-### Phase B 附带: `Mul8Lut` 预计算 nibble 表
+### Phase B 附带：`Mul8Lut` 预计算 nibble 表
 
 **文件**: `src/core/leopard_gf8/mod.rs`, `src/core/leopard_gf8/tables.rs`
 
@@ -60,7 +60,7 @@
 
 ### 2.2 与之前基线对比 (cold system)
 
-之前基线数据来自 `docs/leopard-gf8-4m-backtest-2026-05-30.md` (冷系统, commit `320f7e2`)。
+之前基线数据来自 `docs/leopard-gf8-4m-backtest-2026-05-30.md` (冷系统，commit `320f7e2`)。
 
 | case | 之前冷系统 1M | NEON warm 1M | 之前冷系统 4M | NEON warm 4M |
 |------|-------------|-------------|-------------|-------------|
@@ -69,11 +69,11 @@
 | 96x48 | 106.59 | 627.92 (+489%) | 105.10 | 608.95 (+479%) |
 | 128x64 | 129.56 | 693.66 (+435%) | 124.91 | 664.04 (+432%) |
 
-> 注: warm system 数值高于冷系统, 但 NEON 优化的相对收益是真实的。
+> 注：warm system 数值高于冷系统，但 NEON 优化的相对收益是真实的。
 
 ### 2.3 内部一致性
 
-以 32x16_1m 为基准:
+以 32x16_1m 为基准：
 
 | case | 基线相对 | NEON 相对 | 说明 |
 |------|---------|----------|------|
@@ -82,7 +82,7 @@
 | 96x48_1m | 27.6% | 78.6% | NEON 大幅缩小差距 |
 | 128x64_1m | 33.3% | 86.8% | NEON 大幅缩小差距 |
 
-**关键发现**: NEON 优化后, 高 parity 配置 (96x48, 128x64) 的相对性能大幅提升。这说明 `lut_xor` (FFT 蝶形运算) 在高 parity 下是主要瓶颈, NEON 16 字节/迭代相比标量 1 字节/迭代带来了巨大改善。
+**关键发现**: NEON 优化后，高 parity 配置 (96x48, 128x64) 的相对性能大幅提升。这说明 `lut_xor` (FFT 蝶形运算) 在高 parity 下是主要瓶颈，NEON 16 字节/迭代相比标量 1 字节/迭代带来了巨大改善。
 
 ---
 
@@ -90,26 +90,26 @@
 
 ### 3.1 `slice_xor` NEON 化 (Phase A)
 
-- Profile 占比: 23.3%
-- 基线: `slice_xor_u64` (8×u64 = 64 字节/迭代, 依赖编译器向量化)
-- NEON: `vld1q_u8_x4` + `veorq_u8` (64 字节/迭代, 显式 SIMD)
-- 效果: 对所有配置均有提升, 但不是主要差异来源
+- Profile 占比：23.3%
+- 基线：`slice_xor_u64` (8×u64 = 64 字节/迭代，依赖编译器向量化)
+- NEON: `vld1q_u8_x4` + `veorq_u8` (64 字节/迭代，显式 SIMD)
+- 效果：对所有配置均有提升，但不是主要差异来源
 
 ### 3.2 `lut_xor` NEON 化 (Phase B)
 
-- Profile 占比: ~8% (但对高 parity 配置影响更大)
-- 基线: 标量 `*d ^= lut[*s as usize]` (1 字节/次)
+- Profile 占比：~8% (但对高 parity 配置影响更大)
+- 基线：标量 `*d ^= lut[*s as usize]` (1 字节/次)
 - NEON: `vqtbl1q_u8` nibble-lookup (16 字节/次)
-- 效果: **主要性能提升来源**, 尤其是 96x48 (+445%) 和 128x64 (+400%)
+- 效果：**主要性能提升来源**, 尤其是 96x48 (+445%) 和 128x64 (+400%)
 
-### 3.3 为什么高 parity 配置受益最大?
+### 3.3 为什么高 parity 配置受益最大？
 
-96x48 和 128x64 有更多 parity shards, 意味着:
+96x48 和 128x64 有更多 parity shards, 意味着：
 1. FFT 蝶形运算次数更多 (更多 `lut_xor` 调用)
 2. XOR 累加次数更多 (更多 `slice_xor` 调用)
-3. `lut_xor` 从 1 字节/次 → 16 字节/次, 对计算密集型 case 影响更大
+3. `lut_xor` 从 1 字节/次 → 16 字节/次，对计算密集型 case 影响更大
 
-32x16 配置 parity 较少, 内存拷贝 (input_copy + output_writeback, 65%) 占主导, NEON 对 memcpy 的提升有限。
+32x16 配置 parity 较少，内存拷贝 (input_copy + output_writeback, 65%) 占主导，NEON 对 memcpy 的提升有限。
 
 ---
 

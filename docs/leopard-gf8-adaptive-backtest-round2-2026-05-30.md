@@ -1,13 +1,13 @@
 # Leopard GF8 自适应 Dit4 策略回测 — 第二轮
 
-> 测试日期: 2026-05-30
-> 基准提交: `d242272` (main — adaptive dit4 strategy)
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 测试日期：2026-05-30
+> 基准提交：`d242272` (main — adaptive dit4 strategy)
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (ac68faa20, edition = 2024)
 > Backend: scalar-rust (leopard encode 路径)
 > Features: std, benchmark-metrics
-> 测试方法: **5 runs x 5 iterations**，策略切换后冷却 **15 秒**
-> 原始数据: `docs/leopard-gf8-adaptive-backtest-round2-raw-2026-05-30.json`
+> 测试方法：**5 runs x 5 iterations**，策略切换后冷却 **15 秒**
+> 原始数据：`docs/leopard-gf8-adaptive-backtest-round2-raw-2026-05-30.json`
 
 ---
 
@@ -107,7 +107,7 @@ R2: 5 runs x 5 iterations, 15s cooldown
 ### 4.2 分析
 
 **R2 普遍低于 R1 (−1% ~ −7%)**:
-- 原因: 系统热状态累积（连续运行 ~40 分钟基准测试）
+- 原因：系统热状态累积（连续运行 ~40 分钟基准测试）
 - 所有策略同步下降，相对排序不变
 - 大文件 (512K-1M) 下降最小 (−1% ~ −2%)，因为计算密集型更稳定
 
@@ -138,13 +138,13 @@ R2: 5 runs x 5 iterations, 15s cooldown
 | 10x4 | 64K-1M | direct | direct | ✅ |
 | smoke | all (>= 64K) | direct | direct | ✅ |
 
-**策略选择正确率: 100%**
+**策略选择正确率：100%**
 
 ---
 
 ## 六、综合结论
 
-### 6.1 自适应策略: 验证通过
+### 6.1 自适应策略：验证通过
 
 | 维度 | R1 结果 | R2 结果 | 一致性 |
 |------|---------|---------|--------|
@@ -164,7 +164,7 @@ R2: 5 runs x 5 iterations, 15s cooldown
 
 ### 6.3 最终推荐
 
-auto 模式在两轮独立测试中均表现稳定:
+auto 模式在两轮独立测试中均表现稳定：
 - 与最优手动策略差距 <5%（大部分 <2%）
 - 策略选择 100% 正确
 - 零配置开箱即用

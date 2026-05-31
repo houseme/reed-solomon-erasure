@@ -1,12 +1,12 @@
 # Leopard GF8 优化回测报告
 
-> 日期: 2026-05-30
-> 平台: AMD EPYC 9V45 96-Core Processor (Zen 4c, Genoa), 16 vCPU
+> 日期：2026-05-30
+> 平台：AMD EPYC 9V45 96-Core Processor (Zen 4c, Genoa), 16 vCPU
 > Rust: 1.96.0 (edition 2024, ac68faa2)
 > OS: Linux 6.17.0-1015-azure (Ubuntu 24.04, x86_64)
 > SIMD: AVX2 + GFNI + AVX-512 全系列
-> 代码版本: `674da4e` (优化后) vs `2b066d5` (优化前基线)
-> 自动选择后端: **rust-gfni-avx512** (优化后新增 GFNI 自动检测)
+> 代码版本：`674da4e` (优化后) vs `2b066d5` (优化前基线)
+> 自动选择后端：**rust-gfni-avx512** (优化后新增 GFNI 自动检测)
 
 ---
 

@@ -1,15 +1,15 @@
 # Leopard GF8 Unsafe & Panic Audit Report
 
-> 审计日期: 2026-05-30
-> 提交: 基于 `0af1fe4` (main) 的重构后代码
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 审计日期：2026-05-30
+> 提交：基于 `0af1fe4` (main) 的重构后代码
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (edition = 2024)
 
 ---
 
 ## 一、审计范围
 
-本次审计覆盖以下模块的 `unsafe` 代码和 `panic` 路径:
+本次审计覆盖以下模块的 `unsafe` 代码和 `panic` 路径：
 
 | 模块 | 文件数 | 路径 |
 |------|--------|------|
@@ -25,7 +25,7 @@
 
 **重构前**: 1 处 `unsafe` (encode.rs:190 — 原始指针算术获取 4 个可变引用)
 
-**重构后**: 通过 `RSE_DIT4_STRATEGY` 环境变量可选三种策略:
+**重构后**: 通过 `RSE_DIT4_STRATEGY` 环境变量可选三种策略：
 
 | 策略 | unsafe 块数 | 说明 |
 |------|------------|------|
@@ -43,7 +43,7 @@
 
 ### 2.2 GF(2^8) SIMD 后端
 
-所有 SIMD 后端遵循统一的安全模式:
+所有 SIMD 后端遵循统一的安全模式：
 
 ```
 安全包装函数 (pub)
@@ -182,11 +182,11 @@ unsafe fn impl_fn (#[target_feature])
 | `cargo build --features std` | ✅ 通过 |
 | `cargo test --lib --features std` | ✅ 199 测试通过 |
 | `cargo clippy --features std` | ✅ 无新增警告 |
-| Leopard GF8 unsafe 块数 (decomposed) | 0 (重构前: 1) |
+| Leopard GF8 unsafe 块数 (decomposed) | 0 (重构前：1) |
 | Leopard GF8 unsafe 块数 (direct) | 1 (优化后保留，用于最大性能) |
 | Leopard GF8 unsafe 块数 (direct-safe) | 0 (完全 safe) |
-| 可达 OOB panic | 0 (重构前: 1 — parity_shards > 128) |
-| release assert_eq! (热路径) | 0 (重构前: 9) |
+| 可达 OOB panic | 0 (重构前：1 — parity_shards > 128) |
+| release assert_eq! (热路径) | 0 (重构前：9) |
 
 ---
 

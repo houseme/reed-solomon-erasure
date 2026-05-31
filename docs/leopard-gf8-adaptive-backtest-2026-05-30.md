@@ -1,12 +1,12 @@
 # Leopard GF8 自适应 Dit4 策略回测验证报告
 
-> 测试日期: 2026-05-30
-> 基准提交: `d242272` (main — adaptive dit4 strategy)
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 测试日期：2026-05-30
+> 基准提交：`d242272` (main — adaptive dit4 strategy)
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (ac68faa20, edition = 2024)
 > Backend: scalar-rust (leopard encode 路径)
 > Features: std, benchmark-metrics
-> 测试方法: 3 runs x 5 iterations，每次策略切换后冷却 10 秒
+> 测试方法：3 runs x 5 iterations，每次策略切换后冷却 10 秒
 
 ---
 
@@ -101,7 +101,7 @@ auto 模式 (默认):
 | 96x48 | 1M-4M | direct | direct | ✅ |
 | 128x64 | 1M-4M | direct | direct | ✅ |
 
-**策略选择正确率: 100%**
+**策略选择正确率：100%**
 
 ---
 
@@ -109,7 +109,7 @@ auto 模式 (默认):
 
 ### 5.1 冷却效果
 
-本次测试在每次策略切换后冷却 10 秒。与无冷却的前一轮测试对比:
+本次测试在每次策略切换后冷却 10 秒。与无冷却的前一轮测试对比：
 
 | 指标 | 无冷却 (前一轮) | 有冷却 (本轮) |
 |------|---------------|-------------|
@@ -129,7 +129,7 @@ auto 模式 (默认):
 
 ## 六、最终结论
 
-### 6.1 自适应策略验证: 通过
+### 6.1 自适应策略验证：通过
 
 - ✅ 策略选择 100% 正确
 - ✅ auto vs 最优手动策略差距 <5%（大部分 <2%）

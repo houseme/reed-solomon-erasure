@@ -476,7 +476,7 @@ ARM64 backend 扩展约定：
 | ID    | 项目                                    | 回填结果            | 当前处理方式               |
 |-------|---------------------------------------|-----------------|--------------------------|
 | DL-01 | 阶段 3 自动并行策略层                          | phase 文档状态已对齐   | 后续仅随实现继续维护文档         |
-| DL-02 | 阶段 5 reconstruction hotspot benchmark | “已存在但未升格为 gate” 已在 phase 文档显式标注 | 后续只判断是否升格为稳定 gate |
+| DL-02 | 阶段 5 reconstruction hotspot benchmark | “已存在但未升格为 gate”已在 phase 文档显式标注 | 后续只判断是否升格为稳定 gate |
 | DL-03 | 阶段 4 GFNI 路径                          | backend / override / 风险边界已回填 | 后续只补系统化性能结论         |
 
 ## 9. 第一批实现计划

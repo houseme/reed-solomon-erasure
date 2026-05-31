@@ -1,7 +1,7 @@
 #!/bin/bash
 # verify-x86_64.sh — Leopard GF8 x86_64 架构完整验证
 #
-# 用法: bash scripts/verify-x86_64.sh
+# 用法：bash scripts/verify-x86_64.sh
 # 必须在 x86_64 机器上运行
 
 set -euo pipefail
@@ -26,7 +26,7 @@ ARCH=$(uname -m)
 if [ "$ARCH" != "x86_64" ]; then
     fail "当前架构为 $ARCH, 需要在 x86_64 上运行"
 fi
-pass "架构: $ARCH"
+pass "架构：$ARCH"
 
 if [ -f /proc/cpuinfo ]; then
     CPU_MODEL=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)
@@ -88,7 +88,7 @@ SMOKE_DIR="target/benchmark-smoke"
 
 if [ -d "$SMOKE_DIR" ]; then
     echo ""
-    echo "Leopard encode 吞吐量:"
+    echo "Leopard encode 吞吐量："
     echo "┌─────────────────────┬──────────────┐"
     echo "│ Case                │ Throughput   │"
     echo "├─────────────────────┼──────────────┤"
@@ -102,7 +102,7 @@ if [ -d "$SMOKE_DIR" ]; then
     echo "└─────────────────────┴──────────────┘"
     echo ""
 
-    echo "galois_8 后端信息:"
+    echo "galois_8 后端信息："
     if [ -f "$SMOKE_DIR/smoke-results.json" ]; then
         python3 -c "
 import json

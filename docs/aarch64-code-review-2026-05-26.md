@@ -132,18 +132,18 @@ docs/ 目录文档详尽，覆盖了：
 
 ### BUG-1: NEON profile stats 测试并行竞争 ✅
 - 在涉及 NEON profile metrics 的 4 个测试中添加 `NEON_PROFILE_TEST_LOCK` 互斥锁
-- 文件: `src/galois_8/mod.rs`
+- 文件：`src/galois_8/mod.rs`
 
 ### BUG-2/3: x86 backend 优先级修正 ✅
-- 新优先级: GFNI+AVX512 > GFNI+AVX2 > AVX512 > AVX2 > SSSE3 > SimdC > Scalar
+- 新优先级：GFNI+AVX512 > GFNI+AVX2 > AVX512 > AVX2 > SSSE3 > SimdC > Scalar
 - GFNI 后端现可被运行时自动选中
-- 文件: `src/galois_8/backend.rs`, `src/galois_8/mod.rs`
+- 文件：`src/galois_8/backend.rs`, `src/galois_8/mod.rs`
 
 ### ISSUE-5: SVE stub 清理 ✅
 - `let _ = features.sve;` → `let _sve = features.sve;` 添加说明注释
-- 文件: `src/galois_8/backend.rs`
+- 文件：`src/galois_8/backend.rs`
 
 ### 预存测试修复 ✅
 - `test_aarch64_reconstruct_stage_policies_allow_data_parity_split`: 修正 env var 名称（`RS_AARCH64_RECONSTRUCT_DATA_MIN_BYTES_PER_JOB` → `RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB`）
 - `test_reconstruct_parallel_policy_has_data_only_and_full_tiers`: 移除 aarch64 上不适用的 `!data_only.use_parallel` 断言
-- 文件: `src/tests/mod.rs`
+- 文件：`src/tests/mod.rs`

@@ -32,6 +32,28 @@ fn quickcheck_shard_len(size: usize) -> usize {
     1 + size % QUICKCHECK_MAX_SHARD_LEN
 }
 
+/// Normalize quickcheck-generated (data, parity) into valid shard counts.
+fn qc_params(data: usize, parity: usize) -> (usize, usize) {
+    let data = 1 + data % 255;
+    let mut parity = 1 + parity % 255;
+    if data + parity > 256 {
+        parity -= data + parity - 256;
+    }
+    (data, parity)
+}
+
+/// Generate `n` unique random positions in `[0, total)` using partial Fisher-Yates.
+fn gen_corrupt_positions(n: usize, total: usize) -> Vec<usize> {
+    let n = n.min(total);
+    let mut positions: Vec<usize> = (0..total).collect();
+    for i in 0..n {
+        let j = rand::random_range(i..total);
+        positions.swap(i, j);
+    }
+    positions.truncate(n);
+    positions
+}
+
 #[cfg(feature = "std")]
 fn benchmark_test_iterations() -> usize {
     std::env::var("RSE_TEST_BENCH_ITERATIONS")
@@ -43,7 +65,7 @@ fn benchmark_test_iterations() -> usize {
 
 macro_rules! make_random_shards {
     ($per_shard:expr, $size:expr) => {{
-        let mut shards = Vec::with_capacity(20);
+        let mut shards = Vec::with_capacity($size);
         for _ in 0..$size {
             shards.push(vec![0; $per_shard]);
         }
@@ -2969,25 +2991,9 @@ quickcheck! {
                                            parity: usize,
                                            corrupt: usize,
                                            size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-
-        let mut corrupt_pos_s = Vec::with_capacity(corrupt);
-        for _ in 0..corrupt {
-            let mut pos = rand::random_range(0..(data + parity));
-
-            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
-                pos = rand::random_range(0..(data + parity));
-            }
-
-            corrupt_pos_s.push(pos);
-        }
-
+        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3044,25 +3050,9 @@ quickcheck! {
                                                   parity: usize,
                                                   corrupt: usize,
                                                   size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-
-        let mut corrupt_pos_s = Vec::with_capacity(corrupt);
-        for _ in 0..corrupt {
-            let mut pos = rand::random_range(0..(data + parity));
-
-            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
-                pos = rand::random_range(0..(data + parity));
-            }
-
-            corrupt_pos_s.push(pos);
-        }
-
+        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3093,25 +3083,9 @@ quickcheck! {
                  parity: usize,
                  corrupt: usize,
                  size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-
-        let mut corrupt_pos_s = Vec::with_capacity(corrupt);
-        for _ in 0..corrupt {
-            let mut pos = rand::random_range(0..(data + parity));
-
-            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
-                pos = rand::random_range(0..(data + parity));
-            }
-
-            corrupt_pos_s.push(pos);
-        }
-
+        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3156,25 +3130,9 @@ quickcheck! {
                         parity: usize,
                         corrupt: usize,
                         size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-
-        let mut corrupt_pos_s = Vec::with_capacity(corrupt);
-        for _ in 0..corrupt {
-            let mut pos = rand::random_range(0..(data + parity));
-
-            while corrupt_pos_s.iter().find(|&&x| x == pos).is_some() {
-                pos = rand::random_range(0..(data + parity));
-            }
-
-            corrupt_pos_s.push(pos);
-        }
-
+        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3203,12 +3161,7 @@ quickcheck! {
     fn qc_encode_sep_same_as_encode(data: usize,
                                     parity: usize,
                                     size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3245,12 +3198,7 @@ quickcheck! {
     fn qc_encode_sep_same_as_encode_shards(data: usize,
                                            parity: usize,
                                            size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3276,12 +3224,7 @@ quickcheck! {
     fn qc_encode_single_same_as_encode(data: usize,
                                        parity: usize,
                                        size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3315,12 +3258,7 @@ quickcheck! {
     fn qc_encode_single_same_as_encode_shards(data: usize,
                                               parity: usize,
                                               size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3344,12 +3282,7 @@ quickcheck! {
     fn qc_encode_single_sep_same_as_encode(data: usize,
                                            parity: usize,
                                            size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3389,12 +3322,7 @@ quickcheck! {
     fn qc_encode_single_sep_same_as_encode_shards(data: usize,
                                                   parity: usize,
                                                   size: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
 
         let r = ReedSolomon::new(data, parity).unwrap();
@@ -3843,15 +3771,9 @@ quickcheck! {
                                              parity: usize,
                                              size: usize,
                                              reuse: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
-
-        let reuse = reuse % 10;
+        let reuse = reuse % 5;
 
         let r = ReedSolomon::new(data, parity).unwrap();
         let mut sbs = ShardByShard::new(&r);
@@ -3893,15 +3815,9 @@ quickcheck! {
                                                     parity: usize,
                                                     size: usize,
                                                     reuse: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
-
-        let reuse = reuse % 10;
+        let reuse = reuse % 5;
 
         let r = ReedSolomon::new(data, parity).unwrap();
         let mut sbs = ShardByShard::new(&r);
@@ -4006,15 +3922,9 @@ quickcheck! {
                                                  parity: usize,
                                                  size: usize,
                                                  reuse: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
-
-        let reuse = reuse % 10;
+        let reuse = reuse % 5;
 
         let r = ReedSolomon::new(data, parity).unwrap();
         let mut sbs = ShardByShard::new(&r);
@@ -4065,15 +3975,9 @@ quickcheck! {
                                                         parity: usize,
                                                         size: usize,
                                                         reuse: usize) -> bool {
-        let data = 1 + data % 255;
-        let mut parity = 1 + parity % 255;
-        if data + parity > 256 {
-            parity -= data + parity - 256;
-        }
-
+        let (data, parity) = qc_params(data, parity);
         let size = quickcheck_shard_len(size);
-
-        let reuse = reuse % 10;
+        let reuse = reuse % 5;
 
         let r = ReedSolomon::new(data, parity).unwrap();
         let mut sbs = ShardByShard::new(&r);

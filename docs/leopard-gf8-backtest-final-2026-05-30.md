@@ -1,11 +1,11 @@
 # Leopard GF8 最终回测报告
 
-> 日期: 2026-05-30 21:40
-> 提交: `320f7e2` (main, 7 commits ahead of origin)
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 日期：2026-05-30 21:40
+> 提交：`320f7e2` (main, 7 commits ahead of origin)
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (ac68faa20, edition = 2024)
-> 测试方法: 冷系统 5 分钟冷却后, Criterion (release) + benchmark_smoke (release)
-> 原始数据: Criterion `target/criterion/`, smoke `target/benchmark-smoke/`
+> 测试方法：冷系统 5 分钟冷却后，Criterion (release) + benchmark_smoke (release)
+> 原始数据：Criterion `target/criterion/`, smoke `target/benchmark-smoke/`
 
 ---
 
@@ -46,7 +46,7 @@
 | 10x4_1m | **2.75 GiB/s** (2952 MB/s) | 3.55 ms |
 | 32x16_1m | **784 MiB/s** (822 MB/s) | 40.8 ms |
 
-### 3.2 Smoke 基准 (release, 单次, 冷系统)
+### 3.2 Smoke 基准 (release, 单次，冷系统)
 
 | case | MB/s | ns_per_iter | 说明 |
 |------|------|-------------|------|
@@ -60,7 +60,7 @@
 | 128x64_1m | **149.74** | 854,787,125 | |
 | 128x64_4m | **162.47** | 3,151,268,604 |
 
-> Smoke 单次运行无 warmup, 低于 Criterion 多次迭代结果, 但大文件 case 已接近稳态。
+> Smoke 单次运行无 warmup, 低于 Criterion 多次迭代结果，但大文件 case 已接近稳态。
 
 ### 3.3 与之前基线对比
 
@@ -76,8 +76,8 @@
 
 **分析**:
 - **大文件 Smoke (96x48, 128x64)**: 与基线差距 <3%, 性能稳定
-- **Criterion 32x16_1m**: 822 MB/s, 远高于之前基线 420 MB/s — Criterion 有 warmup+多迭代, 更准确
-- **小文件 Smoke**: 单次运行冷启动效应明显, Criterion 数据更可靠
+- **Criterion 32x16_1m**: 822 MB/s, 远高于之前基线 420 MB/s — Criterion 有 warmup+ 多迭代，更准确
+- **小文件 Smoke**: 单次运行冷启动效应明显，Criterion 数据更可靠
 
 ### 3.4 相对比例 (Smoke release, 内部一致性)
 
@@ -139,7 +139,7 @@ Setup 开销可忽略。
 
 - **4x2**: decomposed 在小文件 (<64K) 表现稳定 (643-717 MB/s), direct 在大文件快速上升 (128K→1M: 934→1605 MB/s)
 - **10x4**: 所有 shard_size 吞吐量稳定 (808-931 MB/s), 策略切换无明显影响
-- **策略选择正确率: 100%**
+- **策略选择正确率：100%**
 
 ---
 
@@ -153,7 +153,7 @@ Setup 开销可忽略。
 | 32x16_1m | 822 MB/s | 344 MB/s | 40 MB/s |
 | 精度 | 高 (±2%) | 低 (单次) | 低 (单次) |
 
-**结论**: Criterion 数据最可靠。Smoke release 适合快速验证, Smoke debug 仅用于功能测试。
+**结论**: Criterion 数据最可靠。Smoke release 适合快速验证，Smoke debug 仅用于功能测试。
 
 ---
 
@@ -166,7 +166,7 @@ Setup 开销可忽略。
 | 10x4 | 1K-1M | decomposed/direct | — | ✅ |
 | smoke | all ≥64K | direct | direct | ✅ |
 
-**策略选择正确率: 100%**
+**策略选择正确率：100%**
 
 ---
 
@@ -193,25 +193,25 @@ Setup 开销可忽略。
 
 ### 9.2 性能表现
 
-- ✅ Criterion 冷系统基准: 32x16_1m 达 822 MB/s (8.3 GiB/s 数据吞吐)
+- ✅ Criterion 冷系统基准：32x16_1m 达 822 MB/s (8.3 GiB/s 数据吞吐)
 - ✅ Smoke release 大文件 (96x48, 128x64): 与基线差距 <3%
-- ✅ 小文件 auto 策略: decomposed 在 <64K 更优, direct 在 ≥64K 更优
+- ✅ 小文件 auto 策略：decomposed 在 <64K 更优，direct 在 ≥64K 更优
 - ✅ Setup 开销可忽略 (µs 级)
 
 ### 9.3 已完成工作
 
 | 维度 | 状态 |
 |------|------|
-| 代码优化 | P0/P3/P4/P5 已应用, P1 回退 |
+| 代码优化 | P0/P3/P4/P5 已应用，P1 回退 |
 | 自适应策略 | 已实现并验证 (auto/decomposed/direct) |
-| aarch64 NEON | slice_xor 编译器向量化, fft_dit2 回退 |
+| aarch64 NEON | slice_xor 编译器向量化，fft_dit2 回退 |
 | x86_64 方案 | 已完成验证方案 + 执行提示语 |
 | 文档 | 优化汇总 + 路线图 + 回测报告 + x86_64 方案 |
 
 ### 9.4 后续建议
 
 1. **x86_64 验证**: 使用 `docs/leopard-gf8-x86_64-execution-prompt.md` 在 x86_64 机器上验证
-2. **长期优化**: P6 (SoA 内存布局) 是最大潜在收益, input_copy 占 43.8%
+2. **长期优化**: P6 (SoA 内存布局) 是最大潜在收益，input_copy 占 43.8%
 3. **CI 集成**: 将 Criterion 基准加入 CI, 每次 PR 检测性能回归
 
 ---

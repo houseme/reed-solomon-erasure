@@ -85,7 +85,7 @@
 
 ### 已执行命令
 
-Release smoke：
+Release smoke:
 
 1. `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=rust-avx2 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`
 2. `RSE_SMOKE_PROFILE=extended RSE_SMOKE_ITERATIONS=3 RSE_BACKEND_OVERRIDE=rust-avx512 RSE_STRICT_BACKEND_OVERRIDE=1 cargo test --release --features 'std simd-accel' --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture`

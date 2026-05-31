@@ -145,6 +145,7 @@ jobs:
   test-linux:
     name: Test Linux (${{ matrix.toolchain }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       QUICKCHECK_TESTS: 4
       QUICKCHECK_GENERATOR_SIZE: 32
@@ -174,6 +175,7 @@ jobs:
   test-windows-native:
     name: Test Windows Native (${{ matrix.toolchain }})
     runs-on: windows-latest
+    timeout-minutes: 30
     env:
       QUICKCHECK_TESTS: 4
       QUICKCHECK_GENERATOR_SIZE: 32
@@ -200,6 +202,7 @@ jobs:
   test-macos-arm64:
     name: Test macOS ARM64 (${{ matrix.toolchain }})
     runs-on: macos-latest
+    timeout-minutes: 30
     env:
       QUICKCHECK_TESTS: 4
       QUICKCHECK_GENERATOR_SIZE: 32

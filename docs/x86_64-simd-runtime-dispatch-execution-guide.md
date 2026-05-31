@@ -298,7 +298,7 @@ override 规则：
 2. 明确区分：
    - baseline fallback build
    - optional legacy tuned build
-3. 让 “是否生成某个 backend” 与 “运行时最终选哪个 backend” 完全解耦。
+3. 让“是否生成某个 backend”与“运行时最终选哪个 backend”完全解耦。
 
 ## 9. 各 ISA 实现策略
 

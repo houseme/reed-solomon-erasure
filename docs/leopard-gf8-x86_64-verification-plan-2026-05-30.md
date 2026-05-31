@@ -1,8 +1,8 @@
 # Leopard GF8 x86_64 架构验证与优化方案
 
-> 日期: 2026-05-30
-> 基准: aarch64 Apple M5 Max 优化结果 (5 commits on main)
-> 目标: 在 x86_64 架构上验证已有优化、评估 SIMD 加速可行性
+> 日期：2026-05-30
+> 基准：aarch64 Apple M5 Max 优化结果 (5 commits on main)
+> 目标：在 x86_64 架构上验证已有优化、评估 SIMD 加速可行性
 
 ---
 
@@ -13,9 +13,9 @@
 | Commit | 优化项 | 效果 |
 |--------|--------|------|
 | `d242272` | 自适应 dit4 策略 (auto/decomposed/direct) | 小文件 +126%, 策略选择 100% 正确 |
-| `142c0ac` | P5: zero_trailing 直接索引 + P4: dit4 分阶段 | 微优化, 消除迭代器开销 |
+| `142c0ac` | P5: zero_trailing 直接索引 + P4: dit4 分阶段 | 微优化，消除迭代器开销 |
 | `d916098` | P0: slice_xor u64 块处理 | 编译器更易向量化为 SIMD |
-| `950ab25` | P3: FlatWork 64 字节对齐分配 | SIMD 对齐, 消除 SmallVec 堆分配 |
+| `950ab25` | P3: FlatWork 64 字节对齐分配 | SIMD 对齐，消除 SmallVec 堆分配 |
 
 ### 1.2 回退优化
 
@@ -93,8 +93,8 @@
 
 | 组件 | 原因 |
 |------|------|
-| `mul_slice_xor` 函数 | leopard_gf8 的蝶形运算是 4 路同时操作, 非单路 mul_slice |
-| Nibble 分解算法 | leopard_gf8 需要 3 个不同 LUT 同时查表, 非单 LUT |
+| `mul_slice_xor` 函数 | leopard_gf8 的蝶形运算是 4 路同时操作，非单路 mul_slice |
+| Nibble 分解算法 | leopard_gf8 需要 3 个不同 LUT 同时查表，非单 LUT |
 | C SIMD 后端 | `simd_c/reedsolomon.c` 是 galois_8 专用 |
 
 ---
@@ -105,7 +105,7 @@
 
 **适用函数**: `fft_dit2_lut`, `ifft_dit2_lut`, `fft_dit4_full_lut`, `ifft_dit4_full_lut`
 
-**原理**: 将 256 字节 LUT 分解为 16 字节 low/high nibble 表:
+**原理**: 将 256 字节 LUT 分解为 16 字节 low/high nibble 表：
 ```
 lut_low[j]  = lut[j]      (j=0..15)
 lut_high[j] = lut[j*16]   (j=0..15)
@@ -147,9 +147,9 @@ unsafe fn gf8_lut_xor_avx2(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
 }
 ```
 
-**aarch64 回归风险**: 已验证 NEON nibble-lookup 在 Apple M5 Max 上回归 -5%~-11%。x86_64 的 `_mm_shuffle_epi8` 与 `vqtbl1q_u8` 性能特征不同, 需独立验证。
+**aarch64 回归风险**: 已验证 NEON nibble-lookup 在 Apple M5 Max 上回归 -5%~-11%。x86_64 的 `_mm_shuffle_epi8` 与 `vqtbl1q_u8` 性能特征不同，需独立验证。
 
-**预期收益**: FFT 计算仅占 ~8% 总时间, 即使 4x 加速, 总体收益 ~2-3%。
+**预期收益**: FFT 计算仅占 ~8% 总时间，即使 4x 加速，总体收益 ~2-3%。
 
 ### 4.2 方案 B: SIMD `slice_xor` 显式实现
 
@@ -183,11 +183,11 @@ unsafe fn slice_xor_avx2(input: &[u8], out: &mut [u8]) {
 2. **SoA 内存布局**: 转置为 `[byte0_all_lanes, byte1_all_lanes, ...]`, 蝶形运算变连续访问
 3. **Prefetch 提示**: `_mm_prefetch` 预取下一个 chunk
 
-**风险**: 高。架构级变更, 需要全面重写。
+**风险**: 高。架构级变更，需要全面重写。
 
 ### 4.4 方案 D: GFNI 原生 GF 乘法 (仅限 Ice Lake+)
 
-**原理**: `vqgf2p8affineqb` 指令直接在硬件上执行 GF(2^8) 乘法, 无需查表。
+**原理**: `vqgf2p8affineqb` 指令直接在硬件上执行 GF(2^8) 乘法，无需查表。
 
 ```rust
 #[target_feature(enable = "avx512f,avx512bw,gfni")]
@@ -202,7 +202,7 @@ unsafe fn gf8_mul_gfni(dst: &mut [u8], src: &[u8], coeff: u8) {
 }
 ```
 
-**优势**: 消除 LUT 查表, 64 字节/迭代。
+**优势**: 消除 LUT 查表，64 字节/迭代。
 **劣势**: 仅 Ice Lake+ (2019+), GFNI 在 galois_8 中从未自动选择。
 
 ---
@@ -215,7 +215,7 @@ unsafe fn gf8_mul_gfni(dst: &mut [u8], src: &[u8], coeff: u8) {
 
 | 测试目标 | 最低 CPU | 推荐 CPU | 说明 |
 |---------|---------|---------|------|
-| 基线验证 | 任意 x86_64 | — | 确认编译+测试通过 |
+| 基线验证 | 任意 x86_64 | — | 确认编译 + 测试通过 |
 | SSSE3 测试 | Core 2+ | — | `_mm_shuffle_epi8` |
 | AVX2 测试 | Haswell+ | Intel 12th+ / AMD Zen 3+ | `_mm256_shuffle_epi8` |
 | AVX-512 测试 | Skylake-X+ | Intel Sapphire Rapids+ | 频率节流需注意 |
@@ -348,16 +348,16 @@ echo "=== 验证完成 ==="
 
 #### 5.4.1 绝对吞吐量预期
 
-基于 aarch64 Apple M5 Max 数据, x86_64 预期:
+基于 aarch64 Apple M5 Max 数据，x86_64 预期：
 
 | 配置 | aarch64 (M5 Max) | x86_64 (Zen 4) | x86_64 (13th Gen) | 说明 |
 |------|-----------------|----------------|-------------------|------|
-| 4x2_1M | ~1650 MB/s | ~1200-1500 | ~1000-1400 | 小文件, 内存延迟敏感 |
-| 32x16_1M | ~410 MB/s | ~300-400 | ~250-350 | 中等, 计算+内存混合 |
-| 96x48_1M | ~125 MB/s | ~90-130 | ~80-120 | 大文件, 计算密集 |
-| 128x64_1M | ~153 MB/s | ~110-150 | ~90-140 | 大文件, 计算密集 |
+| 4x2_1M | ~1650 MB/s | ~1200-1500 | ~1000-1400 | 小文件，内存延迟敏感 |
+| 32x16_1M | ~410 MB/s | ~300-400 | ~250-350 | 中等，计算 + 内存混合 |
+| 96x48_1M | ~125 MB/s | ~90-130 | ~80-120 | 大文件，计算密集 |
+| 128x64_1M | ~153 MB/s | ~110-150 | ~90-140 | 大文件，计算密集 |
 
-> 注: 预期值为粗略估计, 实际取决于 CPU 微架构、内存带宽、缓存大小。
+> 注：预期值为粗略估计，实际取决于 CPU 微架构、内存带宽、缓存大小。
 
 #### 5.4.2 策略选择验证
 
@@ -401,14 +401,14 @@ echo "=== 验证完成 ==="
 
 1. 参考 galois_8 `x86/ssse3.rs` 实现 nibble-lookup
 2. 实现 `gf8_lut_xor_ssse3` 和 `gf8_lut_xor_avx2`
-3. 在 x86_64 上基准测试 (关键: 与 aarch64 不同, 可能有正收益)
-4. 如果回归, 回退; 如果有收益, 保留
+3. 在 x86_64 上基准测试 (关键：与 aarch64 不同，可能有正收益)
+4. 如果回归，回退; 如果有收益，保留
 
 ### Phase 4: Profile 驱动优化 (3-5 天)
 
 1. 在 x86_64 上运行 profiler (`perf record -g`)
 2. 确认 x86_64 的瓶颈分布是否与 aarch64 相同
-3. 针对 x86_64 特定瓶颈优化:
+3. 针对 x86_64 特定瓶颈优化：
    - 如果内存拷贝仍是瓶颈 → 零拷贝 FFT 探索
    - 如果 LUT 查表是瓶颈 → 方案 A/D
    - 如果 XOR 累加是瓶颈 → 方案 B
@@ -421,7 +421,7 @@ echo "=== 验证完成 ==="
 
 | 场景 | 影响 | 缓解 |
 |------|------|------|
-| 混合 AVX-512 + 标量代码 | 频率切换延迟 ~10μs | 避免频繁切换, 批量处理 |
+| 混合 AVX-512 + 标量代码 | 频率切换延迟 ~10μs | 避免频繁切换，批量处理 |
 | 持续 AVX-512 | CPU 降频 10-20% | AVX-512 仅用于大 chunk |
 | 热累积 | 长时间运行降频 | 基准测试需冷却间隔 |
 
@@ -433,10 +433,10 @@ echo "=== 验证完成 ==="
 |------|---------|---------|
 | `_mm_loadu_si128` | 无 | ✅ |
 | `_mm256_loadu_si256` | 无 | ✅ |
-| `_mm256_load_si256` | 32 字节 | ⚠️ FlatWork 64 字节对齐, 满足 |
-| `_mm512_load_si512` | 64 字节 | ⚠️ FlatWork 64 字节对齐, 满足 |
+| `_mm256_load_si256` | 32 字节 | ⚠️ FlatWork 64 字节对齐，满足 |
+| `_mm512_load_si512` | 64 字节 | ⚠️ FlatWork 64 字节对齐，满足 |
 
-当前 FlatWork 已 64 字节对齐, 满足所有 AVX/AVX-512 对齐要求。但 `src`/`dst` 切片的起始偏移需确保对齐。
+当前 FlatWork 已 64 字节对齐，满足所有 AVX/AVX-512 对齐要求。但 `src`/`dst` 切片的起始偏移需确保对齐。
 
 ### 7.3 平台差异
 
@@ -531,10 +531,10 @@ perf report --sort=dso,symbol
 
 | 文件 | 内容 |
 |------|------|
-| `src/core/leopard_gf8/ops.rs` | 蝶形运算, slice_xor — SIMD 优化目标 |
-| `src/core/leopard_gf8/encode.rs` | encode 主逻辑, dit4 策略选择 |
+| `src/core/leopard_gf8/ops.rs` | 蝶形运算，slice_xor — SIMD 优化目标 |
+| `src/core/leopard_gf8/encode.rs` | encode 主逻辑，dit4 策略选择 |
 | `src/core/leopard_gf8/work.rs` | FlatWork 对齐分配 |
-| `src/core/leopard_gf8/mod.rs` | 常量, 数据结构, Plan 构建 |
+| `src/core/leopard_gf8/mod.rs` | 常量，数据结构，Plan 构建 |
 | `src/galois_8/x86/ssse3.rs` | SSSE3 nibble-lookup 参考实现 |
 | `src/galois_8/x86/avx2.rs` | AVX2 nibble-lookup 参考实现 |
 | `src/galois_8/x86/avx512.rs` | AVX-512 nibble-lookup 参考实现 |

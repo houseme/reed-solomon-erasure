@@ -1,13 +1,13 @@
 # 自适应 Dit4 策略选择方案
 
-> 日期: 2026-05-30
-> 状态: 已确认阈值 64K
+> 日期：2026-05-30
+> 状态：已确认阈值 64K
 
 ---
 
 ## 一、背景
 
-基准测试发现不同 shard_size 下最优策略不同:
+基准测试发现不同 shard_size 下最优策略不同：
 
 | shard_size | 4x2 encode 最优策略 | direct vs decomposed |
 |-----------|-------------------|---------------------|
@@ -26,7 +26,7 @@
 
 ### 2.1 自适应逻辑
 
-新增 `auto` 模式（默认），根据 shard_size 自动选择:
+新增 `auto` 模式（默认），根据 shard_size 自动选择：
 
 ```
 RSE_DIT4_STRATEGY=auto (默认)
@@ -42,7 +42,7 @@ RSE_DIT4_STRATEGY=auto (默认)
 1. **第一级 (全局缓存)**: env var 解析 → `OnceLock<Dit4Strategy>`，进程生命周期内只解析一次
 2. **第二级 (每次调用)**: `active_dit4_strategy(shard_size)` 根据 shard_size 决定最终策略
 
-**线程化 shard_size**: `shard_size` 参数从 `encode_with_tables` 传递到 `dit4_at`，经过:
+**线程化 shard_size**: `shard_size` 参数从 `encode_with_tables` 传递到 `dit4_at`，经过：
 ```
 encode_with_tables(shard_size 已知)
   → fft_dit8_with_plan(shard_size)
@@ -62,7 +62,7 @@ encode_with_tables(shard_size 已知)
 仅修改 `src/core/leopard_gf8/encode.rs`:
 
 1. `Dit4Strategy` 枚举添加 `Auto` 变体
-2. `active_dit4_strategy()` 重构为两级: `configured_dit4_mode()` + `active_dit4_strategy(shard_size)`
+2. `active_dit4_strategy()` 重构为两级：`configured_dit4_mode()` + `active_dit4_strategy(shard_size)`
 3. `dit4_at()` 添加 `shard_size: usize` 参数
 4. `fft_dit8_with_plan()` 添加 `shard_size: usize` 参数
 5. `ifft_dit_encoder8_with_plan()` 添加 `shard_size: usize` 参数
@@ -74,7 +74,7 @@ encode_with_tables(shard_size 已知)
 
 1. `cargo build --features std` — 编译通过
 2. `cargo test --lib --features std` — 199 测试通过
-3. 小文件基准验证 auto 选择:
+3. 小文件基准验证 auto 选择：
    - `RSE_DIT4_STRATEGY=auto` + 4x2_1K → 吞吐量应接近 decomposed (~76 MB/s)
    - `RSE_DIT4_STRATEGY=auto` + 4x2_1M → 吞吐量应接近 direct (~82 MB/s)
 4. 大文件基准验证无回退

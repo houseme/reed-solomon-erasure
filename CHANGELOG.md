@@ -1,4 +1,18 @@
-## Unreleased (main vs master)
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+- **Versions 0.9.0 – 6.0.0**: authored by [Darren Ldl](https://github.com/darrenldl), maintained by the [rust-rse](https://github.com/rust-rse) community (2021–2022).
+- **Versions > 6.0.0**: authored by [houseme](https://github.com/houseme).
+- Format follows [Keep a Changelog](https://keepachangelog.com/) for recent versions; older entries use a simpler flat-list format.
+
+---
+
+## 7.0.0 (Unreleased)
+
+> Author: [houseme](https://github.com/houseme/reed-solomon-erasure) (2026-05-24 ~ present)
+> Branch: `main` (diverged from `master` / upstream `rust-rse`)
+
 ### Added
 - Runtime-dispatched GF(2^8) backend architecture under `src/galois_8/`, replacing the prior single-file layout with dedicated modules (`backend`, `policy`, `profile`, `scalar`, `legacy`, `x86`, `aarch64`).
 - New Rust SIMD backend implementations and metadata:
@@ -53,6 +67,8 @@
 - Removed unsafe unwrap-dependent paths introduced by dependency evolution and tightened unsafe boundaries with clippy-focused cleanup.
 - Resolved post-sync x86 SIMD conflict and restored backend correctness validation coverage in runtime dispatch paths.
 
+> Maintainers: [Michael Vines](https://github.com/mvines) and community ([rust-rse](https://github.com/rust-rse))
+
 ## 6.0.0
 - Use LruCache instead of InversionTree for caching data decode matrices
   - See [PR #104](https://github.com/rust-rse/reed-solomon-erasure/pull/104)
@@ -73,6 +89,8 @@
 - The `simd-accel` feature now builds on M1 Macs
   - See [PR #92](https://github.com/rust-rse/reed-solomon-erasure/pull/92)
 - Minor code cleanup
+
+> Note: [Darren Ldl](https://github.com/darrenldl) stepped back from maintenance. Versions 5.0.0–6.0.0 were community-maintained.
 
 ## 5.0.0
 - Merged several PRs

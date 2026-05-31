@@ -1,10 +1,10 @@
 # Leopard GF8 优化汇总对比
 
-> 日期: 2026-05-30
-> 基准提交: `d242272` (main)
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 日期：2026-05-30
+> 基准提交：`d242272` (main)
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (ac68faa20, edition = 2024)
-> 测试方法: benchmark_smoke 测试套件，每次 phase 独立运行
+> 测试方法：benchmark_smoke 测试套件，每次 phase 独立运行
 
 ---
 
@@ -26,7 +26,7 @@
 
 ### 2.1 绝对数值 (MB/s)
 
-数据来源: `target/benchmark-smoke/phase-*.json`
+数据来源：`target/benchmark-smoke/phase-*.json`
 
 | case | 基准 (d242272) | Phase 1 | Phase 2 | Phase 3 | Phase 4 (回退) |
 |------|---------------|---------|---------|---------|---------------|
@@ -40,7 +40,7 @@
 | 128x64_1m | 153.48 | 150.32 | 152.17 | 151.47 | — |
 | 128x64_4m | 163.16 | 162.77 | 163.68 | 163.78 | — |
 
-> 注: Phase 1-3 数据来自不同运行批次，存在系统热状态差异。Phase 4 回退后无独立数据。
+> 注：Phase 1-3 数据来自不同运行批次，存在系统热状态差异。Phase 4 回退后无独立数据。
 
 ### 2.2 相对基准变化 (%)
 
@@ -60,7 +60,7 @@
 
 **关键发现**: 所有 Phase 的绝对数值均低于基准，这不是代码回退，而是 **系统热漂移** 的影响。
 
-验证方法: Phase 1 测试后用 `git stash` 回退代码重新测量，得到同样低的数值 (4x2_1k: 732 vs 基准 1266)。所有策略同步下降，确认为环境因素。
+验证方法：Phase 1 测试后用 `git stash` 回退代码重新测量，得到同样低的数值 (4x2_1k: 732 vs 基准 1266)。所有策略同步下降，确认为环境因素。
 
 **Phase 间相对比较** (同一热状态下):
 
@@ -75,9 +75,9 @@
 
 ## 三、小文件 Encode 吞吐量对比
 
-数据来源: adaptive backtest Round 2 (`docs/leopard-gf8-adaptive-backtest-round2-2026-05-30.md`)
+数据来源：adaptive backtest Round 2 (`docs/leopard-gf8-adaptive-backtest-round2-2026-05-30.md`)
 
-### 3.1 4x2 配置 (auto 策略, MB/s)
+### 3.1 4x2 配置 (auto 策略，MB/s)
 
 | shard_size | Round 1 | Round 2 | 变化 |
 |-----------|---------|---------|------|
@@ -90,7 +90,7 @@
 | 512K | 1659.7 | 1621.3 | −2.31% |
 | 1M | 1661.2 | 1641.8 | −1.17% |
 
-### 3.2 10x4 配置 (auto 策略, MB/s)
+### 3.2 10x4 配置 (auto 策略，MB/s)
 
 | shard_size | Round 1 | Round 2 | 变化 |
 |-----------|---------|---------|------|
@@ -123,7 +123,7 @@
 | 10x4 | 64K-1M | direct | direct | ✅ |
 | smoke | all (≥64K) | direct | direct | ✅ |
 
-**策略选择正确率: 100%**
+**策略选择正确率：100%**
 
 ### 4.2 auto vs 手动策略差距
 
@@ -139,7 +139,7 @@
 
 ### 5.1 实现方案
 
-使用 `vqtbl1q_u8` 将 256 字节 LUT 分解为两个 16 字节 nibble 表:
+使用 `vqtbl1q_u8` 将 256 字节 LUT 分解为两个 16 字节 nibble 表：
 ```
 lut_low[j]  = lut[j]      (j=0..15)
 lut_high[j] = lut[j*16]   (j=0..15)
@@ -159,7 +159,7 @@ lut[byte]   = lut_low[byte & 0xf] ^ lut_high[byte >> 4]
 
 ### 5.3 改进方向
 
-若要优化 FFT 计算，应优先考虑:
+若要优化 FFT 计算，应优先考虑：
 1. **内存布局优化** (P6): SoA 布局减少 cache miss
 2. **radix-4 SIMD**: `fft_dit4_full_lut` 才是主要计算路径
 3. **减少数据搬运**: 输入拷贝和输出回写占 65%+，是真正瓶颈

@@ -14,13 +14,13 @@ LEDGER_PATH="docs/x86_64-simd-benchmark-ledger.md"
 
 ./scripts/run_x86_backend_smoke_matrix.sh "${DATE_UTC}" "${CPU_SLUG}"
 
-python3 scripts/render_x86_simd_benchmark_summary.py \
+bash scripts/render_x86_simd_benchmark_summary.sh \
   --machine-json "${JSON_PATH}" \
   --machine-slug "${CPU_SLUG}" \
   --date "${DATE_UTC}" \
   --output "${SUMMARY_PATH}"
 
-python3 scripts/render_x86_simd_ledger_entry.py \
+bash scripts/render_x86_simd_ledger_entry.sh \
   --machine-json "${JSON_PATH}" \
   --machine-slug "${CPU_SLUG}" \
   --date "${DATE_UTC}" \

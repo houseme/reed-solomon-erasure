@@ -514,9 +514,9 @@ let unroll4 = {
 };
 
 let bytes_done_unrolled = if unroll4 {
-    input.len() & !63usize   // 展开 4：64 字节/迭代
+    input.len() & !63usize   // 展开 4:64 字节/迭代
 } else {
-    input.len() & !31usize   // 展开 2：32 字节/迭代
+    input.len() & !31usize   // 展开 2:32 字节/迭代
 };
 ```
 
@@ -1007,8 +1007,8 @@ pub struct AlignedShard {
 
 64 字节对齐的选择理由：
 - NEON：16 字节寄存器（64 = 4 × 16）
-- AVX2：32 字节寄存器（64 = 2 × 32）
-- AVX-512：64 字节寄存器（64 = 1 × 64）
+- AVX2:32 字节寄存器（64 = 2 × 32）
+- AVX-512:64 字节寄存器（64 = 1 × 64）
 - 现代 CPU 缓存行：通常 64 字节
 
 ### 11.2 分配实现

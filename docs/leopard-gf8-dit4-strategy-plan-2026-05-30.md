@@ -1,13 +1,13 @@
 # 三策略 Dit4 蝶形运算实现方案
 
-> 日期: 2026-05-30
-> 背景: unsafe 消除导致 20-31% 吞吐量下降，需要可配置的三策略实现以平衡安全性与性能
+> 日期：2026-05-30
+> 背景：unsafe 消除导致 20-31% 吞吐量下降，需要可配置的三策略实现以平衡安全性与性能
 
 ---
 
 ## 一、性能回归根因
 
-上一轮将 `dit4_at` 从单次 `fft_dit4_full_lut` 调用分解为 4 次 pairwise `fft_dit2` 调用:
+上一轮将 `dit4_at` 从单次 `fft_dit4_full_lut` 调用分解为 4 次 pairwise `fft_dit2` 调用：
 
 | 指标 | 上一轮 | 本轮 | 变化 |
 |------|--------|------|------|
@@ -80,7 +80,7 @@ fn dit4_at_decomposed(...) {
 fn dit4_at_direct(...) {
     for i in 0..dist {
         if d < work.len() {
-            // 快速路径: unsafe ptr 直接访问 4 个 lane
+            // 快速路径：unsafe ptr 直接访问 4 个 lane
             unsafe {
                 let ptr = work.as_mut_ptr();
                 fft_dit4_full_lut(
@@ -90,7 +90,7 @@ fn dit4_at_direct(...) {
                 );
             }
         } else {
-            // 慢速路径: safe pairwise 分解
+            // 慢速路径：safe pairwise 分解
             dit4_pairwise_one(...);
         }
     }

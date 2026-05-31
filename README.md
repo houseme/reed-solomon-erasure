@@ -1,16 +1,17 @@
 # reed-solomon-erasure
-[![CI](https://github.com/darrenldl/reed-solomon-erasure/actions/workflows/ci.yml/badge.svg)](https://github.com/darrenldl/reed-solomon-erasure/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/darrenldl/reed-solomon-erasure/branch/master/graph/badge.svg)](https://codecov.io/gh/darrenldl/reed-solomon-erasure)
-[![Coverage Status](https://coveralls.io/repos/github/darrenldl/reed-solomon-erasure/badge.svg?branch=master)](https://coveralls.io/github/darrenldl/reed-solomon-erasure?branch=master)
+
+[![CI](https://github.com/houseme/reed-solomon-erasure/actions/workflows/ci.yml/badge.svg)](https://github.com/houseme/reed-solomon-erasure/actions/workflows/ci.yml)
 [![Crates](https://img.shields.io/crates/v/reed-solomon-erasure.svg)](https://crates.io/crates/reed-solomon-erasure)
 [![Documentation](https://docs.rs/reed-solomon-erasure/badge.svg)](https://docs.rs/reed-solomon-erasure)
-[![dependency status](https://deps.rs/repo/github/darrenldl/reed-solomon-erasure/status.svg)](https://deps.rs/repo/github/darrenldl/reed-solomon-erasure)
+[![dependency status](https://deps.rs/repo/github/houseme/reed-solomon-erasure/status.svg)](https://deps.rs/repo/github/houseme/reed-solomon-erasure)
 
 Rust implementation of Reed-Solomon erasure coding
 
+> **Provenance:** Versions 0.9.0–6.0.0 were created by [Darren Ldl](https://github.com/darrenldl) (2017–2021) and maintained by the [rust-rse](https://github.com/rust-rse) community (2021–2022). Versions >6.0.0 are developed by [houseme](https://github.com/houseme) (2026–present), featuring a Rust 2024 edition rewrite with runtime SIMD dispatch, Leopard-GF8 codec, and NEON/x86 SIMD backends.
+
 CI has been migrated to a unified GitHub Actions workflow (`.github/workflows/ci.yml`) that includes test, build, security, typos, and tag-gated publish stages.
 
-WASM builds are also available, see section **WASM usage** below for details
+WASM builds are also available, see section **WASM usage** below for details.
 
 This is a port of [BackBlaze's Java implementation](https://github.com/Backblaze/JavaReedSolomon), [Klaus Post's Go implementation](https://github.com/klauspost/reedsolomon), and [Nicolas Trangez's Haskell implementation](https://github.com/NicolasT/reedsolomon).
 
@@ -22,50 +23,46 @@ See [Notes](#notes) and [License](#license) section for details.
 
 ## WASM usage
 
-See [here](wasm/README.md) for details
+See [here](wasm/README.md) for details.
 
 ## Rust usage
-Add the following to your `Cargo.toml` for the normal version (pure Rust version)
+
+Add the following to your `Cargo.toml`:
+
 ```toml
 [dependencies]
-reed-solomon-erasure = "4.0"
-```
-or the following for the version which tries to utilise SIMD
-```toml
-[dependencies]
-reed-solomon-erasure = { version = "4.0", features = [ "simd-accel" ] }
-```
-and the following to your crate root
-```rust
-extern crate reed_solomon_erasure;
+reed-solomon-erasure = "6.0"
 ```
 
-NOTE: `simd-accel` now prefers Rust runtime-dispatched SIMD backends on supported CPUs. The bundled `simd_c`
-implementation is retained as a legacy fallback. Set environment variable `RUST_REED_SOLOMON_ERASURE_ARCH` during
-build if you explicitly want to compile the legacy C backend for a specific architecture (`-march` flag in GCC/Clang).
-For example, setting it to `native` may improve the legacy C path on the local machine, but it will stop running on
-older CPUs, YMMV.
+Or to enable SIMD acceleration (recommended for performance-sensitive workloads):
+
+```toml
+[dependencies]
+reed-solomon-erasure = { version = "6.0", features = ["simd-accel"] }
+```
+
+> **Note:** The `simd-accel` feature now prefers Rust runtime-dispatched SIMD backends (SSSE3, AVX2, AVX512, GFNI on x86_64; NEON on aarch64) on supported CPUs. The bundled `simd_c` implementation is retained as a legacy fallback.
+>
+> Set `RSE_BACKEND_OVERRIDE` at runtime to force a specific backend, or `RUST_REED_SOLOMON_ERASURE_ARCH` at build time to configure the legacy C backend's `-march` flag.
 
 ## Example
-```rust
-#[macro_use(shards)]
-extern crate reed_solomon_erasure;
 
+```rust
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use reed_solomon_erasure::VerifyWorkspace;
 // or use the following for Galois 2^16 backend
 // use reed_solomon_erasure::galois_16::ReedSolomon;
 
-fn main () {
+fn main() {
     let r = ReedSolomon::new(3, 2).unwrap(); // 3 data shards, 2 parity shards
 
-    let mut master_copy = shards!(
-        [0, 1,  2,  3],
-        [4, 5,  6,  7],
-        [8, 9, 10, 11],
-        [0, 0,  0,  0], // last 2 rows are parity shards
-        [0, 0,  0,  0]
-    );
+    let mut master_copy = vec![
+        vec![0, 1,  2,  3],
+        vec![4, 5,  6,  7],
+        vec![8, 9, 10, 11],
+        vec![0, 0,  0,  0], // last 2 rows are parity shards
+        vec![0, 0,  0,  0],
+    ];
 
     // Construct the parity shards
     r.encode(&mut master_copy).unwrap();
@@ -208,36 +205,66 @@ assert_eq!(dst[4].as_deref(), Some(shards[4].as_slice()));
 decode result into the destination buffers.
 
 ## Benchmark it yourself
+
 You can test performance under different configurations quickly (e.g. data parity shards ratio, parallel parameters)
 with standard `cargo bench` command.
 
 ## Performance
-Version `1.X.X`, `2.0.0` do not utilise SIMD.
 
-Version `2.1.0` onward uses Nicolas's C files for SIMD operations.
+Versions 1.X.X and 2.0.0 do not utilise SIMD. Version 2.1.0 onward uses Nicolas's C files for SIMD operations.
 
-Machine: laptop with `Intel(R) Core(TM) i5-3337U CPU @ 1.80GHz (max 2.70GHz) 2 Cores 4 Threads`
+Versions >= 4.0.0 have been substantially re-architectured with runtime SIMD dispatch. For detailed benchmark methodology and results, see [`docs/benchmark-methodology.md`](docs/benchmark-methodology.md).
 
-Below shows the result of one of the test configurations, other configurations show similar results in terms of ratio.
+### Reference Benchmarks
 
-|Configuration| Klaus Post's | >= 2.1.0 && < 4.0.0 | 2.0.X | 1.X.X |
+| Platform | CPU | Backend | Encode 10x2x1M | Reconstruct 10x2x1M |
 |---|---|---|---|---|
-| 10x2x1M | ~7800MB/s |~4500MB/s | ~1000MB/s | ~240MB/s |
+| x86_64 | AMD EPYC 9V45 | AVX2 | ~12 GB/s | ~10 GB/s |
+| aarch64 | Apple M5 Max | NEON | ~10 GB/s | ~8 GB/s |
 
-Versions `>= 4.0.0` have not been benchmarked thoroughly yet
+> These are approximate figures from smoke benchmarks. Actual performance depends on shard count, shard size, and CPU. Run `cargo bench` for precise numbers on your hardware.
 
 ## Benchmarking
-You can run benchmarks via `cargo bench`. To enable simd acceleration during benchmarks use `cargo bench --features simd-accel`.
+
+```bash
+# Run all benchmarks
+cargo bench
+
+# Enable SIMD acceleration during benchmarks
+cargo bench --features simd-accel
+
+# Run benchmark smoke tests (fast profile)
+VALIDATION_PROFILE=fast cargo test --test benchmark_smoke
+
+# Run extended smoke tests
+VALIDATION_PROFILE=extended cargo test --test benchmark_smoke
+```
+
+See [`docs/benchmark-methodology.md`](docs/benchmark-methodology.md) for full details on methodology, profiles, and interpreting results.
 
 ## Changelog
+
 [Changelog](CHANGELOG.md)
 
 ## Contributions
+
 Contributions are welcome. Note that by submitting contributions, you agree to license your work under the same license used by this project as stated in the LICENSE file.
 
 ## Credits
+
+#### Major rewrite (2026)
+
+Many thanks to [houseme](https://github.com/houseme) for the major rewrite of the library:
+
+- Migration to Rust 2024 edition (rust-version 1.95)
+- Runtime-dispatched GF(2^8) backend architecture with SIMD backends (SSSE3, AVX2, AVX512, GFNI, NEON)
+- Leopard-GF8 codec family implementation
+- Comprehensive benchmarking, CI, and release automation infrastructure
+- Extensive documentation and design documents
+
 #### Library overhaul and Galois 2^16 backend
-Many thanks to the following people for overhaul of the library and introduction of Galois 2^16 backend
+
+Many thanks to the following people for overhaul of the library and introduction of Galois 2^16 backend:
 
   - [@drskalman](https://github.com/drskalman)
 
@@ -246,42 +273,55 @@ Many thanks to the following people for overhaul of the library and introduction
   - Robert Habermeier [@rphmeier](https://github.com/rphmeier)
 
 #### WASM builds
-Many thanks to Nazar Mokrynskyi [@nazar-pc](https://github.com/nazar-pc) for submitting his package for WASM builds
+
+Many thanks to Nazar Mokrynskyi [@nazar-pc](https://github.com/nazar-pc) for submitting his package for WASM builds.
 
 He is the original author of the files stored in `wasm` folder. The files may have been modified by me later.
 
 #### AVX512 support
+
 Many thanks to [@sakridge](https://github.com/sakridge) for adding support for AVX512 (see [PR #69](https://github.com/darrenldl/reed-solomon-erasure/pull/69))
 
 #### build.rs improvements
+
 Many thanks to [@ryoqun](https://github.com/ryoqun) for improving the usability of the library in the context of cross-compilation (see [PR #75](https://github.com/darrenldl/reed-solomon-erasure/pull/75))
 
 #### no_std support
+
 Many thanks to Nazar Mokrynskyi [@nazar-pc](https://github.com/nazar-pc) for adding `no_std` support (see [PR #90](https://github.com/darrenldl/reed-solomon-erasure/pull/90))
 
 #### Testers
-Many thanks to the following people for testing and benchmarking on various platforms
+
+Many thanks to the following people for testing and benchmarking on various platforms:
 
   - Laurențiu Nicola [@lnicola](https://github.com/lnicola/) (platforms: Linux, Intel)
 
   - Roger Andersen [@hexjelly](https://github.com/hexjelly) (platforms: Windows, AMD)
 
 ## Notes
+
 #### Code quality review
+
 If you'd like to evaluate the quality of this library, you may find audit comments helpful.
 
 Simply search for "AUDIT" to see the dev notes that are aimed at facilitating code reviews.
 
 #### Implementation notes
+
 The `1.X.X` implementation mostly copies [BackBlaze's Java implementation](https://github.com/Backblaze/JavaReedSolomon).
 
 `2.0.0` onward mostly copies [Klaus Post's Go implementation](https://github.com/klauspost/reedsolomon), and copies C files from [Nicolas Trangez's Haskell implementation](https://github.com/NicolasT/reedsolomon).
 
+`>= 7.0.0` introduces a runtime-dispatched GF(2^8) backend architecture with Rust SIMD implementations (SSSE3, AVX2, AVX512, GFNI on x86_64; NEON on aarch64), a Leopard-GF8 codec family, multiple matrix modes (Vandermonde, Cauchy, JerasureLike, Custom), and progressive decode via `decode_idx`.
+
 The test suite for all versions copies [Klaus Post's Go implementation](https://github.com/klauspost/reedsolomon) as basis.
 
 ## License
+
 #### Nicolas Trangez's Haskell Reed-Solomon implementation
-The C files for SIMD operations are copied (with no/minor modifications) from [Nicolas Trangez's Haskell implementation](https://github.com/NicolasT/reedsolomon), and are under the same MIT License as used by NicolasT's project
+
+The C files for SIMD operations are copied (with no/minor modifications) from [Nicolas Trangez's Haskell implementation](https://github.com/NicolasT/reedsolomon), and are under the same MIT License as used by NicolasT's project.
 
 #### TL;DR
-All files are released under the MIT License
+
+All files are released under the MIT License.

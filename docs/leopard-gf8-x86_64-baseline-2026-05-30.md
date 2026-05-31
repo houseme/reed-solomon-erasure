@@ -1,10 +1,10 @@
 # Leopard GF8 x86_64 基线验证报告
 
-> 日期: 2026-05-30
-> 平台: AMD EPYC 9V45 96-Core Processor (Zen 4c, Genoa)
+> 日期：2026-05-30
+> 平台：AMD EPYC 9V45 96-Core Processor (Zen 4c, Genoa)
 > OS: Linux 6.17.0-1015-azure (Ubuntu 24.04, x86_64)
 > Rust: 1.96.0 (2026-05-25)
-> 基准: aarch64 Apple M5 Max (commit d242272)
+> 基准：aarch64 Apple M5 Max (commit d242272)
 
 ---
 
@@ -18,7 +18,7 @@
 | Rust | 1.96.0 (ac68faa20, 2026-05-25) |
 | OS | Linux 6.17.0-1015-azure (Ubuntu 24.04, x86_64) |
 
-**备注**: 该 CPU 拥有完整的 AVX-512 和 GFNI 支持, 是验证 SIMD 优化的理想平台。
+**备注**: 该 CPU 拥有完整的 AVX-512 和 GFNI 支持，是验证 SIMD 优化的理想平台。
 
 ---
 
@@ -30,7 +30,7 @@
 | `cargo build --release --features std` | ✅ 成功 | 2.70s |
 | `cargo build --features std,simd-accel` | ✅ 成功 | 1.43s |
 
-**结论**: 所有构建配置均通过, 无编译错误或警告。
+**结论**: 所有构建配置均通过，无编译错误或警告。
 
 ---
 
@@ -74,7 +74,7 @@
 - **小配置 (32x16)**: x86_64 比 aarch64 慢 15-21%, 可能受内存延迟影响
 - **中配置 (64x32)**: x86_64 比 aarch64 慢 13-19%
 - **大配置 (96x48, 128x64)**: x86_64 比 aarch64 慢 5-12%, 差距最小
-- **趋势**: 配置越大, x86_64 与 aarch64 的差距越小, 说明大配置下计算密集度更高, x86_64 的计算能力更接近 aarch64
+- **趋势**: 配置越大，x86_64 与 aarch64 的差距越小，说明大配置下计算密集度更高，x86_64 的计算能力更接近 aarch64
 
 ---
 
@@ -104,13 +104,13 @@
 
 ### 5.3 关键发现
 
-**x86_64 与 aarch64 的瓶颈分布完全不同:**
+**x86_64 与 aarch64 的瓶颈分布完全不同：**
 
 1. **aarch64**: 内存操作为瓶颈 (input_copy 43.8% + output 21.7% + xor 23.3% = ~89%)
 2. **x86_64**: 计算为瓶颈 (dit4_at 61.8% + ifft_dit2 14.2% = ~76%)
 
-**可能原因:**
-- x86_64 的 AMD EPYC 9V45 内存带宽更高, 内存操作不再是瓶颈
+**可能原因：**
+- x86_64 的 AMD EPYC 9V45 内存带宽更高，内存操作不再是瓶颈
 - x86_64 编译器对 memcpy/XOR 的自动向量化更有效
 - FFT 蝶形运算中的 LUT 查表 (256 字节表) 在 x86_64 上效率较低
 - x86_64 的 `_mm_shuffle_epi8` (16 字节查表) 可能不如 aarch64 的 `vqtbl1q_u8` 高效
@@ -141,11 +141,11 @@ A/B 测试数据 (64x32_1m):
 | 功能测试 | ✅ 通过 | 198 passed, 0 failed |
 | 基准测试 | ✅ 通过 | 27 passed |
 | 吞吐量 vs aarch64 | ✅ 正常 | 最低 78.9%, 最高 95.4% |
-| 瓶颈分布 | ⚠️ 与 aarch64 不同 | x86_64 计算瓶颈, aarch64 内存瓶颈 |
+| 瓶颈分布 | ⚠️ 与 aarch64 不同 | x86_64 计算瓶颈，aarch64 内存瓶颈 |
 
-### 7.2 是否需要 SIMD 优化?
+### 7.2 是否需要 SIMD 优化？
 
-**结论: 是, 但优先级和方向与 aarch64 不同。**
+**结论：是，但优先级和方向与 aarch64 不同。**
 
 | 优化方向 | aarch64 优先级 | x86_64 优先级 | 原因 |
 |---------|---------------|--------------|------|
@@ -157,25 +157,25 @@ A/B 测试数据 (64x32_1m):
 
 #### 优先级 1: SIMD FFT 蝶形运算 (预期收益 30-50%)
 
-在 x86_64 上, FFT 蝶形运算占 76% 时间。使用 SSSE3/AVX2 的 `_mm_shuffle_epi8` / `_mm256_shuffle_epi8` 实现 nibble-lookup SIMD 化:
+在 x86_64 上，FFT 蝶形运算占 76% 时间。使用 SSSE3/AVX2 的 `_mm_shuffle_epi8` / `_mm256_shuffle_epi8` 实现 nibble-lookup SIMD 化：
 
-- **SSSE3**: 16 字节/迭代, `_mm_shuffle_epi8`
-- **AVX2**: 32 字节/迭代, `_mm256_shuffle_epi8`
-- **AVX-512**: 64 字节/迭代, 可能降频, 默认不启用
-- **GFNI**: 原生 GF 乘法, 仅 Ice Lake+, 可选
+- **SSSE3**: 16 字节/迭代，`_mm_shuffle_epi8`
+- **AVX2**: 32 字节/迭代，`_mm256_shuffle_epi8`
+- **AVX-512**: 64 字节/迭代，可能降频，默认不启用
+- **GFNI**: 原生 GF 乘法，仅 Ice Lake+, 可选
 
-**注意**: aarch64 上 NEON nibble-lookup 回归 -5%~-11%, 但 x86_64 的 `_mm_shuffle_epi8` 性能特征不同, 需独立验证。
+**注意**: aarch64 上 NEON nibble-lookup 回归 -5%~-11%, 但 x86_64 的 `_mm_shuffle_epi8` 性能特征不同，需独立验证。
 
 #### 优先级 2: 内存操作显式 SIMD 化 (预期收益 5-10%)
 
-虽然内存操作占比低 (~12%), 但显式 AVX2/AVX-512 化可消除编译器自动向量化不确定性:
+虽然内存操作占比低 (~12%), 但显式 AVX2/AVX-512 化可消除编译器自动向量化不确定性：
 
 - `slice_xor_avx2`: `_mm256_xor_si256` 32 字节/迭代
 - `memcpy_avx512`: `_mm512_loadu_si512` + `_mm512_storeu_si512` 64 字节/迭代
 
-#### 优先级 3: GFNI 原生 GF 乘法 (可选, 仅 Ice Lake+)
+#### 优先级 3: GFNI 原生 GF 乘法 (可选，仅 Ice Lake+)
 
-`vqgf2p8affineqb` 指令直接在硬件上执行 GF(2^8) 乘法, 无需查表。该 CPU 支持 GFNI, 可作为高级优化选项。
+`vqgf2p8affineqb` 指令直接在硬件上执行 GF(2^8) 乘法，无需查表。该 CPU 支持 GFNI, 可作为高级优化选项。
 
 ### 7.4 风险评估
 
@@ -197,7 +197,7 @@ A/B 测试数据 (64x32_1m):
 
 ---
 
-## 九、附录: 原始数据
+## 九、附录：原始数据
 
 ### 9.1 Release 模式吞吐量 JSON
 
@@ -238,5 +238,5 @@ A/B 测试数据 (64x32_1m):
 
 ---
 
-*报告生成时间: 2026-05-30*
-*工具: perf 6.17.13, Rust 1.96.0, cargo test --release*
+*报告生成时间：2026-05-30*
+*工具：perf 6.17.13, Rust 1.96.0, cargo test --release*

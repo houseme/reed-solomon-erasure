@@ -11,10 +11,10 @@
 |------|------|
 | SIMD 架构 | `galois_8` 从单文件拆分为模块化架构 (`aarch64/`, `x86/`, `scalar.rs`, `backend.rs`, `policy.rs`) |
 | x86 后端 | 新增 SSSE3 / AVX512 / GFNI 后端，运行时分发支持 7 级优先级 |
-| aarch64 后端 | NEON 后端 (4x展开 + 2x展开 + scalar tail)，SVE stub 预留 |
-| 核心逻辑 | 新增 `CodecOptions`, `ParallelPolicy`, `MatrixMode`, cache 分析, reconstruct 特化 |
+| aarch64 后端 | NEON 后端 (4x 展开 + 2x 展开 + scalar tail)，SVE stub 预留 |
+| 核心逻辑 | 新增 `CodecOptions`, `ParallelPolicy`, `MatrixMode`, cache 分析，reconstruct 特化 |
 | 构建系统 | `build.rs` 重写为架构感知的表生成 + C 代码编译 |
-| 测试 | 新增 ~1900 行内部测试, benchmark smoke, golden vectors, selftest |
+| 测试 | 新增 ~1900 行内部测试，benchmark smoke, golden vectors, selftest |
 | CI | 新增完整 CI 流水线 (typos, audit, multi-toolchain build/test, tag-gated publish) |
 
 ## 2. 已确认修复的问题

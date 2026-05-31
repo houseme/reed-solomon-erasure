@@ -1,11 +1,11 @@
 # Leopard GF8 x86_64 全面回测报告
 
-> 日期: 2026-05-30
-> 平台: AMD EPYC 9V45 96-Core Processor
-> 架构: x86_64
+> 日期：2026-05-30
+> 平台：AMD EPYC 9V45 96-Core Processor
+> 架构：x86_64
 > OS: linux
-> 代码版本: main (commits 9c9d3f1, afa8b91, 142e1ff)
-> aarch64 基线: Apple M5 Max (commit d242272)
+> 代码版本：main (commits 9c9d3f1, afa8b91, 142e1ff)
+> aarch64 基线：Apple M5 Max (commit d242272)
 
 ---
 
@@ -46,9 +46,9 @@
 
 ### 4.1 吞吐量与 shard_size 的关系
 
-- **小 shard (1K-16K)**: 吞吐量较高, SIMD overhead 占比小, LUT 表在 L1 cache
-- **中 shard (64K-256K)**: 吞吐量稳定, LUT 表仍在 L1/L2 cache
-- **大 shard (512K-4M)**: 吞吐量下降, LUT 表可能溢出到 L3, 内存带宽瓶颈
+- **小 shard (1K-16K)**: 吞吐量较高，SIMD overhead 占比小，LUT 表在 L1 cache
+- **中 shard (64K-256K)**: 吞吐量稳定，LUT 表仍在 L1/L2 cache
+- **大 shard (512K-4M)**: 吞吐量下降，LUT 表可能溢出到 L3, 内存带宽瓶颈
 
 ### 4.2 配置大小的影响
 
@@ -85,7 +85,7 @@ x86_64 (AMD EPYC 9V45) vs aarch64 (Apple M5 Max):
 | Commit | 优化项 | 效果 |
 |--------|--------|------|
 | 9c9d3f1 | AVX2 lut_xor + slice_xor_avx2 + butterfly SIMD | 2.2x 平均加速 |
-| afa8b91 | 减少 butterfly 堆分配 (3到1) + 修复对齐 UB | +5%~15% 额外加速 |
+| afa8b91 | 减少 butterfly 堆分配 (3 到 1) + 修复对齐 UB | +5%~15% 额外加速 |
 
 ---
 
@@ -101,5 +101,5 @@ x86_64 (AMD EPYC 9V45) vs aarch64 (Apple M5 Max):
 
 ---
 
-*报告生成时间: 2026-05-30*
-*测试工具: comprehensive_x86_64_benchmark (release 模式)*
+*报告生成时间：2026-05-30*
+*测试工具：comprehensive_x86_64_benchmark (release 模式)*

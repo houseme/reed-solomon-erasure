@@ -1,8 +1,8 @@
 # Leopard GF8 优化路线图
 
-> 日期: 2026-05-30
-> 基准: `d242272` (main)
-> 分析范围: `src/core/leopard_gf8/` 全模块 + `src/galois_8/` SIMD 后端
+> 日期：2026-05-30
+> 基准：`d242272` (main)
+> 分析范围：`src/core/leopard_gf8/` 全模块 + `src/galois_8/` SIMD 后端
 
 ---
 
@@ -18,7 +18,7 @@
 | zero_fill | 468 MiB | 3.3% | 尾部 lane 清零 |
 | FFT/IFFT 计算 | — | ~8% | 蝶形运算 (LUT 查表+XOR) |
 
-### 1.2 核心发现: Leopard Encode 路径完全标量化
+### 1.2 核心发现：Leopard Encode 路径完全标量化
 
 Leopard encode 的所有计算核心 (`fft_dit2_lut`, `ifft_dit2_lut`, `fft_dit4_full_lut`, `slice_xor`) 均为纯标量实现。虽然 `galois_8` 模块已有完整的 NEON/AVX2/SSSE3 SIMD 后端，但 leopard encode 路径从未使用它们。
 
@@ -33,7 +33,7 @@ Benchmark 元数据中的 `"backend": "scalar-rust"` 指的是 `galois_8` 后端
 **现状** (`ops.rs:62-152`): 64 字节手动展开 + 逐字节 XOR，依赖编译器自动向量化。
 
 ```rust
-// 当前: 64 次逐字节 XOR
+// 当前：64 次逐字节 XOR
 dst[0] ^= src[0];
 dst[1] ^= src[1];
 // ... dst[63] ^= src[63];
@@ -41,7 +41,7 @@ dst[1] ^= src[1];
 
 **问题**: 编译器自动向量化不保证生效。Profile 显示 XOR 占 23.3% 数据搬运量。
 
-**方案**: 使用 `u64` 块处理，编译器更容易向量化:
+**方案**: 使用 `u64` 块处理，编译器更容易向量化：
 
 ```rust
 pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
@@ -87,9 +87,9 @@ for (dst, src) in x.iter_mut().zip(y.iter()) {
 }
 ```
 
-**问题**: 这是 FFT 蝶形运算的最内层循环。每次迭代: load src → index LUT → load lut[val] → XOR dst → store dst。对 1M shard，此循环执行数百万次。
+**问题**: 这是 FFT 蝶形运算的最内层循环。每次迭代：load src → index LUT → load lut[val] → XOR dst → store dst。对 1M shard，此循环执行数百万次。
 
-**方案**: 复用 `galois_8/aarch64/neon.rs` 的 nibble-lookup SIMD 技术:
+**方案**: 复用 `galois_8/aarch64/neon.rs` 的 nibble-lookup SIMD 技术：
 
 ```
 原理: 将字节拆为低 4 位 + 高 4 位，分别从 16 字节 shuffle 表查找，XOR 合并。
@@ -101,7 +101,7 @@ AVX2: _mm256_shuffle_epi8 (32 字节/指令)
 
 **实现步骤**:
 1. 从 256 字节 `lut` 预计算两个 16 字节 shuffle 表 (low/high nibble)
-2. 对每 16/32 字节: split → shuffle → XOR → XOR with dst
+2. 对每 16/32 字节：split → shuffle → XOR → XOR with dst
 3. 标量处理尾部
 
 **关键**: `galois_8` 已有完整的 `mul_slice_xor` SIMD 实现，`fft_dit2_lut` 与其功能完全等价（只是 LUT 来源不同）。可直接移植模式。
@@ -122,7 +122,7 @@ let fft_plan = build_fft_dit8_plan(parity_shards, driver.m, &tables.fft_skew);
 let mut later_ifft_plans = Vec::new(); // 每次分配
 ```
 
-**问题**: Plan 包含 `Vec<Stage4Block>`，每次 encode 调用涉及堆分配+填充+释放。
+**问题**: Plan 包含 `Vec<Stage4Block>`，每次 encode 调用涉及堆分配 + 填充 + 释放。
 
 **方案**: 将 Plan 嵌入 `LeopardGf8EncodeDriver`:
 
@@ -154,7 +154,7 @@ pub(crate) struct LeopardGf8EncodeDriver {
 
 **方案**:
 1. 使用 `AlignedShard` 的 64 字节对齐分配器
-2. 将 views 缓存到 `FlatWork` 中:
+2. 将 views 缓存到 `FlatWork` 中：
 
 ```rust
 pub(super) struct FlatWork {
@@ -197,7 +197,7 @@ for i in bulk_end..dist {
 
 **现状** (`encode.rs:414-418`): `.iter_mut().skip(start_lane).take(count)`。
 
-**方案**: 直接索引:
+**方案**: 直接索引：
 
 ```rust
 for i in start_lane..start_lane + count {
@@ -215,7 +215,7 @@ for i in start_lane..start_lane + count {
 
 **现状**: FlatWork 为 lane-major 布局。蝶形运算访问 `work[i]` 和 `work[i+dist]`，间距为 `dist * chunk_size`。对 128 parity shards + 32K chunk，间距 = 4MB，远超 L2 cache。
 
-**方案**: 转置为 SoA (Structure of Arrays) 布局: `[byte0_all_lanes, byte1_all_lanes, ...]`。蝶形运算变为连续内存访问。
+**方案**: 转置为 SoA (Structure of Arrays) 布局：`[byte0_all_lanes, byte1_all_lanes, ...]`。蝶形运算变为连续内存访问。
 
 **问题**: 与输入拷贝模式冲突 (输入是 lane-major)。需要在 FFT 前转置，FFT 后转置回来。
 
@@ -247,7 +247,7 @@ for i in start_lane..start_lane + count {
 2. **P5** — `zero_trailing_lanes` 改用直接索引
 3. **P4** — `dit4_at_direct` 循环分阶段
 
-验证: `cargo test --lib`, benchmark 确认无回退。
+验证：`cargo test --lib`, benchmark 确认无回退。
 
 ### Phase 2: SIMD 基础 (3-5 天)
 
@@ -258,7 +258,7 @@ for i in start_lane..start_lane + count {
 
 5. **P3** — FlatWork 64 字节对齐 + views 缓存
 
-验证: `cargo test --lib`, benchmark 对比 SIMD vs scalar。
+验证：`cargo test --lib`, benchmark 对比 SIMD vs scalar。
 
 ### Phase 3: SIMD 蝶形运算 (5-10 天)
 
@@ -270,7 +270,7 @@ for i in start_lane..start_lane + count {
 
 7. 扩展到 `fft_dit4_full_lut` / `ifft_dit4_full_lut` 的 SIMD 版本
 
-验证: 全量测试 + 大规模基准对比。
+验证：全量测试 + 大规模基准对比。
 
 ### Phase 4: 架构探索 (长期)
 
@@ -289,7 +289,7 @@ for i in start_lane..start_lane + count {
 | 96x48_1M | 124 MB/s | ~126 | ~160 | ~300+ |
 | 128x64_1M | 152 MB/s | ~154 | ~190 | ~350+ |
 
-> 注: 预期值为粗略估计，实际收益需基准验证。SIMD 蝶形运算 (Phase 3) 是最大单项收益来源。
+> 注：预期值为粗略估计，实际收益需基准验证。SIMD 蝶形运算 (Phase 3) 是最大单项收益来源。
 
 ---
 

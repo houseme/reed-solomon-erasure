@@ -1,18 +1,18 @@
 # Leopard GF8 重构后性能检测报告
 
-> 测试日期: 2026-05-30
-> 提交: `0af1fe4` (main)
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 测试日期：2026-05-30
+> 提交：`0af1fe4` (main)
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (ac68faa20 2026-05-25)
 > Backend: scalar-rust (ScalarRust)
 > Features: std, benchmark-metrics
-> 重构内容: 见 `docs/leopard-gf8-code-review-2026-05-30.md`
+> 重构内容：见 `docs/leopard-gf8-code-review-2026-05-30.md`
 
 ---
 
 ## 一、重构变更摘要
 
-本次重构涉及 7 个文件，主要变更:
+本次重构涉及 7 个文件，主要变更：
 
 | 变更项 | 影响 |
 |--------|------|
@@ -91,10 +91,10 @@
 | **output_writeback_bytes** | **1,309,671,424** (1.22 GiB) |
 
 **数据流分析 (96x48)**:
-- 总输入拷贝: 2.48 GiB (first group 占 54%, later group 占 39%, remainder 占 7%)
-- XOR 累加: 1.31 GiB (later group 占 73%, remainder 占 27%)
-- 输出回写: 1.22 GiB
-- 零填充: 184 MiB (仅 remainder group)
+- 总输入拷贝：2.48 GiB (first group 占 54%, later group 占 39%, remainder 占 7%)
+- XOR 累加：1.31 GiB (later group 占 73%, remainder 占 27%)
+- 输出回写：1.22 GiB
+- 零填充：184 MiB (仅 remainder group)
 
 ### 3.2 128x64_1m Profile
 
@@ -156,10 +156,10 @@
 - 全部 smoke matrix 测试通过
 
 ### 5.2 性能影响
-本次重构为纯代码质量改进，不涉及算法或数据结构变更:
-- `debug_assert_eq!` 替换: release 构建中无运行时开销 (debug_assert 在 release 模式下被编译器移除)
-- Profile 辅助方法: 编译器内联后与原始代码等价
-- `dit4_at` 参数化: 通过 `#[inline]` 提示，编译器可消除 dispatch 开销
+本次重构为纯代码质量改进，不涉及算法或数据结构变更：
+- `debug_assert_eq!` 替换：release 构建中无运行时开销 (debug_assert 在 release 模式下被编译器移除)
+- Profile 辅助方法：编译器内联后与原始代码等价
+- `dit4_at` 参数化：通过 `#[inline]` 提示，编译器可消除 dispatch 开销
 - `fft_dit2` thin wrapper: 编译器内联后直接调用 `_lut` 变体
 
 ### 5.3 代码行数变化
@@ -179,7 +179,7 @@
 
 ## 六、后续优化方向
 
-基于 Profile 数据的观察:
+基于 Profile 数据的观察：
 
 1. **输入拷贝是最大瓶颈**: 96x48 配置下 input_copy_bytes (2.48 GiB) 远超其他操作。可考虑 zero-copy 或 mmap 策略
 2. **XOR 累加优化**: later_group_xor_bytes 占 XOR 总量的 73%。`slice_xor` 的显式 SIMD 实现可带来 2-4x 提升

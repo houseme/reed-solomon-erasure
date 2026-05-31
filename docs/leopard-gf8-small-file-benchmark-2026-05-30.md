@@ -1,8 +1,8 @@
 # Leopard GF8 小文件基准测试 — 三策略对比
 
-> 测试日期: 2026-05-30
-> 基准提交: `0af1fe4` (main) + 三策略 dit4 实现
-> 平台: Apple M5 Max / aarch64-macos-unknown
+> 测试日期：2026-05-30
+> 基准提交：`0af1fe4` (main) + 三策略 dit4 实现
+> 平台：Apple M5 Max / aarch64-macos-unknown
 > Rust: 1.96.0 (edition = 2024)
 > Backend: rust-neon (auto-selected)
 > Features: std, benchmark-metrics
@@ -36,11 +36,11 @@
 
 ### 2.1 小文件性能差异根因
 
-4x2 配置中 `m = ceil_pow2(2) = 2`，FFT 仅 1 层 (dist=1)。`dit4_at` 循环只执行 1 次迭代:
+4x2 配置中 `m = ceil_pow2(2) = 2`，FFT 仅 1 层 (dist=1)。`dit4_at` 循环只执行 1 次迭代：
 - `a = base, b = base+1, c = base+2, d = base+3`
 - 对于 4 data shards，`work.len() = 8`，所有索引都在界内
 
-小文件时 `direct` 策略慢的原因:
+小文件时 `direct` 策略慢的原因：
 1. **`active_dit4_strategy()` 调用开销**: 每次 `dit4_at` 调用都执行 `OnceLock::get_or_init`，对于 1K shard，FFT 本身极快，策略查询开销占比显著
 2. **`fft_dit4_full_lut` 的 `as_chunks_mut::<4>` 开销**: 1K 数据只有 256 个 4-byte chunk，循环+step 调用的固定开销相对较高
 3. **`decomposed` 的 4 次 `fft_dit2` 更适合小数据**: `fft_dit2` 内部是简单的 `for byte in x.iter_mut().zip(y)` 循环，对 1K 数据有更好的 cache 行为
@@ -177,9 +177,9 @@
 
 ### 6.2 自动选择可能性
 
-当前 `RSE_DIT4_STRATEGY` 需要手动设置。未来可考虑:
-- 基于 `shard_size` 自动选择: shard < 64K 用 `decomposed`，否则用 `direct`
-- 或基于 `data_shards + parity_shards` 的 `m` 值: m <= 2 用 `decomposed`，否则用 `direct`
+当前 `RSE_DIT4_STRATEGY` 需要手动设置。未来可考虑：
+- 基于 `shard_size` 自动选择：shard < 64K 用 `decomposed`，否则用 `direct`
+- 或基于 `data_shards + parity_shards` 的 `m` 值：m <= 2 用 `decomposed`，否则用 `direct`
 
 ### 6.3 `direct-safe` 观察
 

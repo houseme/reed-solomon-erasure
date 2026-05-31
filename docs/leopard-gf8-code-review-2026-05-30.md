@@ -1,8 +1,8 @@
 # Leopard GF8 代码审查与改造方案
 
-> 审查日期: 2026-05-30
-> 范围: `src/core/leopard_gf8/` 模块 + 相关测试/基准代码
-> 状态: 待评审
+> 审查日期：2026-05-30
+> 范围：`src/core/leopard_gf8/` 模块 + 相关测试/基准代码
+> 状态：待评审
 
 ---
 
@@ -11,9 +11,9 @@
 | 文件 | 职责 | 行数 |
 |------|------|------|
 | `mod.rs` | 常量、类型定义、Plan 构建器、全局表/性能计数器、公共 API | ~410 |
-| `encode.rs` | 编码主流程: `encode_skeleton`、`encode_with_tables`、IFFT/FFT 蝶形运算 | ~650 |
+| `encode.rs` | 编码主流程：`encode_skeleton`、`encode_with_tables`、IFFT/FFT 蝶形运算 | ~650 |
 | `ops.rs` | GF(2^8) 算术、Walsh-Hadamard 变换、`slice_xor`、蝶形基元 | ~420 |
-| `tables.rs` | 一次性 LUT 构建: Cantor 基 log/exp、FFT 偏斜因子、GF 乘法表 | ~130 |
+| `tables.rs` | 一次性 LUT 构建：Cantor 基 log/exp、FFT 偏斜因子、GF 乘法表 | ~130 |
 | `driver.rs` | 编码驱动参数计算 (chunk sizing、work slice 数量) | ~37 |
 | `work.rs` | `FlatWork` 连续缓冲区抽象 | ~65 |
 | `tests.rs` | 单元测试 (表形状、驱动参数) | ~25 |
@@ -63,12 +63,12 @@
 手动展开 64 元素的 XOR 循环依赖 LLVM 自动向量化，不同编译器版本行为不一致。对于处理 MB 级数据的 Reed-Solomon 编码器，显式 SIMD (AVX2 `_mm256_xor_si256` / NEON `veorq_u8`) 可带来显著提升。
 
 **改造方案**:
-- 短期: 添加 `#[repr(align(32))]` 对齐类型，确保编译器能更好向量化
-- 中期: 使用 `std::simd` (nightly) 或 `wide` crate 实现跨平台 SIMD
-- 长期: 与 `galois_8` 模块的 SIMD 后端分发机制统一，运行时选择最优实现
+- 短期：添加 `#[repr(align(32))]` 对齐类型，确保编译器能更好向量化
+- 中期：使用 `std::simd` (nightly) 或 `wide` crate 实现跨平台 SIMD
+- 长期：与 `galois_8` 模块的 SIMD 后端分发机制统一，运行时选择最优实现
 
 ```rust
-// 方案示例: 运行时分发
+// 方案示例：运行时分发
 pub fn slice_xor(input: &[u8], out: &mut [u8]) {
     match active_backend() {
         Backend::Avx2 => unsafe { slice_xor_avx2(input, out) },
@@ -221,7 +221,7 @@ let (c, d) = rest.split_at_mut(dist);
 #### 2.13 Codec 分发机制不统一
 **位置**: `src/core/encode.rs`
 
-三种守卫模式并存:
+三种守卫模式并存：
 - `self.ensure_classic_family_execution()?` — 拒绝 GF8 和 GF16
 - `self.is_leopard_gf8_family()` — 仅检查 GF8
 - `leopard_gf8_state().is_ok()` — 仅检查 GF8
@@ -266,7 +266,7 @@ trait CodecStrategy {
 
 #### 2.17 测试代码大量重复
 
-以下函数在 `benchmark_smoke.rs` 和 `benchmark_small_files.rs` 间完全重复:
+以下函数在 `benchmark_smoke.rs` 和 `benchmark_small_files.rs` 间完全重复：
 - `git_revision()`, `features()`, `backend()`, `backend_id()`, `backend_kind()`, `target_triple()` (~60 行)
 - `ARTIFACT_SCHEMA_VERSION` 常量 (3 个文件)
 - `run_operation()` 核心分发逻辑

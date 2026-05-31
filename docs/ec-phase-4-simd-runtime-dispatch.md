@@ -463,7 +463,7 @@ cargo bench --bench throughput_matrix
   - `/tmp/policy-maxjobs4-simd-c-serial.json`
   - `/tmp/policy-maxjobs8-minbytes128k-simd-c-serial.json`
   - `/tmp/policy-minparallel64k-maxjobs8-simd-c-serial.json`
-- bench 日志:
+- bench 日志：
   - `/tmp/policy-default-simd-c-serial.log`
   - `/tmp/policy-minbytes128k-simd-c-serial.log`
   - `/tmp/policy-maxjobs4-simd-c-serial.log`
