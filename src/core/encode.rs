@@ -357,7 +357,7 @@ impl<F: Field> ReedSolomon<F> {
         check_slices!(multi => data, multi => parity);
 
         if leopard::leopard_gf8_state(&self.family_state).is_ok() {
-            return Err(Error::UnsupportedLeopardPrototype);
+            return self.encode_leopard_gf8_sep(data, parity);
         }
 
         if self.fast_one_parity_enabled() {
@@ -369,6 +369,37 @@ impl<F: Field> ReedSolomon<F> {
         self.code_some_slices(&parity_rows, data, parity);
 
         Ok(())
+    }
+
+    fn encode_leopard_gf8_sep<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+        &self,
+        data: &[T],
+        parity: &mut [U],
+    ) -> Result<(), Error> {
+        let data_u8: Vec<&[u8]> = data
+            .iter()
+            .map(|s| {
+                let slice: &[F::Elem] = s.as_ref();
+                // SAFETY: Leopard GF8 is only instantiated when F::Elem = u8.
+                // The validate_leopard_gf8 check ensures F::ORDER == 256,
+                // and galois_8::Field has Elem = u8.
+                unsafe { &*(slice as *const [F::Elem] as *const [u8]) }
+            })
+            .collect();
+        let mut parity_u8: Vec<&mut [u8]> = parity
+            .iter_mut()
+            .map(|s| {
+                let slice: &mut [F::Elem] = s.as_mut();
+                // SAFETY: Same as above — F::Elem = u8 for leopard.
+                unsafe { &mut *(slice as *mut [F::Elem] as *mut [u8]) }
+            })
+            .collect();
+        leopard::leopard_gf8_encode(
+            self.data_shard_count,
+            self.parity_shard_count,
+            &data_u8,
+            &mut parity_u8,
+        )
     }
 
     pub fn update<T, U>(
@@ -454,7 +485,7 @@ impl<F: Field> ReedSolomon<F> {
         check_slices!(multi => data, multi => parity);
 
         if leopard::leopard_gf8_state(&self.family_state).is_ok() {
-            return Err(Error::UnsupportedLeopardPrototype);
+            return self.encode_leopard_gf8_sep(data, parity);
         }
 
         if self.fast_one_parity_enabled() {

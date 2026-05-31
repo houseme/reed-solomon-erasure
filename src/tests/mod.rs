@@ -345,6 +345,98 @@ fn test_leopard_gf8_is_rejected_for_galois_16_field() {
 }
 
 #[test]
+fn test_leopard_gf8_encode_sep_populates_parity() {
+    let codec = ReedSolomon::with_options(
+        10,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut shards = make_random_shards!(1024, 14);
+    let (data, parity) = shards.split_at_mut(10);
+    let data_refs: Vec<&[u8]> = data.iter().map(|s| s.as_slice()).collect();
+    let mut parity_copies: Vec<Vec<u8>> = parity.iter().map(|s| s.to_vec()).collect();
+    let mut parity_refs: Vec<&mut [u8]> = parity_copies.iter_mut().map(|s| s.as_mut_slice()).collect();
+
+    codec.encode_sep(&data_refs, &mut parity_refs).unwrap();
+
+    // Parity should be non-zero after encoding
+    assert!(parity_refs.iter().any(|p| p.iter().any(|&b| b != 0)));
+}
+
+#[test]
+fn test_leopard_gf8_encode_sep_consistency() {
+    let codec = ReedSolomon::with_options(
+        10,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shards = make_random_shards!(1024, 14);
+    let data: Vec<&[u8]> = shards[..10].iter().map(|s| s.as_slice()).collect();
+
+    // Encode twice — results must be identical
+    let mut parity1: Vec<Vec<u8>> = vec![vec![0u8; 1024]; 4];
+    let mut parity2: Vec<Vec<u8>> = vec![vec![0u8; 1024]; 4];
+
+    codec.encode_sep(&data, &mut parity1.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+    codec.encode_sep(&data, &mut parity2.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+
+    assert_eq_shards(&parity1, &parity2);
+}
+
+#[test]
+fn test_leopard_gf8_encode_sep_various_shard_sizes() {
+    for shard_size in [64, 256, 1024, 4096, 65536] {
+        let codec = ReedSolomon::with_options(
+            10,
+            4,
+            CodecOptions {
+                codec_family: CodecFamily::LeopardGF8,
+                ..CodecOptions::default()
+            },
+        )
+        .unwrap();
+
+        let shards = make_random_shards!(shard_size, 14);
+        let data: Vec<&[u8]> = shards[..10].iter().map(|s| s.as_slice()).collect();
+        let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 4];
+
+        codec.encode_sep(&data, &mut parity.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+
+        assert!(parity.iter().any(|p| p.iter().any(|&b| b != 0)));
+    }
+}
+
+#[test]
+fn test_leopard_gf8_encode_sep_small_config() {
+    let codec = ReedSolomon::with_options(
+        1,
+        1,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shards = make_random_shards!(64, 2);
+    let data: Vec<&[u8]> = vec![shards[0].as_slice()];
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; 64]];
+
+    codec.encode_sep(&data, &mut parity.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+    assert!(parity[0].iter().any(|&b| b != 0));
+}
+
+#[test]
 fn test_alloc_aligned_shards_zeroed_and_aligned() {
     let shards = galois_8::alloc_aligned_shards(6, 1024);
 

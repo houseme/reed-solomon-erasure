@@ -8,6 +8,26 @@ use crate::matrix::Matrix;
 
 use super::CodecFamily;
 
+/// Trait for safely reinterpreting `F::Elem` as `u8` for leopard encode.
+///
+/// Only implemented for `u8` (i.e., `galois_8::Field`). This enables the generic
+/// `encode_sep` to call the `u8`-specific leopard FFT engine without `unsafe`.
+pub(crate) trait AsLeopardU8: Sized {
+    fn slice_to_u8(slice: &[Self]) -> &[u8];
+    fn slice_to_u8_mut(slice: &mut [Self]) -> &mut [u8];
+}
+
+impl AsLeopardU8 for u8 {
+    #[inline]
+    fn slice_to_u8(slice: &[u8]) -> &[u8] {
+        slice
+    }
+    #[inline]
+    fn slice_to_u8_mut(slice: &mut [u8]) -> &mut [u8] {
+        slice
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum FamilyState<F: Field> {
     Classic,
@@ -132,5 +152,20 @@ fn validate_leopard_gf8<F: Field>(data_shards: usize, parity_shards: usize) -> R
         return Err(Error::UnsupportedCodecFamily);
     }
 
+    Ok(())
+}
+
+/// Dispatch encode to the Leopard GF8 FFT engine.
+///
+/// Accepts `u8` slices directly. The caller (`encode_leopard_gf8_sep`) is responsible
+/// for converting from `F::Elem` to `u8` (safe because Leopard GF8 is only
+/// instantiated for `galois_8::Field` where `Elem = u8`).
+pub(crate) fn leopard_gf8_encode(
+    data_shards: usize,
+    parity_shards: usize,
+    data: &[&[u8]],
+    parity: &mut [&mut [u8]],
+) -> Result<(), Error> {
+    super::leopard_gf8::encode_with_tables(data_shards, parity_shards, data, parity)?;
     Ok(())
 }
