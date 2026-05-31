@@ -10,6 +10,7 @@ use std::sync::atomic::AtomicUsize;
 #[cfg(feature = "std")]
 use std::sync::atomic::Ordering;
 
+pub(crate) mod decode;
 mod driver;
 mod encode;
 mod ops;
@@ -455,6 +456,15 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
     parity: &mut [U],
 ) -> Result<LeopardGf8EncodeDriver, Error> {
     encode::encode_with_tables(data_shards, parity_shards, data, parity)
+}
+
+pub(crate) fn reconstruct_with_tables(
+    shards: &mut [Option<&mut [u8]>],
+    data_shards: usize,
+    parity_shards: usize,
+) -> Result<(), Error> {
+    let tables = init_leopard_gf8_tables();
+    decode::reconstruct_with_tables(shards, data_shards, parity_shards, tables)
 }
 
 fn ceil_pow2(n: usize) -> usize {

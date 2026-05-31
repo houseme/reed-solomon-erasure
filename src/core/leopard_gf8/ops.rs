@@ -55,6 +55,65 @@ pub(super) fn fwht8(data: &mut [u8; ORDER8]) {
     }
 }
 
+/// Flexible-size FWHT for slices whose length is a power of 2 and <= ORDER8.
+///
+/// Used by the decode path where the transform size is `m + data_shards`
+/// (not necessarily ORDER8).
+pub(super) fn fwht_variable(data: &mut [u8]) {
+    let n = data.len();
+    debug_assert!(n.is_power_of_two());
+    debug_assert!(n <= ORDER8);
+
+    let mut dist = 1usize;
+    while dist < n {
+        let dist4 = dist * 4;
+        if dist4 <= n {
+            let mut r = 0usize;
+            while r < n {
+                let mut off = r;
+                for _ in 0..dist {
+                    let t0 = data[off];
+                    let t1 = data[off + dist];
+                    let t2 = data[off + dist * 2];
+                    let t3 = data[off + dist * 3];
+
+                    let (t0, t1) = fwht2_alt8(t0, t1);
+                    let (t2, t3) = fwht2_alt8(t2, t3);
+                    let (t0, t2) = fwht2_alt8(t0, t2);
+                    let (t1, t3) = fwht2_alt8(t1, t3);
+
+                    data[off] = t0;
+                    data[off + dist] = t1;
+                    data[off + dist * 2] = t2;
+                    data[off + dist * 3] = t3;
+                    off += 1;
+                }
+                r += dist4;
+            }
+            dist = dist4;
+        } else {
+            // Remaining pairwise pass (dist * 2 <= n < dist * 4)
+            let dist2 = dist * 2;
+            if dist2 <= n {
+                let mut r = 0usize;
+                while r < n {
+                    let mut off = r;
+                    for _ in 0..dist {
+                        let t0 = data[off];
+                        let t1 = data[off + dist];
+                        let (t0, t1) = fwht2_alt8(t0, t1);
+                        data[off] = t0;
+                        data[off + dist] = t1;
+                        off += 1;
+                    }
+                    r += dist2;
+                }
+            }
+            break;
+        }
+    }
+}
+
 fn fwht2_alt8(a: u8, b: u8) -> (u8, u8) {
     (add_mod8(a, b), sub_mod8(a, b))
 }
