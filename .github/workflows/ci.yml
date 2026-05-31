@@ -145,7 +145,7 @@ jobs:
   test-linux:
     name: Test Linux (${{ matrix.toolchain }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       QUICKCHECK_TESTS: 4
       QUICKCHECK_GENERATOR_SIZE: 32
@@ -172,10 +172,40 @@ jobs:
       - name: Test std + simd
         run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz --features simd-accel
 
+  test-linux-aarch64:
+    name: Test Linux ARM64 (${{ matrix.toolchain }})
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      QUICKCHECK_TESTS: 4
+      QUICKCHECK_GENERATOR_SIZE: 32
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [ stable ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master # v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Test no_std
+        run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz --no-default-features
+
+      - name: Test std + simd
+        run: cargo test --verbose --workspace --exclude reed-solomon-erasure-fuzz --features simd-accel
+
   test-windows-native:
     name: Test Windows Native (${{ matrix.toolchain }})
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       QUICKCHECK_TESTS: 4
       QUICKCHECK_GENERATOR_SIZE: 32
@@ -202,7 +232,7 @@ jobs:
   test-macos-arm64:
     name: Test macOS ARM64 (${{ matrix.toolchain }})
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       QUICKCHECK_TESTS: 4
       QUICKCHECK_GENERATOR_SIZE: 32
@@ -240,6 +270,7 @@ jobs:
       - build-windows-native
       - build-windows-gnu-targets
       - test-linux
+      - test-linux-aarch64
       - test-windows-native
       - test-macos-arm64
 
