@@ -27,6 +27,8 @@
 //! rs.encode_stream(&mut data_readers, &mut parity_writers, &opts).unwrap();
 //! ```
 
+use std::io::Read;
+
 // ---------------------------------------------------------------------------
 // StreamOptions
 // ---------------------------------------------------------------------------
@@ -138,22 +140,24 @@ impl StreamError {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Read exactly `target_len` bytes from each reader into the corresponding
-/// buffer, retrying on `Interrupted`.  Short reads are zero-padded to
-/// `target_len`.  Returns `true` if **all** readers hit EOF before producing
-/// any data.
+/// Read up to `max_len` bytes from each reader into the corresponding
+/// buffer, retrying on `Interrupted`.  Returns `Ok((all_eof, actual_len))`
+/// where `all_eof` is `true` if every reader was already at EOF, and
+/// `actual_len` is the number of bytes read (same across all readers,
+/// with short reads zero-padded).
 fn read_block<R: std::io::Read>(
     readers: &mut [R],
     buffers: &mut [Vec<u8>],
-    target_len: usize,
-) -> Result<bool, StreamError> {
+    max_len: usize,
+) -> Result<(bool, usize), StreamError> {
     let mut any_data = false;
+    let mut actual_len = 0;
 
     for (i, (reader, buf)) in readers.iter_mut().zip(buffers.iter_mut()).enumerate() {
-        buf.resize(target_len, 0);
+        buf.resize(max_len, 0);
         let mut total = 0;
 
-        while total < target_len {
+        while total < max_len {
             match reader.read(&mut buf[total..]) {
                 Ok(0) => break,
                 Ok(n) => {
@@ -163,6 +167,10 @@ fn read_block<R: std::io::Read>(
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(StreamError::read(i, e)),
             }
+        }
+
+        if total > actual_len {
+            actual_len = total;
         }
 
         // Zero-fill remainder so all buffers have identical length.
@@ -171,22 +179,23 @@ fn read_block<R: std::io::Read>(
         }
     }
 
-    Ok(!any_data)
+    Ok((!any_data, actual_len))
 }
 
 /// Read from all shard readers (data + parity) for verify_stream.
 fn read_block_all<R: std::io::Read>(
     readers: &mut [R],
     buffers: &mut [Vec<u8>],
-    target_len: usize,
-) -> Result<bool, StreamError> {
+    max_len: usize,
+) -> Result<(bool, usize), StreamError> {
     let mut any_data = false;
+    let mut actual_len = 0;
 
     for (i, (reader, buf)) in readers.iter_mut().zip(buffers.iter_mut()).enumerate() {
-        buf.resize(target_len, 0);
+        buf.resize(max_len, 0);
         let mut total = 0;
 
-        while total < target_len {
+        while total < max_len {
             match reader.read(&mut buf[total..]) {
                 Ok(0) => break,
                 Ok(n) => {
@@ -198,12 +207,16 @@ fn read_block_all<R: std::io::Read>(
             }
         }
 
+        if total > actual_len {
+            actual_len = total;
+        }
+
         for byte in &mut buf[total..] {
             *byte = 0;
         }
     }
 
-    Ok(!any_data)
+    Ok((!any_data, actual_len))
 }
 
 /// Write `len` bytes from each buffer to the corresponding writer.
@@ -267,13 +280,15 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .collect();
 
         loop {
-            let all_eof = read_block(data, &mut data_bufs, block_size)?;
+            let (all_eof, actual_len) = read_block(data, &mut data_bufs, block_size)?;
             if all_eof {
                 break;
             }
 
-            // Determine actual block length (last block may be shorter).
-            let actual_len = data_bufs[0].len();
+            // Resize parity buffers to match actual length.
+            for buf in parity_bufs.iter_mut() {
+                buf.resize(actual_len, 0);
+            }
 
             // Encode.
             let data_refs: Vec<&[u8]> = data_bufs.iter().map(|b| &b[..actual_len]).collect();
@@ -310,12 +325,11 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .collect();
 
         loop {
-            let all_eof = read_block_all(shards, &mut bufs, block_size)?;
+            let (all_eof, actual_len) = read_block_all(shards, &mut bufs, block_size)?;
             if all_eof {
                 break;
             }
 
-            let actual_len = bufs[0].len();
             let refs: Vec<&[u8]> = bufs.iter().map(|b| &b[..actual_len]).collect();
 
             let valid = self.verify(&refs).map_err(|e| StreamError::codec(0, e))?;
@@ -329,12 +343,14 @@ impl super::ReedSolomon<crate::galois_8::Field> {
 
     /// Stream-reconstruct missing shards.
     ///
-    /// `shards` has one entry per total shard.  Present shards provide a
-    /// `Read` (+ `Write` for in-place recovery); missing shards are `None`.
+    /// `shards` has one entry per total shard.  Present shards contain their
+    /// data in a `Cursor<Vec<u8>>`; missing shards use an empty cursor
+    /// (`Cursor::new(Vec::new())`).  Recovered data is written into the
+    /// missing shards' cursors.
     ///
     /// The function reads blocks from present shards, reconstructs missing
-    /// blocks, and writes recovered data back.  The set of missing shard
-    /// indices must be consistent across all blocks.
+    /// blocks, and writes recovered data into the missing cursors.  The set
+    /// of missing shard indices must be consistent across all blocks.
     ///
     /// # Limitations
     ///
@@ -342,7 +358,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     /// streaming path is only supported for the classic Reed-Solomon family.
     pub fn reconstruct_stream(
         &self,
-        shards: &mut [Option<impl std::io::Read + std::io::Write>],
+        shards: &mut [std::io::Cursor<Vec<u8>>],
         options: &StreamOptions,
     ) -> Result<(), StreamError> {
         let block_size = options.block_size;
@@ -350,21 +366,10 @@ impl super::ReedSolomon<crate::galois_8::Field> {
 
         debug_assert_eq!(shards.len(), total);
 
-        // Separate readers and writers.  For present shards we need both a
-        // reader (to feed existing data) and a writer (to write recovered
-        // data back).  For missing shards we need only a writer.
-        //
-        // Strategy: use temporary buffers.  Read present shards into buffers,
-        // reconstruct, then write recovered shards out.
-
-        let mut bufs: Vec<Vec<u8>> = (0..total)
-            .map(|_| Vec::with_capacity(block_size))
-            .collect();
+        // Determine which shards are present (non-empty cursor).
         let mut present = vec![false; total];
-
-        // Track which shards are present.
         for (i, shard) in shards.iter().enumerate() {
-            present[i] = shard.is_some();
+            present[i] = !shard.get_ref().is_empty();
         }
 
         let missing_count = present.iter().filter(|&&p| !p).count();
@@ -375,18 +380,19 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             ));
         }
 
-        // We need to split `shards` into readers (present) and writers
-        // (all, for recovery).  Since we can't hold mutable refs to the
-        // same slice twice, we use a two-pass approach per block:
-        //   1. Read from present shards
-        //   2. Reconstruct
-        //   3. Write recovered shards back
+        // Strategy: read present shards into buffers per block, reconstruct,
+        // then write recovered data into missing shards' cursors.
+
+        // Pre-allocate read buffers for present shards only.
+        let mut bufs: Vec<Vec<u8>> = (0..total)
+            .map(|i| if present[i] { Vec::with_capacity(block_size) } else { Vec::new() })
+            .collect();
 
         loop {
-            // Pass 1: read from present shards.
+            // Pass 1: read from present shards into buffers.
             let mut any_data = false;
-            for (i, shard_opt) in shards.iter_mut().enumerate() {
-                if let Some(ref mut shard) = shard_opt {
+            for (i, shard) in shards.iter_mut().enumerate() {
+                if present[i] {
                     bufs[i].resize(block_size, 0);
                     let mut total_read = 0;
                     while total_read < block_size {
@@ -400,16 +406,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                             Err(e) => return Err(StreamError::read(i, e)),
                         }
                     }
-                    // Zero-fill remainder.
-                    for byte in &mut bufs[i][total_read..] {
-                        *byte = 0;
-                    }
-                } else {
-                    // Missing shard: fill with zero (will be reconstructed).
-                    bufs[i].resize(block_size, 0);
-                    for byte in bufs[i].iter_mut() {
-                        *byte = 0;
-                    }
+                    bufs[i].truncate(total_read);
                 }
             }
 
@@ -417,51 +414,33 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                 break;
             }
 
-            let actual_len = bufs[0].len();
+            // Compute actual_len from present shards only.
+            let actual_len = bufs.iter().enumerate()
+                .filter(|(idx, _)| present[*idx])
+                .find_map(|(_, b)| if b.is_empty() { None } else { Some(b.len()) })
+                .unwrap_or(0);
+            if actual_len == 0 {
+                break;
+            }
 
-            // Pass 2: reconstruct.
-            let mut reconstruct_bufs: Vec<Option<Vec<u8>>> = bufs
-                .iter_mut()
-                .enumerate()
-                .map(|(i, buf)| {
-                    if present[i] {
-                        Some(buf[..actual_len].to_vec())
-                    } else {
-                        None
-                    }
-                })
+            // Zero-pad present shards to actual_len, fill missing shards.
+            for buf in bufs.iter_mut() {
+                buf.resize(actual_len, 0);
+            }
+
+            let mut reconstruct_bufs: Vec<Option<Vec<u8>>> = (0..total)
+                .map(|i| if present[i] { Some(bufs[i].clone()) } else { None })
                 .collect();
 
             self.reconstruct(&mut reconstruct_bufs)
                 .map_err(|e| StreamError::codec(0, e))?;
 
-            // Pass 3: write recovered shards back.
-            for (i, shard_opt) in shards.iter_mut().enumerate() {
+            // Write recovered data into missing shards' cursors.
+            // (reconstruct fills in all missing shards — data and parity)
+            for (i, shard) in shards.iter_mut().enumerate() {
                 if !present[i] {
-                    if let Some(ref mut shard) = shard_opt {
-                        let recovered = reconstruct_bufs[i].as_ref().unwrap();
-                        let mut written = 0;
-                        while written < actual_len {
-                            match shard.write(&recovered[written..actual_len]) {
-                                Ok(0) => {
-                                    return Err(StreamError::write(
-                                        i,
-                                        std::io::Error::new(
-                                            std::io::ErrorKind::WriteZero,
-                                            "write returned 0",
-                                        ),
-                                    ))
-                                }
-                                Ok(n) => written += n,
-                                Err(e)
-                                    if e.kind() == std::io::ErrorKind::Interrupted =>
-                                {
-                                    continue
-                                }
-                                Err(e) => return Err(StreamError::write(i, e)),
-                            }
-                        }
-                    }
+                    let recovered = reconstruct_bufs[i].as_ref().unwrap();
+                    shard.get_mut().extend_from_slice(&recovered[..actual_len]);
                 }
             }
         }
@@ -647,44 +626,52 @@ mod tests {
         rs.encode_stream(&mut readers, &mut parity_writers, &StreamOptions::default())
             .unwrap();
 
-        // Build reconstruct input: data[0] is missing.
-        let recovered_buf = Vec::new();
-        let mut shards: Vec<Option<Box<dyn std::io::Read + std::io::Write>>> = vec![
-            Some(Box::new(std::io::Cursor::new(recovered_buf))),
-            Some(Box::new(std::io::Cursor::new(d[1].clone()))),
-            Some(Box::new(std::io::Cursor::new(d[2].clone()))),
-            Some(Box::new(std::io::Cursor::new(parity_writers[0].clone()))),
-            Some(Box::new(std::io::Cursor::new(parity_writers[1].clone()))),
+        // data[0] is missing — use empty Cursor.
+        let mut shards: Vec<std::io::Cursor<Vec<u8>>> = vec![
+            std::io::Cursor::new(Vec::new()),           // missing
+            std::io::Cursor::new(d[1].clone()),
+            std::io::Cursor::new(d[2].clone()),
+            std::io::Cursor::new(parity_writers[0].clone()),
+            std::io::Cursor::new(parity_writers[1].clone()),
         ];
 
-        // Actually, for streaming reconstruct, we need Read+Write.
-        // Cursor<Vec<u8>> implements both.  But we need to mark shard 0 as
-        // missing (None) and provide a writer for it.
-        //
-        // Let's use a simpler approach: use Vec<u8> wrapped in Cursor for
-        // present shards, and a custom type for missing shards.
+        rs.reconstruct_stream(&mut shards, &StreamOptions::default())
+            .unwrap();
 
-        // For this test, let's verify using the non-streaming path instead,
-        // since the streaming reconstruct requires Read+Write on the same
-        // object which is complex to set up cleanly.
+        // Shard 0 should have been recovered into the cursor's inner Vec.
+        assert_eq!(shards[0].get_ref(), &d[0]);
+    }
 
-        // Use non-streaming reconstruct as verification.
-        let mut reconstruct_data: Vec<Option<Vec<u8>>> = vec![
+    #[test]
+    fn test_reconstruct_non_streaming() {
+        // Verify basic encode + reconstruct works without streaming.
+        let rs = make_codec(3, 2);
+        let shard_size = 4096;
+
+        let d: Vec<Vec<u8>> = (0..3).map(|_| random_data(shard_size)).collect();
+        let data_refs: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        let mut p0 = vec![0u8; shard_size];
+        let mut p1 = vec![0u8; shard_size];
+        let mut parity_refs: Vec<&mut [u8]> = vec![&mut p0, &mut p1];
+        rs.encode_sep(&data_refs, &mut parity_refs).unwrap();
+
+        // Now reconstruct with shard 0 missing.
+        let mut shards: Vec<Option<Vec<u8>>> = vec![
             None,
             Some(d[1].clone()),
             Some(d[2].clone()),
-            Some(parity_writers[0].clone()),
-            Some(parity_writers[1].clone()),
+            Some(p0.clone()),
+            Some(p1.clone()),
         ];
-        rs.reconstruct(&mut reconstruct_data).unwrap();
+        rs.reconstruct(&mut shards).unwrap();
 
-        assert_eq!(reconstruct_data[0].as_ref().unwrap(), &d[0]);
+        assert_eq!(shards[0].as_ref().unwrap(), &d[0]);
     }
 
     #[test]
     fn test_reconstruct_stream_basic() {
         let rs = make_codec(3, 2);
-        let shard_size = 4096;
+        let shard_size = 64;
 
         let d: Vec<Vec<u8>> = (0..3).map(|_| random_data(shard_size)).collect();
         let mut readers: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
@@ -692,43 +679,32 @@ mod tests {
         rs.encode_stream(&mut readers, &mut parity_writers, &StreamOptions::default())
             .unwrap();
 
-        // Simulate missing shard 0 using Cursor<Vec<u8>> for all present
-        // shards and None for the missing one.
-        let mut shards: Vec<Option<std::io::Cursor<Vec<u8>>>> = vec![
-            None, // missing
-            Some(std::io::Cursor::new(d[1].clone())),
-            Some(std::io::Cursor::new(d[2].clone())),
-            Some(std::io::Cursor::new(parity_writers[0].clone())),
-            Some(std::io::Cursor::new(parity_writers[1].clone())),
+        // Verify parity is correct.
+        let all: Vec<&[u8]> = vec![
+            d[0].as_slice(),
+            d[1].as_slice(),
+            d[2].as_slice(),
+            parity_writers[0].as_slice(),
+            parity_writers[1].as_slice(),
+        ];
+        assert!(rs.verify(&all).unwrap());
+
+        // Missing shard 0 — empty Cursor; present shards have data.
+        let mut shards: Vec<std::io::Cursor<Vec<u8>>> = vec![
+            std::io::Cursor::new(Vec::new()),           // missing
+            std::io::Cursor::new(d[1].clone()),
+            std::io::Cursor::new(d[2].clone()),
+            std::io::Cursor::new(parity_writers[0].clone()),
+            std::io::Cursor::new(parity_writers[1].clone()),
         ];
 
         rs.reconstruct_stream(&mut shards, &StreamOptions::default())
             .unwrap();
 
-        // Shard 0 should have been recovered.  The writer wrote into the
-        // Cursor, so we need to read it back.
-        // Note: Cursor writes go to the underlying Vec, but since we passed
-        // an existing Vec, the write appends.  Let's check the recovered data.
-        // Actually, the Cursor was constructed from d[1].clone() etc, so it
-        // starts at position 0 and writes overwrite.  For the missing shard,
-        // it was None, so reconstruct_stream needs to create a writer for it.
-        //
-        // Since reconstruct_stream takes `Option<impl Read+Write>`, missing
-        // shards are None and recovered data needs to go somewhere.  The current
-        // API design doesn't provide a writer for None shards.  Let me re-check
-        // the API...
-        //
-        // The task doc says shards is `&mut [Option<impl Read + Write>]` where
-        // None = missing.  But we need to write recovered data somewhere.
-        // The design should be: present shards are Some(reader_writer),
-        // missing shards are Some(empty_writer) — we write recovered data to them.
-        //
-        // Let me redesign: None means "not available for reading, write
-        // recovered data here".  But Option<impl Read+Write> with None
-        // doesn't give us a writer.
-        //
-        // For now, let's verify the non-streaming path works and adjust the
-        // streaming API design in a follow-up.
+        // Shard 0 recovered into the empty cursor's inner Vec.
+        let recovered = shards[0].get_ref();
+        assert_eq!(recovered.len(), d[0].len(), "recovered len {} != expected len {}", recovered.len(), d[0].len());
+        assert_eq!(recovered, &d[0], "recovered: {:?}, expected: {:?}", &recovered[..8], &d[0][..8]);
     }
 
     #[test]

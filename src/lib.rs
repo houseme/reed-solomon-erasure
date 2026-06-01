@@ -65,6 +65,8 @@ pub use crate::core::ReedSolomon;
 #[cfg(feature = "std")]
 pub use crate::core::RuntimeProfileStats;
 pub use crate::core::ShardByShard;
+#[cfg(feature = "std")]
+pub use crate::core::stream;
 pub use crate::core::VerifyWorkspace;
 
 #[cfg(feature = "std")]

@@ -152,6 +152,50 @@ For SIMD-sensitive workloads on `galois_8`, you can allocate 64-byte aligned sha
 These helpers return `AlignedShard` buffers that implement `AsRef<[u8]>` and `AsMut<[u8]>`, so they can be passed
 directly to the existing encode/verify APIs without changing codec output semantics.
 
+### Streaming API
+
+For large datasets that don't fit in memory, use the streaming API to process data in blocks:
+
+```rust
+use reed_solomon_erasure::galois_8::ReedSolomon;
+use reed_solomon_erasure::stream::StreamOptions;
+use std::io::Cursor;
+
+fn main() {
+    let rs = ReedSolomon::new(3, 2).unwrap();
+    let shard_size = 64 * 1024; // 64 KiB
+
+    // Prepare data shards as readers.
+    let data: Vec<Vec<u8>> = (0..3).map(|i| vec![i as u8; shard_size]).collect();
+    let mut readers: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+    let mut parity_writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+
+    // Encode in blocks (default 4 MiB block size).
+    let opts = StreamOptions::new().with_block_size(256 * 1024); // 256 KiB blocks
+    rs.encode_stream(&mut readers, &mut parity_writers, &opts).unwrap();
+
+    // Verify all shards in blocks.
+    let mut all_readers: Vec<&[u8]> = Vec::new();
+    for d in &data { all_readers.push(d.as_slice()); }
+    for p in &parity_writers { all_readers.push(p.as_slice()); }
+    assert!(rs.verify_stream(&mut all_readers, &opts).unwrap());
+
+    // Reconstruct with missing shard 0.
+    // Present shards: Cursor with data; missing shards: empty Cursor.
+    let mut shards: Vec<Cursor<Vec<u8>>> = vec![
+        Cursor::new(Vec::new()),               // missing
+        Cursor::new(data[1].clone()),
+        Cursor::new(data[2].clone()),
+        Cursor::new(parity_writers[0].clone()),
+        Cursor::new(parity_writers[1].clone()),
+    ];
+    rs.reconstruct_stream(&mut shards, &opts).unwrap();
+    assert_eq!(shards[0].get_ref(), &data[0]);
+}
+```
+
+The streaming API is available on `galois_8::ReedSolomon` (classic family only) and requires the `std` feature.
+
 ## Codec Families
 
 `CodecOptions::codec_family` makes the algorithm family explicit:

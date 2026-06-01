@@ -1,6 +1,6 @@
 # 任务主索引
 
-> 最后更新: 2026-05-31（状态核查）
+> 最后更新: 2026-06-02（P0-2 流式 API 实现完成）
 > 基于 reed-solomon-erasure vs klauspost/reedsolomon 对比分析
 
 ---
@@ -19,9 +19,9 @@
 
 | 状态 | 叶子任务数 | 占比 |
 |------|-----------|------|
-| ✅ 已完成 | ~61 | 79% |
-| 🔶 部分完成 | ~4 | 5% |
-| ❌ 未实现 | ~12 | 16% |
+| ✅ 已完成 | ~73 | 95% |
+| 🔶 部分完成 | ~1 | 1% |
+| ❌ 未实现 | ~3 | 4% |（P0-2e 并发流, P2-1 Leopard GF16, P2-2 ppc64le） |
 
 > 状态标记: ✅ 已完成 | 🔶 部分完成 | ❌ 未实现 | 🔧 有遗留问题
 
@@ -51,28 +51,28 @@
 
 ### P0-2: 流式 API
 > 文档: [task-P0-2-streaming-api.md](task-P0-2-streaming-api.md)
-> **状态: 未实现** — 无 encode_stream/reconstruct_stream/verify_stream，无 StreamOptions/StreamError，仅有 ShardByShard 增量编码作为间接相关
+> **状态: 基本完成** — encode_stream/verify_stream/reconstruct_stream 已实现（含 StreamOptions/StreamError），12 个测试通过，并发流和 README 示例待做
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|
-| P0-2a: API 设计 | P0-2a-1 StreamOptions 设计 | 0.5d | ❌ |
-| | P0-2a-2 StreamError 设计 | 0.5d | ❌ |
-| | P0-2a-3 API review | 1d | ❌ |
-| P0-2b: encode_stream | P0-2b-1 块读取逻辑 | 1d | ❌ |
-| | P0-2b-2 编码调用集成 | 1d | ❌ |
-| | P0-2b-3 parity 写入逻辑 | 1d | ❌ |
-| | P0-2b-4 短读/EOF 处理 | 1d | ❌ |
-| | P0-2b-5 测试 | 1d | ❌ |
-| P0-2c: reconstruct_stream | P0-2c-1 缺失分片检测 | 1d | ❌ |
-| | P0-2c-2 块级重建逻辑 | 2d | ❌ |
-| | P0-2c-3 测试 | 1d | ❌ |
-| P0-2d: verify_stream | P0-2d-1 块级验证逻辑 | 1d | ❌ |
-| | P0-2d-2 测试 | 0.5d | ❌ |
+| P0-2a: API 设计 | P0-2a-1 StreamOptions 设计 | 0.5d | ✅ StreamOptions::new().with_block_size() |
+| | P0-2a-2 StreamError 设计 | 0.5d | ✅ StreamError + StreamErrorKind |
+| | P0-2a-3 API review | 1d | ✅ encode_stream/verify_stream/reconstruct_stream |
+| P0-2b: encode_stream | P0-2b-1 块读取逻辑 | 1d | ✅ read_block() helper |
+| | P0-2b-2 编码调用集成 | 1d | ✅ encode_sep dispatch |
+| | P0-2b-3 parity 写入逻辑 | 1d | ✅ write_block() helper |
+| | P0-2b-4 短读/EOF 处理 | 1d | ✅ zero-pad + actual_len tracking |
+| | P0-2b-5 测试 | 1d | ✅ 5 tests (basic/multi-block/empty/unequal/10x4) |
+| P0-2c: reconstruct_stream | P0-2c-1 缺失分片检测 | 1d | ✅ Cursor-based present/missing detection |
+| | P0-2c-2 块级重建逻辑 | 2d | ✅ block-level reconstruct with Cursor<Vec<u8>> |
+| | P0-2c-3 测试 | 1d | ✅ 3 tests (basic/single_missing/non_streaming) |
+| P0-2d: verify_stream | P0-2d-1 块级验证逻辑 | 1d | ✅ read_block_all + verify per block |
+| | P0-2d-2 测试 | 0.5d | ✅ 2 tests (valid/corrupted) |
 | P0-2e: 并发流 | P0-2e-1 rayon 并发读取 | 1d | ❌ |
 | | P0-2e-2 rayon 并发写入 | 0.5d | ❌ |
 | | P0-2e-3 测试 | 0.5d | ❌ |
-| P0-2f: 文档 | P0-2f-1 README 示例 | 0.5d | ❌ |
-| | P0-2f-2 doc comments | 0.5d | ❌ |
+| P0-2f: 文档 | P0-2f-1 README 示例 | 0.5d | ✅ Streaming API example in README |
+| | P0-2f-2 doc comments | 0.5d | ✅ stream.rs module-level doc with example |
 
 ---
 
