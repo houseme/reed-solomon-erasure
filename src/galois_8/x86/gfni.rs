@@ -2,7 +2,7 @@
 extern crate alloc;
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -10,7 +10,7 @@ extern crate alloc;
 const GFNI_ISOMORPHISM_ROWS: [u8; 8] = [0xff, 0xaa, 0xcc, 0x88, 0xf0, 0xa0, 0xc0, 0x80];
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -34,7 +34,7 @@ fn gfni_isomorphism_bytes() -> [u8; 16] {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -45,7 +45,7 @@ fn coeff_table_avx2(c: u8) -> [u8; 32] {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -56,7 +56,7 @@ fn coeff_table_avx512(c: u8) -> [u8; 64] {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -67,7 +67,7 @@ fn gfni_avx2_constant_bytes(c: u8) -> ([u8; 16], [u8; 32]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -78,7 +78,7 @@ fn gfni_avx512_constant_bytes(c: u8) -> ([u8; 16], [u8; 64]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -102,7 +102,7 @@ unsafe fn gfni_avx2_constants(c: u8) -> (core::arch::x86_64::__m256i, core::arch
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -128,7 +128,7 @@ unsafe fn gfni_avx512_constants(
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -142,7 +142,7 @@ pub(crate) fn rust_gfni_avx2_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -156,7 +156,7 @@ pub(crate) fn rust_gfni_avx2_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) 
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -170,7 +170,7 @@ pub(crate) fn rust_gfni_avx512_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -184,7 +184,7 @@ pub(crate) fn rust_gfni_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -235,7 +235,7 @@ unsafe fn rust_gfni_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mu
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -287,7 +287,7 @@ unsafe fn rust_gfni_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &
 
 #[cfg(all(
     test,
-    feature = "simd-accel",
+    feature = "simd-gfni",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),

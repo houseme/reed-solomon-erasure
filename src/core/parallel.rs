@@ -6,7 +6,7 @@ use super::{
 };
 
 #[cfg(feature = "std")]
-pub const PARALLEL_POLICY_VERSION: u32 = 1;
+pub const PARALLEL_POLICY_VERSION: u32 = 2;
 #[cfg(feature = "std")]
 const RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES_ENV: &str =
     "RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES";
@@ -14,6 +14,8 @@ const RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES_ENV: &str =
 const RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB_ENV: &str = "RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB";
 #[cfg(feature = "std")]
 const RS_PARALLEL_POLICY_MAX_JOBS_ENV: &str = "RS_PARALLEL_POLICY_MAX_JOBS";
+#[cfg(feature = "std")]
+const RS_PARALLEL_POLICY_L2_CACHE_BYTES_ENV: &str = "RS_PARALLEL_POLICY_L2_CACHE_BYTES";
 
 #[cfg(feature = "std")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +23,9 @@ pub struct ParallelPolicy {
     pub min_parallel_shard_bytes: usize,
     pub min_bytes_per_job: usize,
     pub max_jobs: usize,
+    /// Estimated L2 cache size per core in bytes. Used to bound chunk sizes so
+    /// each job's working set fits in L2. Set to 0 to disable cache-aware sizing.
+    pub l2_cache_bytes: usize,
 }
 
 #[cfg(feature = "std")]
@@ -47,6 +52,8 @@ impl Default for ParallelPolicy {
             min_parallel_shard_bytes: PARALLEL_MIN_SHARD_BYTES,
             min_bytes_per_job: CODE_SLICE_LARGE_CHUNK_BYTES,
             max_jobs: 0,
+            l2_cache_bytes: super::cache_detect::detect_l2_cache_bytes()
+                .unwrap_or(super::cache_detect::DEFAULT_L2_CACHE_BYTES),
         }
     }
 }
@@ -79,7 +86,18 @@ impl ParallelPolicy {
         let min_parallel_shard_bytes = self.min_parallel_shard_bytes.max(1);
         let min_bytes_per_job = self.min_bytes_per_job.max(CODE_SLICE_MIN_CHUNK_BYTES);
 
-        let chunk_count = shard_size.div_ceil(min_bytes_per_job).max(1);
+        let mut chunk_count = shard_size.div_ceil(min_bytes_per_job).max(1);
+
+        // Cache-aware chunking: if L2 cache size is known, limit chunk count so
+        // each job's working set (chunk * active shards) fits in L2.
+        if self.l2_cache_bytes > 0 {
+            let active_shards = data_shards.saturating_add(output_shards).max(1);
+            let ideal_chunk = self.l2_cache_bytes / active_shards;
+            if ideal_chunk > 0 {
+                let cache_chunk_count = shard_size.div_ceil(ideal_chunk).max(1);
+                chunk_count = chunk_count.max(cache_chunk_count);
+            }
+        }
         let max_useful_jobs = if output_shards <= 2 {
             chunk_count
         } else {
@@ -120,6 +138,12 @@ impl ParallelPolicy {
         }
     }
 
+    /// Builder-style setter for L2 cache size.
+    pub fn with_l2_cache_bytes(mut self, bytes: usize) -> Self {
+        self.l2_cache_bytes = bytes;
+        self
+    }
+
     pub fn with_env_overrides(self) -> Self {
         let mut policy = self;
         if let Some(value) = parse_env_usize(RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES_ENV)
@@ -134,6 +158,9 @@ impl ParallelPolicy {
         }
         if let Some(value) = parse_env_usize(RS_PARALLEL_POLICY_MAX_JOBS_ENV) {
             policy.max_jobs = value;
+        }
+        if let Some(value) = parse_env_usize(RS_PARALLEL_POLICY_L2_CACHE_BYTES_ENV) {
+            policy.l2_cache_bytes = value;
         }
         policy
     }
@@ -233,11 +260,73 @@ impl<F: Field> ReedSolomon<F> {
 
     #[cfg(feature = "std")]
     pub(crate) fn resolve_policy_cache() -> RuntimeParallelPolicyCache {
-        let data = ParallelPolicy::default().with_env_overrides();
+        Self::resolve_policy_cache_with_options(super::CodecOptions::default())
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn resolve_policy_cache_with_options(
+        options: super::CodecOptions,
+    ) -> RuntimeParallelPolicyCache {
+        let mut data = ParallelPolicy::default().with_env_overrides();
+        if options.max_parallel_jobs > 0 {
+            data.max_jobs = options.max_parallel_jobs;
+        }
         if core::any::type_name::<F>() == core::any::type_name::<crate::galois_8::Field>() {
             crate::galois_8::resolve_runtime_parallel_policy_cache(data)
         } else {
             RuntimeParallelPolicyCache::new(data)
         }
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_policy_has_l2_cache() {
+        let policy = ParallelPolicy::default();
+        assert!(policy.l2_cache_bytes > 0, "L2 cache should be detected or defaulted");
+    }
+
+    #[test]
+    fn test_cache_aware_increases_chunk_count() {
+        // Small L2 cache forces more chunks
+        let policy = ParallelPolicy {
+            l2_cache_bytes: 64 * 1024, // 64 KiB
+            ..Default::default()
+        };
+        let decision = policy.decide(1024 * 1024, 10, 4, 8);
+        // With 64K L2 / 14 active shards ≈ 4.5K per chunk
+        // 1MB / 4.5K ≈ 227 chunks → many parallel jobs
+        assert!(decision.jobs > 1, "should parallelize with small cache");
+    }
+
+    #[test]
+    fn test_l2_cache_zero_disables_cache_aware() {
+        let policy = ParallelPolicy {
+            l2_cache_bytes: 0,
+            ..Default::default()
+        };
+        let decision = policy.decide(1024 * 1024, 10, 4, 8);
+        // Should still work, just without cache-aware sizing
+        assert!(decision.jobs >= 1);
+    }
+
+    #[test]
+    fn test_with_l2_cache_bytes_builder() {
+        let policy = ParallelPolicy::default().with_l2_cache_bytes(512 * 1024);
+        assert_eq!(policy.l2_cache_bytes, 512 * 1024);
+    }
+
+    #[test]
+    fn test_cache_aware_small_shard_no_effect() {
+        // Shard smaller than min_parallel_shard_bytes → serial regardless
+        let policy = ParallelPolicy {
+            l2_cache_bytes: 256 * 1024,
+            ..Default::default()
+        };
+        let decision = policy.decide(1024, 10, 4, 8);
+        assert!(!decision.use_parallel);
     }
 }

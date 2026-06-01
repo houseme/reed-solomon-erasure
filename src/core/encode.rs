@@ -277,6 +277,78 @@ impl<F: Field> ReedSolomon<F> {
         self.options.fast_one_parity && self.parity_shard_count == 1
     }
 
+    /// Attempt SIMD codegen encode for GF(2^8) with common configurations.
+    /// Returns `true` if the codegen path was used, `false` to fall back to generic path.
+    fn try_encode_codegen<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+        &self,
+        data: &[T],
+        parity: &mut [U],
+        _shard_len: usize,
+    ) -> bool {
+        // SAFETY: We only call this when size_of::<F::Elem>() == 1, so F::Elem is u8.
+        // u8 and F::Elem have identical layout (align=1, size=1), so pointer casts are valid.
+        let _data_u8: smallvec::SmallVec<[&[u8]; 32]> = data
+            .iter()
+            .map(|d| unsafe { &*(d.as_ref() as *const [F::Elem] as *const [u8]) })
+            .collect();
+        let _parity_len = parity.len();
+        let mut _parity_u8: smallvec::SmallVec<[&mut [u8]; 32]> = parity
+            .iter_mut()
+            .map(|p| unsafe { &mut *(p.as_mut() as *mut [F::Elem] as *mut [u8]) })
+            .collect();
+        let parity_rows = self.get_parity_rows();
+        let mut _parity_refs: smallvec::SmallVec<[&[u8]; 32]> =
+            smallvec::SmallVec::with_capacity(parity_rows.len());
+        for r in parity_rows.iter() {
+            let slice: &[F::Elem] = *r;
+            _parity_refs.push(unsafe {
+                core::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len())
+            });
+        }
+
+        // x86_64 AVX2 codegen path
+        #[cfg(all(
+            feature = "simd-avx2",
+            target_arch = "x86_64",
+            not(target_env = "msvc"),
+            not(any(target_os = "android", target_os = "ios"))
+        ))]
+        {
+            if crate::galois_8::x86::codegen::try_encode_codegen_avx2(
+                self.data_shard_count,
+                self.parity_shard_count,
+                &_parity_refs,
+                &_data_u8,
+                &mut _parity_u8,
+                _shard_len,
+            ) {
+                return true;
+            }
+        }
+
+        // aarch64 NEON codegen path
+        #[cfg(all(
+            feature = "simd-neon",
+            target_arch = "aarch64",
+            not(target_env = "msvc"),
+            not(any(target_os = "android", target_os = "ios"))
+        ))]
+        {
+            if crate::galois_8::aarch64::codegen::try_encode_codegen_neon(
+                self.data_shard_count,
+                self.parity_shard_count,
+                &_parity_refs,
+                &_data_u8,
+                &mut _parity_u8,
+                _shard_len,
+            ) {
+                return true;
+            }
+        }
+
+        false
+    }
+
     pub(crate) fn encode_fast_one_parity<
         T: AsRef<[F::Elem]>,
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
@@ -300,7 +372,7 @@ impl<F: Field> ReedSolomon<F> {
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
     {
         if self.is_leopard_gf8_family() {
-            return Err(Error::UnsupportedLeopardPrototype);
+            return Err(Error::UnsupportedCodecFamily);
         }
         let slices = shards.as_mut();
 
@@ -321,7 +393,7 @@ impl<F: Field> ReedSolomon<F> {
         parity: &mut [U],
     ) -> Result<(), Error> {
         if self.is_leopard_gf8_family() {
-            return Err(Error::UnsupportedLeopardPrototype);
+            return Err(Error::UnsupportedCodecFamily);
         }
         check_slice_index!(data => self, i_data);
         check_piece_count!(parity => self, parity);
@@ -365,13 +437,21 @@ impl<F: Field> ReedSolomon<F> {
             return Ok(());
         }
 
+        // Try SIMD codegen path for GF(2^8) with common configurations.
+        if core::mem::size_of::<F::Elem>() == 1 {
+            let shard_len = data.first().map(|d| d.as_ref().len()).unwrap_or(0);
+            if shard_len > 0 && self.try_encode_codegen(data, parity, shard_len) {
+                return Ok(());
+            }
+        }
+
         let parity_rows = self.get_parity_rows();
         self.code_some_slices(&parity_rows, data, parity);
 
         Ok(())
     }
 
-    fn encode_leopard_gf8_sep<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+    pub(crate) fn encode_leopard_gf8_sep<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
         &self,
         data: &[T],
         parity: &mut [U],
@@ -412,6 +492,9 @@ impl<F: Field> ReedSolomon<F> {
         T: AsRef<[F::Elem]>,
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
     {
+        if self.is_leopard_gf8_family() {
+            return Err(Error::UnsupportedCodecFamily);
+        }
         self.ensure_classic_family_execution()?;
         check_piece_count!(data => self, old_data);
         check_piece_count!(parity => self, parity);
@@ -517,7 +600,7 @@ impl<F: Field> ReedSolomon<F> {
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send,
     {
         if self.is_leopard_gf8_family() {
-            return Err(Error::UnsupportedLeopardPrototype);
+            return Err(Error::UnsupportedCodecFamily);
         }
         check_slice_index!(data => self, i_data);
         check_piece_count!(parity => self, parity);

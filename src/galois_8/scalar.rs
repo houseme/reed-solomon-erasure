@@ -1,4 +1,12 @@
 pub(crate) fn mul_slice_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
+    if c == 0 {
+        out.fill(0);
+        return;
+    }
+    if c == 1 {
+        out.copy_from_slice(input);
+        return;
+    }
     let mt = &super::MUL_TABLE[c as usize];
     assert_eq!(input.len(), out.len());
     for (i, o) in input.iter().zip(out.iter_mut()) {
@@ -7,6 +15,16 @@ pub(crate) fn mul_slice_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 pub(crate) fn mul_slice_xor_pure_rust(c: u8, input: &[u8], out: &mut [u8]) {
+    if c == 0 {
+        return;
+    }
+    if c == 1 {
+        assert_eq!(input.len(), out.len());
+        for (i, o) in input.iter().zip(out.iter_mut()) {
+            *o ^= *i;
+        }
+        return;
+    }
     let mt = &super::MUL_TABLE[c as usize];
     assert_eq!(input.len(), out.len());
     for (i, o) in input.iter().zip(out.iter_mut()) {

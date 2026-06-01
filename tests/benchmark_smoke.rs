@@ -1421,7 +1421,7 @@ fn benchmark_leopard_encode_ab_64x32_1m_exports_results() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     feature = "std",
     target_arch = "aarch64",
     not(target_env = "msvc"),

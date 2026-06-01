@@ -285,6 +285,22 @@ pub fn features() -> String {
     }
     if cfg!(feature = "simd-accel") {
         enabled.push("simd-accel");
+    } else {
+        if cfg!(feature = "simd-neon") {
+            enabled.push("simd-neon");
+        }
+        if cfg!(feature = "simd-ssse3") {
+            enabled.push("simd-ssse3");
+        }
+        if cfg!(feature = "simd-avx2") {
+            enabled.push("simd-avx2");
+        }
+        if cfg!(feature = "simd-avx512") {
+            enabled.push("simd-avx512");
+        }
+        if cfg!(feature = "simd-gfni") {
+            enabled.push("simd-gfni");
+        }
     }
     if cfg!(feature = "benchmark-metrics") {
         enabled.push("benchmark-metrics");

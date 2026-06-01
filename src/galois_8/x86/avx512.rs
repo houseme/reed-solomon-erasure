@@ -2,7 +2,7 @@
 extern crate alloc;
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-avx512",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -25,7 +25,7 @@ unsafe fn load_tables_avx512(
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-avx512",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -39,7 +39,7 @@ pub(crate) fn rust_avx512_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-avx512",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -53,7 +53,7 @@ pub(crate) fn rust_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-avx512",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -112,7 +112,7 @@ unsafe fn rust_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [
 
 #[cfg(all(
     test,
-    feature = "simd-accel",
+    feature = "simd-avx512",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),

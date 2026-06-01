@@ -2,7 +2,7 @@
 use super::super::profile::{RUST_NEON_PROFILE_METRICS, rust_neon_mul_slice_xor_unroll};
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -12,12 +12,20 @@ pub(crate) fn rust_neon_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     if input.is_empty() {
         return;
     }
+    if c == 0 {
+        out.fill(0);
+        return;
+    }
+    if c == 1 {
+        out.copy_from_slice(input);
+        return;
+    }
 
     unsafe { rust_neon_mul_slice_impl(c, input, out) }
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -27,12 +35,21 @@ pub(crate) fn rust_neon_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     if input.is_empty() {
         return;
     }
+    if c == 0 {
+        return;
+    }
+    if c == 1 {
+        for (i, o) in input.iter().zip(out.iter_mut()) {
+            *o ^= *i;
+        }
+        return;
+    }
 
     unsafe { rust_neon_mul_slice_xor_impl(c, input, out) }
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -123,7 +140,7 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))

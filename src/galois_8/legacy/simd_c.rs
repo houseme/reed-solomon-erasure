@@ -1,5 +1,5 @@
 #[cfg(all(
-    feature = "simd-accel",
+    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -23,7 +23,7 @@ unsafe extern "C" {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -48,7 +48,7 @@ pub(crate) fn simd_c_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))

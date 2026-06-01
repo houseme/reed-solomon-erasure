@@ -37,13 +37,24 @@ reed-solomon-erasure = "6.0"
 Or to enable SIMD acceleration (recommended for performance-sensitive workloads):
 
 ```toml
+# Enable all SIMD backends (umbrella feature — recommended for most users)
 [dependencies]
 reed-solomon-erasure = { version = "6.0", features = ["simd-accel"] }
+
+# Or enable only the backend(s) matching your target architecture:
+# [dependencies]
+# reed-solomon-erasure = { version = "6.0", features = ["simd-neon"] }    # aarch64 NEON
+# reed-solomon-erasure = { version = "6.0", features = ["simd-avx2"] }   # x86_64 AVX2
+# reed-solomon-erasure = { version = "6.0", features = ["simd-ssse3"] }  # x86_64 SSSE3
+# reed-solomon-erasure = { version = "6.0", features = ["simd-avx512"] } # x86_64 AVX-512
+# reed-solomon-erasure = { version = "6.0", features = ["simd-gfni"] }   # x86_64 GFNI (requires AVX2/AVX-512)
 ```
 
-> **Note:** The `simd-accel` feature now prefers Rust runtime-dispatched SIMD backends (SSSE3, AVX2, AVX512, GFNI on x86_64; NEON on aarch64) on supported CPUs. The bundled `simd_c` implementation is retained as a legacy fallback.
+> **Note:** The `simd-accel` feature enables all SIMD backends and is recommended for most users. For cross-compilation or minimal binary size, enable only the feature matching your target architecture. All features use runtime detection — enabling `simd-avx2` on a machine without AVX2 will safely fall back to scalar code.
 >
-> Set `RSE_BACKEND_OVERRIDE` at runtime to force a specific backend, or `RUST_REED_SOLOMON_ERASURE_ARCH` at build time to configure the legacy C backend's `-march` flag.
+> The bundled `simd_c` implementation is retained as a legacy fallback when `simd-accel` (or any individual SIMD feature) is enabled.
+>
+> Set `RSE_BACKEND_OVERRIDE` at runtime to force a specific backend (e.g., `scalar`, `rust-neon`, `rust-avx2`, `rust-gfni-avx2`), or `RUST_REED_SOLOMON_ERASURE_ARCH` at build time to configure the legacy C backend's `-march` flag.
 
 ## Example
 
@@ -90,6 +101,52 @@ fn main() {
 For repeated verify calls, prefer `verify_with_workspace` or `verify_with_buffer`
 over plain `verify`, so the parity scratch buffer can be reused across calls.
 
+### LeopardGF8 Example
+
+```rust
+use reed_solomon_erasure::galois_8::ReedSolomon;
+use reed_solomon_erasure::{CodecOptions, CodecFamily};
+
+fn main() {
+    // LeopardGF8 uses FFT-based encoding for high shard counts.
+    // Shard lengths must be multiples of 64 bytes.
+    let r = ReedSolomon::with_options(
+        4, 4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    ).unwrap();
+
+    let shard_len = 256; // must be multiple of 64
+    let mut shards: Vec<Vec<u8>> = (0..8)
+        .map(|i| (0..shard_len).map(|j| (i * shard_len + j) as u8).collect())
+        .collect();
+
+    // Encode: data shards 0..4 produce parity shards 4..7
+    let (data, parity) = shards.split_at_mut(4);
+    let data_refs: Vec<&[u8]> = data.iter().map(|s| s.as_slice()).collect();
+    let mut parity_refs: Vec<&mut [u8]> = parity.iter_mut().map(|s| s.as_mut_slice()).collect();
+    r.encode_sep(&data_refs, &mut parity_refs).unwrap();
+
+    // Verify
+    let all_refs: Vec<&[u8]> = shards.iter().map(|s| s.as_slice()).collect();
+    assert!(r.verify(&all_refs).unwrap());
+
+    // Reconstruct with missing shards
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        shards.iter().map(|s| Some(s.clone())).collect();
+    reconstructable[0] = None;
+    reconstructable[5] = None;
+    r.reconstruct(&mut reconstructable).unwrap();
+
+    // Verify reconstruction
+    let recovered: Vec<Vec<u8>> = reconstructable.into_iter().map(|s| s.unwrap()).collect();
+    assert_eq!(recovered[0], shards[0]);
+    assert_eq!(recovered[5], shards[5]);
+}
+```
+
 For SIMD-sensitive workloads on `galois_8`, you can allocate 64-byte aligned shards with
 `reed_solomon_erasure::galois_8::alloc_aligned_shards(...)` or `galois_8::ReedSolomon::alloc_aligned(...)`.
 These helpers return `AlignedShard` buffers that implement `AsRef<[u8]>` and `AsMut<[u8]>`, so they can be passed
@@ -103,11 +160,11 @@ directly to the existing encode/verify APIs without changing codec output semant
   - default family
   - preserves the crate's current classic behavior and compatibility assumptions
 - `CodecFamily::LeopardGF8`
-  - reserved for an explicit high-shard-count Leopard GF(2^8) family
-  - can now be constructed as an explicit internal-family prototype
-  - exposes setup metadata such as `leopard_setup_matrix_shape()`
-  - `encode(...)`, `encode_sep(...)`, and `encode_opt(...)` are now wired to an explicit family-specific prototype path
-  - `verify`, `reconstruct`, `update`, and `decode_idx` still return `Error::UnsupportedLeopardPrototype`
+  - FFT-based Leopard codec over GF(2^8) for high-shard-count scenarios
+  - supports up to 256 total shards (data + parity)
+  - requires shard lengths that are multiples of 64 bytes
+  - fully functional: `encode`, `encode_sep`, `encode_opt`, `verify`, `reconstruct`, `reconstruct_data`, `reconstruct_some` (and their `_opt`/`_par` variants)
+  - does **not** support `encode_single`, `encode_single_sep`, `update`, or `decode_idx` (these return `Error::UnsupportedCodecFamily`)
 - `CodecFamily::LeopardGF16`
   - reserved for a future Leopard GF(2^16) family
   - currently exposed only as a prototype skeleton and returns `Error::UnsupportedLeopardPrototype`
@@ -232,6 +289,10 @@ cargo bench
 
 # Enable SIMD acceleration during benchmarks
 cargo bench --features simd-accel
+
+# Benchmark with a specific SIMD backend only
+cargo bench --features simd-avx2   # x86_64 AVX2 only
+cargo bench --features simd-neon   # aarch64 NEON only
 
 # Run benchmark smoke tests (fast profile)
 VALIDATION_PROFILE=fast cargo test --test benchmark_smoke

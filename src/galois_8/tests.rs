@@ -10,7 +10,7 @@ use rand;
 
 #[cfg(all(
     feature = "std",
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -316,7 +316,7 @@ fn test_same_as_maybe_ffi() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -342,7 +342,7 @@ fn test_simd_c_matches_scalar_mul_slice() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -370,7 +370,7 @@ fn test_simd_c_matches_scalar_mul_slice_xor() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -399,7 +399,7 @@ fn test_rust_neon_matches_scalar_mul_slice() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -430,7 +430,7 @@ fn test_rust_neon_matches_scalar_mul_slice_xor() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -459,7 +459,7 @@ fn test_rust_neon_matches_simd_c() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -515,7 +515,7 @@ fn test_rust_neon_xor_schedule_env_constant() {
 #[test]
 fn test_active_backend_metadata() {
     #[cfg(all(
-        feature = "simd-accel",
+        any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
         any(target_arch = "x86_64", target_arch = "aarch64"),
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
@@ -576,7 +576,7 @@ fn test_active_backend_metadata() {
     }
 
     #[cfg(not(all(
-        feature = "simd-accel",
+        any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
         any(target_arch = "x86_64", target_arch = "aarch64"),
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
@@ -588,7 +588,7 @@ fn test_active_backend_metadata() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
     feature = "std",
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
@@ -690,7 +690,7 @@ fn test_backend_override_affects_active_backend() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     feature = "std",
     target_arch = "aarch64",
     not(target_env = "msvc"),
@@ -730,7 +730,7 @@ fn test_active_backend_metadata_fresh_process() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     feature = "std",
     target_arch = "aarch64",
     not(target_env = "msvc"),
@@ -762,7 +762,7 @@ fn test_aarch64_backend_override_metadata_matches_expected_ids() {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),

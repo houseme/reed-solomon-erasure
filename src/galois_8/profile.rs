@@ -76,7 +76,7 @@ impl RustNeonProfileMetrics {
     }
 
     #[cfg(all(
-        feature = "simd-accel",
+        feature = "simd-neon",
         target_arch = "aarch64",
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))

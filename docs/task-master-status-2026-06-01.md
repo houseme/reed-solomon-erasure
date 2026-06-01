@@ -1,6 +1,6 @@
 # 任务状态核查报告
 
-> 核查日期: 2026-06-01
+> 核查日期: 2026-06-01（更新）
 > 核查方式: 基于代码全面交叉验证（非仅文档标记）
 > 对比基准: task-master-index.md（2026-05-31 版本）
 
@@ -10,11 +10,52 @@
 
 | 状态 | 叶子任务数 | 占比 | 与上次对比 |
 |------|-----------|------|-----------|
-| ✅ 已完成 | ~30 | 39% | +2 |
-| 🔶 部分完成 | ~10 | 13% | +2 |
-| ❌ 未实现 | ~37 | 48% | -4 |
+| ✅ 已完成 | ~37 | 48% | +7 |
+| 🔶 部分完成 | ~8 | 10% | -2 |
+| ❌ 未实现 | ~32 | 42% | -5 |
 
 > 状态标记: ✅ 已完成 | 🔶 部分完成 | ❌ 未实现 | 🔧 有遗留问题
+
+---
+
+## 本次实现完成的任务（2026-06-01 会话）
+
+### 1. P0-1c-1 verify dispatch → ✅ 已完成
+
+- 修改 `ensure_classic_family_execution()` 允许 LeopardGF8 通过（`mod.rs:94-107`）
+- 添加 `verify_leopard_gf8()` 辅助方法（`verify.rs:56-75`）：re-encode + compare
+- 更新全部 8 个 verify 方法（`verify`, `verify_with_workspace`, `verify_with_buffer`, `verify_with_buffer_par`, `verify_par`）添加 LeopardGF8 dispatch
+- 更新 `verify_opt`, `verify_with_buffer_opt`, `verify_with_workspace_opt`（`policy.rs`）添加 dispatch
+
+### 2. P0-1e-1 错误类型清理 → ✅ 已完成
+
+- `ensure_classic_family_execution()` 不再拒绝 LeopardGF8
+- `encode_single`, `encode_single_sep`, `encode_single_sep_par` 改用 `UnsupportedCodecFamily`
+- `codec.rs:build_matrix_with_options`, `with_custom_matrix` 改用 `UnsupportedCodecFamily`
+- `update()`, `decode_idx()` 添加显式 LeopardGF8 拒绝
+- 更新测试断言匹配新错误类型
+- `UnsupportedLeopardPrototype` 仅保留给 LeopardGF16（真正未实现）
+
+### 3. P0-1d _opt 变体 → ✅ 已确认完成
+
+- `reconstruct_opt`, `reconstruct_data_opt`, `reconstruct_some_opt` 已有 LeopardGF8 dispatch（委托基础 reconstruct）
+- `verify_opt`, `verify_with_buffer_opt`, `verify_with_workspace_opt` 已添加 dispatch
+
+### 4. P0-1e-2 README 更新 → ✅ 已完成
+
+- 更新 Codec Families 章节准确描述 LeopardGF8 功能
+- 添加 LeopardGF8 使用示例（encode + verify + reconstruct）
+
+### 5. P1-3a GFNI doc comments → ✅ 已完成
+
+- `backend.rs:303-304` 改为描述自动选择行为（非 "override-only"）
+- `backend.rs:316-317` 同步更新
+
+### 6. P3-3a 源码 doc-comments → ✅ 已完成
+
+- `CodecFamily` 添加详细文档（含 LeopardGF8/LeopardGF16 说明）
+- `CodecOptions` 添加文档（含各字段说明和示例）
+- `MatrixMode` 添加文档
 
 ---
 
@@ -30,7 +71,7 @@
 
 公共 API 已在 `reconstruct.rs:422-665` 中集成 dispatch。7+ 个重建测试存在。
 
-**遗留问题**：`encode.rs:213` 和 `encode.rs:272` 仍有 `eprintln!` 调试输出（非 decode.rs），需要移除。但核心算法已完成。
+**遗留问题**：已清理。`encode.rs` 无 `eprintln!`，`parallel.rs:193` 的 `eprintln!` 是有意的调试日志（behind env var）。
 
 ### 2. P0-1b-4 重建测试矩阵 → ✅ 大部分完成（原文档标 🔶）
 
@@ -131,8 +172,8 @@
 |------|------|
 | P3-1 Builder 模式全部 | ❌ `CodecOptions` 是纯数据 struct，`max_jobs` 仅 env var |
 | P3-2 缓存感知全部 | ❌ 无 L1/L2/L3 检测，纯启发式策略 |
-| P3-3a-1 CodecFamily 文档 | ❌ 源码无 doc-comments |
-| P3-3c-1 使用示例 | ❌ 无 LeopardGF8 编码流程示例 |
+| P3-3a-1 CodecFamily 文档 | ✅ 源码已有完整 doc-comments |
+| P3-3c-1 使用示例 | ✅ README 已有 LeopardGF8 编码流程示例 |
 | P3-4c Go 基准 | ❌ 不在本仓库 |
 | P3-4d-2 报告撰写 | ❌ |
 
@@ -144,28 +185,26 @@
 |------|------|------|----------|
 | `src/errors.rs` | 20, 67-68, 187-188 | 定义 + 显示 + 测试 | 保留（LeopardGF16 仍需此错误） |
 | `src/core/leopard.rs` | 103, 128, 140 | LeopardGF16 守卫 | 保留（GF16 确实未实现） |
-| `src/core/encode.rs` | 303, 324, 520 | encode_single 守卫 | 改为更精确的错误类型（架构性限制） |
-| `src/core/mod.rs` | 98 | `ensure_classic_family_execution` | **核心阻断点** — 移除对 LeopardGF8 的拒绝 |
-| `src/core/codec.rs` | 196, 404 | 矩阵守卫 | 保留（Leopard 不使用编码矩阵） |
-| `src/tests/mod.rs` | 256, 273, 290 | 测试断言 | 随功能实现更新 |
+| `src/core/encode.rs` | — | — | 已改为 `UnsupportedCodecFamily` |
+| `src/core/mod.rs` | 102 | `ensure_classic_family_execution` | 已移除对 LeopardGF8 的拒绝（仅拒绝 GF16） |
+| `src/core/codec.rs` | — | — | 已改为 `UnsupportedCodecFamily` |
+| `src/tests/mod.rs` | 270 | LeopardGF16 测试断言 | 保留（GF16 未实现） |
 | `wasm/src/lib.rs` | 40 | WASM todo!() | 实现或返回正确错误 |
 
-**总计：16 处，8 个源文件**
+**总计：8 处，5 个源文件（LeopardGF8 相关已全部清理）**
 
 ---
 
 ## 六、关键发现
 
-### 1. 单一最大阻断点
+### 1. 单一最大阻断点（已解决）
 
-`ensure_classic_family_execution()`（`mod.rs:94-101`）是阻断 Leopard GF8 完整功能的**唯一函数**。它阻断了：
+`ensure_classic_family_execution()`（`mod.rs:94-107`）曾是阻断 Leopard GF8 完整功能的**唯一函数**。本次会话已移除对 LeopardGF8 的拒绝：
 
-- verify（8 个方法）
-- reconstruct_opt / reconstruct_data_opt / reconstruct_some_opt
-- update
-- decode_idx
-
-移除此函数对 LeopardGF8 的拒绝，并在各调用点添加 leopard dispatch，是解锁 P0-1c、P0-1d `_opt`、P0-1e 的最高效路径。
+- verify（8 个方法）→ ✅ 已添加 LeopardGF8 dispatch
+- reconstruct_opt / reconstruct_data_opt / reconstruct_some_opt → ✅ 已有 dispatch
+- update → ✅ 添加显式 LeopardGF8 拒绝（不支持增量更新）
+- decode_idx → ✅ 添加显式 LeopardGF8 拒绝（Classic-only）
 
 ### 2. NEON butterfly 公式问题
 
@@ -183,19 +222,17 @@
 
 ## 七、建议的执行优先级
 
-### 立即可做（无依赖，低风险）
+### ✅ 已完成（本次会话）
 
-1. **移除 `eprintln!` 调试输出** — `encode.rs:213, 272`
-2. **修正 P1-3a doc comment** — `backend.rs:303-304, 316-317` 从 "override-only" 改为正确描述
-3. **添加源码 doc-comments** — `CodecFamily`、`CodecOptions`、`MatrixMode`（P3-3a）
+1. ~~移除 `eprintln!` 调试输出~~ — `encode.rs` 无 `eprintln!`，`parallel.rs:193` 是有意的调试日志
+2. ~~修正 P1-3a doc comment~~ — `backend.rs:303-304, 316-317` 已更新为正确描述
+3. ~~添加源码 doc-comments~~ — `CodecFamily`、`CodecOptions`、`MatrixMode` 已有完整文档
+4. ~~P0-1c verify dispatch~~ — 全部 8 个 verify 方法已添加 LeopardGF8 dispatch
+5. ~~P0-1e 移除 prototype 标签~~ — `ensure_classic_family_execution` 不再拒绝 LeopardGF8
+6. ~~P0-1d `_opt` 变体~~ — 已有 dispatch 或委托基础路径
 
-### 关键路径（解锁最多后续任务）
+### 下一步建议
 
-4. **P0-1c verify dispatch** — 在 `verify.rs` 中添加 leopard dispatch（re-encode + compare）
-5. **P0-1e 移除 prototype 标签** — 使 `ensure_classic_family_execution` 不再拒绝 LeopardGF8
-6. **P0-1d `_opt` 变体** — 在 `policy.rs` 中添加 leopard dispatch 或委托基础路径
-
-### 可并行
-
-- P0-1（Leopard GF8 完善）和 P0-2（流式 API）无依赖，可并行
-- P1-1（NEON 优化）的 c=0/c=1 快速路径独立于 P0 任务
+- **P0-2 流式 API** — 无依赖，可独立启动
+- **P1-1 NEON c=0/c=1 快速路径** — 独立于 P0 任务
+- **P3-1 Builder 模式** — 独立，改善 DX

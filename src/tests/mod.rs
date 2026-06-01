@@ -252,10 +252,7 @@ fn test_leopard_gf8_prototype_is_explicit_but_not_executed_yet() {
 
     let mut shards = make_random_shards!(1024, 48);
     codec.encode_opt(&mut shards).unwrap();
-    assert_eq!(
-        Error::UnsupportedLeopardPrototype,
-        codec.verify(&shards).unwrap_err()
-    );
+    assert!(codec.verify(&shards).unwrap());
 }
 
 #[test]
@@ -287,7 +284,7 @@ fn test_leopard_custom_matrix_path_is_rejected_for_now() {
     )
     .unwrap_err();
 
-    assert_eq!(Error::UnsupportedLeopardPrototype, err);
+    assert_eq!(Error::UnsupportedCodecFamily, err);
 }
 
 #[test]
@@ -5576,5 +5573,48 @@ fn test_leopard_gf8_reconstruct_debug_4x4() {
 
     for i in 0..8 {
         assert_eq!(reconstructable[i].as_ref().unwrap().as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
+    }
+}
+
+/// Verify that SIMD codegen encode produces correct results for common configurations.
+/// The codegen path is automatically selected for these (data, parity) pairs when
+/// SIMD features are enabled: (10,4), (12,4), (8,3), (8,4), (6,3), (4,2).
+#[test]
+fn test_codegen_encode_common_configs() {
+    let configs: &[(usize, usize)] = &[(10, 4), (12, 4), (8, 3), (8, 4), (6, 3), (4, 2)];
+    let shard_size = 4096;
+
+    for &(data_count, parity_count) in configs {
+        let codec = ReedSolomon::new(data_count, parity_count).unwrap();
+        let total = data_count + parity_count;
+        let shards = make_random_shards!(shard_size, total);
+
+        // Encode
+        let mut all_shards: Vec<Vec<u8>> = shards.clone();
+        {
+            let (data, parity) = all_shards.split_at_mut(data_count);
+            let data_refs: Vec<&[u8]> = data.iter().map(|s| s.as_slice()).collect();
+            let mut parity_refs: Vec<&mut [u8]> =
+                parity.iter_mut().map(|s| s.as_mut_slice()).collect();
+            codec.encode_sep(&data_refs, &mut parity_refs).unwrap();
+        }
+        let encoded: Vec<Vec<u8>> = all_shards.clone();
+
+        // Lose up to parity_count shards and reconstruct
+        let mut reconstructable: Vec<Option<Vec<u8>>> =
+            encoded.iter().map(|s| Some(s.to_vec())).collect();
+        for i in 0..parity_count.min(data_count) {
+            reconstructable[i] = None;
+        }
+
+        codec.reconstruct(&mut reconstructable).unwrap();
+
+        for i in 0..total {
+            assert_eq!(
+                reconstructable[i].as_ref().unwrap().as_slice(),
+                encoded[i].as_slice(),
+                "config ({data_count},{parity_count}) shard {i} mismatch"
+            );
+        }
     }
 }

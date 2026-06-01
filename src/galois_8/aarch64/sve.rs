@@ -5,7 +5,7 @@
 //! SVE backend can be added without reworking the NEON-oriented module split.
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -17,7 +17,7 @@ pub(crate) struct SveFeatureSet {
 }
 
 #[cfg(all(
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -32,7 +32,7 @@ pub(crate) fn detect_sve_features() -> SveFeatureSet {
 
 #[cfg(all(
     test,
-    feature = "simd-accel",
+    feature = "simd-neon",
     target_arch = "aarch64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),

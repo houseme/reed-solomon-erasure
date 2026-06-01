@@ -2,14 +2,14 @@
 
 include!(concat!(env!("OUT_DIR"), "/table.rs"));
 
-mod aarch64;
+pub(crate) mod aarch64;
 mod aligned;
 mod backend;
 mod legacy;
 mod policy;
 mod profile;
 mod scalar;
-mod x86;
+pub(crate) mod x86;
 
 pub use aligned::{AlignedShard, SHARD_ALIGNMENT, alloc_aligned_shards};
 pub use backend::{BackendId, BackendKind};

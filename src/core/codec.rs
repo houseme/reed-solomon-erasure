@@ -193,7 +193,7 @@ impl<F: Field> ReedSolomon<F> {
         options: CodecOptions,
     ) -> Result<Matrix<F>, Error> {
         if options.codec_family != CodecFamily::Classic {
-            return Err(Error::UnsupportedLeopardPrototype);
+            return Err(Error::UnsupportedCodecFamily);
         }
 
         match options.matrix_mode {
@@ -254,7 +254,7 @@ impl<F: Field> ReedSolomon<F> {
             &matrix,
         )?;
         #[cfg(feature = "std")]
-        let policy_cache = Self::resolve_policy_cache();
+        let policy_cache = Self::resolve_policy_cache_with_options(options);
 
         Ok(ReedSolomon {
             data_shard_count: data_shards,
@@ -401,7 +401,7 @@ impl<F: Field> ReedSolomon<F> {
         );
 
         if options.codec_family != CodecFamily::Classic {
-            return Err(Error::UnsupportedLeopardPrototype);
+            return Err(Error::UnsupportedCodecFamily);
         }
 
         let matrix = Self::build_custom_matrix(data_shards, total_shards, custom_matrix)?;
@@ -412,7 +412,7 @@ impl<F: Field> ReedSolomon<F> {
             &matrix,
         )?;
         #[cfg(feature = "std")]
-        let policy_cache = Self::resolve_policy_cache();
+        let policy_cache = Self::resolve_policy_cache_with_options(options);
 
         Ok(ReedSolomon {
             data_shard_count: data_shards,

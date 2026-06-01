@@ -385,6 +385,9 @@ impl crate::ReedSolomon<super::Field> {
         T: AsRef<[u8]> + Sync,
     {
         self.ensure_classic_family_execution()?;
+        if self.is_leopard_gf8_family() {
+            return self.verify(slices);
+        }
         let shard_len = Self::first_shard_len(slices);
         if self.should_parallel_data_path(shard_len, self.parity_shard_count()) {
             self.verify_par(slices)
@@ -404,6 +407,9 @@ impl crate::ReedSolomon<super::Field> {
         U: AsRef<[u8]> + AsMut<[u8]> + Send,
     {
         self.ensure_classic_family_execution()?;
+        if self.is_leopard_gf8_family() {
+            return self.verify_with_buffer(slices, buffer);
+        }
         let shard_len = Self::first_shard_len(slices);
         if self.should_parallel_data_path(shard_len, buffer.len()) {
             self.verify_with_buffer_par(slices, buffer)
@@ -419,6 +425,9 @@ impl crate::ReedSolomon<super::Field> {
         workspace: &mut crate::VerifyWorkspace<crate::galois_8::Field>,
     ) -> Result<bool, crate::Error> {
         self.ensure_classic_family_execution()?;
+        if self.is_leopard_gf8_family() {
+            return self.verify(slices);
+        }
         let shard_len = Self::first_shard_len(slices);
         workspace.resize(self, shard_len);
         if self.should_parallel_data_path(shard_len, self.parity_shard_count()) {
@@ -522,6 +531,9 @@ impl crate::ReedSolomon<super::Field> {
         expect_input: Option<&[bool]>,
         input: &[Option<Vec<u8>>],
     ) -> Result<(), crate::Error> {
+        if self.is_leopard_gf8_family() {
+            return Err(crate::Error::UnsupportedCodecFamily);
+        }
         self.ensure_classic_family_execution()?;
         if dst.len() != self.total_shard_count() || input.len() != self.total_shard_count() {
             return Err(crate::Error::TooFewShards);
@@ -688,12 +700,14 @@ fn reconstruct_parallel_policy_default(
             min_parallel_shard_bytes: core::cmp::max(base.min_parallel_shard_bytes, data_only_min),
             min_bytes_per_job,
             max_jobs: base.max_jobs,
+            l2_cache_bytes: base.l2_cache_bytes,
         }
     } else {
         crate::ParallelPolicy {
             min_parallel_shard_bytes: core::cmp::max(base.min_parallel_shard_bytes / 2, full_min),
             min_bytes_per_job,
             max_jobs: base.max_jobs,
+            l2_cache_bytes: base.l2_cache_bytes,
         }
     }
 }

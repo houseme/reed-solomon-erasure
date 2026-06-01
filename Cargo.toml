@@ -49,7 +49,16 @@ license.workspace = true
 [features]
 default = ["std"] # simd and metrics off by default
 std = ["parking_lot", "rayon"]
-simd-accel = ["cc", "libc"]
+# Fine-grained SIMD backends — enable per-architecture as needed.
+# Users on aarch64 should enable `simd-neon`; users on x86_64 should enable
+# whichever ISA extensions their target supports.
+simd-neon = ["cc", "libc"]
+simd-ssse3 = ["cc", "libc"]
+simd-avx2 = ["cc", "libc"]
+simd-avx512 = ["cc", "libc"]
+simd-gfni = ["cc", "libc"]
+# Backwards-compatible umbrella: enables all SIMD backends.
+simd-accel = ["simd-neon", "simd-ssse3", "simd-avx2", "simd-avx512", "simd-gfni"]
 benchmark-metrics = []
 
 [badges]
