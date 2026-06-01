@@ -1,18 +1,17 @@
 extern crate alloc;
 
-use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::errors::Error;
 
 use super::ops::{
-    fft_dit2, fft_dit4_full_lut_scratch, fwht_variable, ifft_dit2,
+    fft_dit2, fft_dit4_full_lut_scratch, fwht8_mtrunc, fwht_variable, ifft_dit2,
     ifft_dit4_full_lut_scratch, mulgf8, slice_xor,
 };
 use super::work::FlatWork;
 use super::{
     FftDit8Plan, IfftDit8Plan, LeopardGf8Tables, MODULUS8, WORK_SIZE8, build_fft_dit8_plan,
-    build_ifft_dit8_plan, ceil_pow2, init_leopard_gf8_tables,
+    build_ifft_decode_dit8_plan, ceil_pow2, init_leopard_gf8_tables,
 };
 
 /// Leopard GF8 decode driver — precomputed parameters for reconstruction.
@@ -60,41 +59,58 @@ pub(crate) fn build_leopard_gf8_decode_driver(
 
 /// Compute error locator values using FWHT (Fast Walsh-Hadamard Transform).
 ///
-/// Returns an array of `work_size` error locator values in log domain.
+/// The errLocs array uses a specific coordinate system:
+/// - Positions 0..parity_shards: parity shard erasures
+/// - Positions parity_shards..m: padding (unused parity slots, always 1)
+/// - Positions m..m+data_shards: data shard erasures
+///
+/// Returns an ORDER8-sized array of error locator values in log domain.
 fn compute_error_locs(
-    erasure_indices: &[usize],
+    missing_parity: &[usize],  // shard indices (data_shards..total) of missing parity
+    missing_data: &[usize],    // shard indices (0..data_shards) of missing data
     driver: &LeopardGf8DecodeDriver,
     tables: &LeopardGf8Tables,
-) -> Vec<u8> {
-    // Step 1: Initialize — 1 at erasure positions, 0 elsewhere.
-    let mut err_locs = vec![0u8; driver.work_size];
-    for &idx in erasure_indices {
-        if idx < driver.work_size {
-            err_locs[idx] = 1;
-        }
+) -> [u8; super::ORDER8] {
+    // Step 1: Initialize errLocs.
+    // Parity erasures at 0..p, padding (p..m) always 1, data erasures at m..m+d.
+    let mut err_locs = [0u8; super::ORDER8];
+
+    // Parity shard erasures: shard index (data_shards + i) → errLocs position i
+    for &shard_idx in missing_parity {
+        let pos = shard_idx - driver.data_shards;
+        err_locs[pos] = 1;
     }
 
-    // Step 2: FWHT on errLocs (size = work_size).
-    fwht_variable(&mut err_locs);
+    // Padding positions (unused parity slots): always 1
+    for i in driver.parity_shards..driver.m {
+        err_locs[i] = 1;
+    }
 
-    // Step 3: Multiply by log_walsh in log domain.
-    // After FWHT, values are treated as log-domain indices (Lin et al. 2016 basis).
-    for i in 0..driver.work_size {
+    // Data shard erasures: shard index i → errLocs position m + i
+    for &shard_idx in missing_data {
+        err_locs[driver.m + shard_idx] = 1;
+    }
+
+    // Step 2: FWHT — outer loop to ORDER8, inner loop limited by mtrunc = work_size.
+    // Matches Go's `fwht8(&errLocs, m+r.dataShards)`.
+    fwht8_mtrunc(&mut err_locs, driver.work_size);
+
+    // Step 3: Pointwise multiply by log_walsh (integer-mod-255 arithmetic).
+    // Store the product directly — do NOT apply exp_lut, because the second
+    // FWHT expects integer-mod-255 inputs, not GF(2^8) field values.
+    for i in 0..super::ORDER8 {
         if err_locs[i] == 0 {
             continue;
         }
         let product = (err_locs[i] as usize * tables.log_walsh[i] as usize) % MODULUS8;
-        err_locs[i] = tables.exp_lut[product];
+        err_locs[i] = product as u8;
     }
 
-    // Step 4: Extend to ORDER8 size and apply second FWHT.
-    err_locs.resize(super::ORDER8, 0);
+    // Step 4: Apply second FWHT (full ORDER8 size).
     fwht_variable(&mut err_locs[..super::ORDER8]);
 
-    // Convert from field domain to log domain for later use.
-    for v in err_locs.iter_mut() {
-        *v = tables.log_lut[*v as usize];
-    }
+    // err_locs is now in log domain (integer-mod-255 = multiplicative group log).
+    // Go uses these values directly as log-domain multipliers — NO log_lut conversion.
 
     err_locs
 }
@@ -102,36 +118,36 @@ fn compute_error_locs(
 /// Perform Leopard GF8 reconstruction using Forney's algorithm.
 ///
 /// Recovery formula: `Original = -ErrLocator * FFT(Derivative(IFFT(ErrLocator * ReceivedData)))`
+///
+/// # Arguments
+/// * `present` - Slice indicating which shards are present (true = present, false = missing).
+///               Length must be `data_shards + parity_shards`.
+///               Parity shards at indices `data_shards..total`, data at `0..data_shards`.
+/// * `outputs` - Mutable slice of output buffers, one per shard. All must be the same length.
+///               Present shards are overwritten with their input (no-op for correctness).
+///               Missing shards are recovered and written here.
+/// * `input_data` - Slice of input shard data for present shards. Only present shard
+///                  data is read; missing shard entries are ignored.
 pub(crate) fn reconstruct_with_tables(
-    shards: &mut [Option<&mut [u8]>],
+    present: &[bool],
+    outputs: &mut [&mut [u8]],
+    input_data: &[Option<&[u8]>],
     data_shards: usize,
     parity_shards: usize,
     tables: &LeopardGf8Tables,
 ) -> Result<(), Error> {
     let total_shards = data_shards + parity_shards;
-    if shards.len() != total_shards {
+    if present.len() != total_shards || outputs.len() != total_shards || input_data.len() != total_shards {
         return Err(Error::IncorrectShardSize);
     }
 
-    // Count present shards and find shard size.
-    let mut number_present = 0usize;
-    let mut shard_len = None::<usize>;
-    for shard in shards.iter() {
-        if let Some(s) = shard.as_ref() {
-            let len = s.len();
-            if len == 0 {
-                return Err(Error::EmptyShard);
-            }
-            if let Some(old_len) = shard_len {
-                if len != old_len {
-                    return Err(Error::IncorrectShardSize);
-                }
-            }
-            shard_len = Some(len);
-            number_present += 1;
-        }
+    // Find shard size from first present shard.
+    let shard_size = outputs.first().map(|s| s.len()).unwrap_or(0);
+    if shard_size == 0 || shard_size % 64 != 0 {
+        return Err(Error::IncorrectShardSize);
     }
 
+    let number_present = present.iter().filter(|&&p| p).count();
     if number_present == total_shards {
         return Ok(());
     }
@@ -139,34 +155,35 @@ pub(crate) fn reconstruct_with_tables(
         return Err(Error::TooFewShardsPresent);
     }
 
-    let shard_size = shard_len.expect("at least one shard present");
     let driver = build_leopard_gf8_decode_driver(data_shards, parity_shards, shard_size)?;
 
-    // Collect erasure indices (parity shards first, then data shards — matching Go order).
-    let mut erasure_indices = Vec::new();
+    // Collect erasure indices separated by type.
+    let mut missing_parity = Vec::new();
+    let mut missing_data = Vec::new();
     for i in data_shards..total_shards {
-        if shards[i].is_none() {
-            erasure_indices.push(i);
+        if !present[i] {
+            missing_parity.push(i);
         }
     }
     for i in 0..data_shards {
-        if shards[i].is_none() {
-            erasure_indices.push(i);
+        if !present[i] {
+            missing_data.push(i);
         }
     }
 
-    if erasure_indices.len() > parity_shards {
+    let total_missing = missing_parity.len() + missing_data.len();
+    if total_missing > parity_shards {
         return Err(Error::TooFewShardsPresent);
     }
-    if erasure_indices.is_empty() {
+    if total_missing == 0 {
         return Ok(());
     }
 
     // Compute error locator values.
-    let err_locs = compute_error_locs(&erasure_indices, &driver, tables);
+    let err_locs = compute_error_locs(&missing_parity, &missing_data, &driver, tables);
 
-    // Build FFT and IFFT plans for the decode work size.
-    let ifft_plan = build_ifft_dit8_plan(driver.work_size, driver.n, &*tables.fft_skew);
+    // Build FFT and IFFT plans.
+    let ifft_plan = build_ifft_decode_dit8_plan(driver.work_size, driver.n, &*tables.fft_skew);
     let fft_plan = build_fft_dit8_plan(driver.work_size, driver.n, &*tables.fft_skew);
 
     // Allocate work buffers and scratch.
@@ -188,10 +205,11 @@ pub(crate) fn reconstruct_with_tables(
         // Parity shards go into work[0..m], data shards go into work[m..m+data_shards].
         for i in 0..data_shards {
             let work_idx = driver.m + i;
-            if let Some(shard) = shards[i].as_ref() {
+            if present[i] {
+                let data = input_data[i].as_ref().ok_or(Error::TooFewShardsPresent)?;
                 mulgf8(
                     work.lane_mut(work_idx),
-                    &shard[offset..end],
+                    &data[offset..end],
                     err_locs[work_idx],
                     tables,
                 );
@@ -201,10 +219,11 @@ pub(crate) fn reconstruct_with_tables(
         }
         for i in 0..parity_shards {
             let shard_idx = data_shards + i;
-            if let Some(shard) = shards[shard_idx].as_ref() {
+            if present[shard_idx] {
+                let data = input_data[shard_idx].as_ref().ok_or(Error::TooFewShardsPresent)?;
                 mulgf8(
                     work.lane_mut(i),
-                    &shard[offset..end],
+                    &data[offset..end],
                     err_locs[i],
                     tables,
                 );
@@ -212,7 +231,11 @@ pub(crate) fn reconstruct_with_tables(
                 work.lane_mut(i)[..size].fill(0);
             }
         }
-        // Zero remaining work slots.
+        // Zero padding slots (unused parity positions parity_shards..m).
+        for i in parity_shards..driver.m {
+            work.lane_mut(i)[..size].fill(0);
+        }
+        // Zero remaining work slots (beyond work_size).
         for i in driver.work_size..driver.n {
             work.lane_mut(i)[..size].fill(0);
         }
@@ -228,7 +251,7 @@ pub(crate) fn reconstruct_with_tables(
 
         // Step 5: Recover missing shards.
         for i in 0..total_shards {
-            if shards[i].is_some() {
+            if present[i] {
                 continue;
             }
             let (work_idx, err_idx) = if i >= data_shards {
@@ -238,7 +261,7 @@ pub(crate) fn reconstruct_with_tables(
             };
             let inv_err = (MODULUS8 as u8).wrapping_sub(err_locs[err_idx]);
             mulgf8(
-                shards[i].as_mut().unwrap(),
+                &mut outputs[i][offset..end],
                 work.lane(work_idx),
                 inv_err,
                 tables,
@@ -260,14 +283,12 @@ fn ifft_dit_decode8_with_plan(
     scratch: &mut [u8],
 ) {
     if plan.initial_blocks.is_empty() {
-        // Zero trailing lanes.
         for idx in plan.mtrunc..plan.m {
             work.lane_mut(idx)[..size].fill(0);
         }
     } else {
         for block in &plan.initial_blocks {
             let available = core::cmp::min(plan.mtrunc.saturating_sub(block.r), 4);
-            // Zero unused slots in this block.
             for slot_idx in (block.r + available)..(block.r + 4) {
                 if slot_idx < n {
                     work.lane_mut(slot_idx)[..size].fill(0);
@@ -288,7 +309,6 @@ fn ifft_dit_decode8_with_plan(
             );
         }
 
-        // Zero trailing lanes.
         for idx in plan.clear_start..plan.m {
             if idx < n {
                 work.lane_mut(idx)[..size].fill(0);
@@ -296,23 +316,18 @@ fn ifft_dit_decode8_with_plan(
         }
 
         for block in &plan.later_blocks {
-            let i_end = block.r + block.dist;
-            let mut i = block.r;
-            while i < i_end {
-                dit4_decode_at(
-                    TransformDir::Inverse,
-                    work,
-                    size,
-                    i,
-                    block.dist,
-                    block.log_m01,
-                    block.log_m23,
-                    block.log_m02,
-                    tables,
-                    scratch,
-                );
-                i += 1;
-            }
+            dit4_decode_at(
+                TransformDir::Inverse,
+                work,
+                size,
+                block.r,
+                block.dist,
+                block.log_m01,
+                block.log_m23,
+                block.log_m02,
+                tables,
+                scratch,
+            );
         }
     }
 
@@ -339,50 +354,42 @@ fn fft_dit_decode8_with_plan(
     scratch: &mut [u8],
 ) {
     for block in &plan.stage4_blocks {
-        let i_end = block.r + block.dist;
-        let mut i = block.r;
-        while i < i_end {
-            dit4_decode_at(
-                TransformDir::Forward,
-                work,
-                size,
-                i,
-                block.dist,
-                block.log_m01,
-                block.log_m23,
-                block.log_m02,
-                tables,
-                scratch,
-            );
-            i += 1;
-        }
+        dit4_decode_at(
+            TransformDir::Forward,
+            work,
+            size,
+            block.r,
+            block.dist,
+            block.log_m01,
+            block.log_m23,
+            block.log_m02,
+            tables,
+            scratch,
+        );
     }
 
-    if let Some(stage) = plan.final_stage {
-        let mut r = 0usize;
-        while r < plan.mtrunc {
-            let a = r;
-            let b = r + stage.dist;
-            if b < n {
-                if let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
-                    fft_dit2(ra, rb, stage.log_m, tables);
-                }
+    for stage in &plan.final_stage {
+        let a = stage.r;
+        let b = stage.r + stage.dist;
+        if b < n {
+            if let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
+                fft_dit2(ra, rb, stage.log_m, tables);
             }
-            r += stage.dist * 2;
         }
     }
 }
 
 /// Compute the formal derivative of the polynomial represented by work slots.
 ///
-/// For i in 1..n: XOR work[i-width..i] into work[i..i+width]
+/// For i in 1..n: XOR work[i..i+width] into work[i-width..i]
 /// where width = ((i ^ (i-1)) + 1) >> 1.
+/// Go: slicesXor(work[i-width:i], work[i:i+width]) → lower ^= higher
 fn compute_formal_derivative(work: &mut FlatWork, n: usize, _size: usize) {
     for i in 1..n {
         let width = ((i ^ (i - 1)) + 1) >> 1;
         for j in 0..width {
-            let src_idx = i - width + j;
-            let dst_idx = i + j;
+            let dst_idx = i - width + j;
+            let src_idx = i + j;
             if src_idx < n && dst_idx < n {
                 if let Some((s, d)) = get_pair_mut_flat(work, src_idx, dst_idx) {
                     slice_xor(s, d);
@@ -410,7 +417,7 @@ fn get_pair_mut_flat<'a>(
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum TransformDir {
     Forward,
     Inverse,
@@ -421,7 +428,7 @@ enum TransformDir {
 fn dit4_decode_at(
     dir: TransformDir,
     work: &mut FlatWork,
-    size: usize,
+    _size: usize,
     base: usize,
     dist: usize,
     log_m01: u8,
@@ -436,18 +443,15 @@ fn dit4_decode_at(
 
     for i in 0..dist {
         let a = base + i;
-        let b = a + dist;
-        let c = a + dist * 2;
+        let _b = a + dist;
+        let _c = a + dist * 2;
         let d = a + dist * 3;
         if d >= work.lanes() {
-            // Boundary: pairwise fallback.
             dit4_decode_pairwise_one(dir, work, a, dist, log_m01, log_m23, log_m02, tables);
             continue;
         }
 
-        // Use split_at_mut on FlatWork to get non-overlapping mutable references.
-        // This is equivalent to the encode path's approach.
-        dit4_decode_direct(dir, work, a, dist, mul01, mul23, mul02, scratch);
+        dit4_decode_direct(dir, work, a, dist, log_m01, log_m23, log_m02, mul01, mul23, mul02, scratch);
     }
 }
 
@@ -457,6 +461,9 @@ fn dit4_decode_direct(
     work: &mut FlatWork,
     a: usize,
     dist: usize,
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
     mul01: &super::Mul8Lut,
     mul23: &super::Mul8Lut,
     mul02: &super::Mul8Lut,
@@ -466,7 +473,6 @@ fn dit4_decode_direct(
     let c = a + dist * 2;
     let d = a + dist * 3;
 
-    // Get 4 non-overlapping mutable references using raw pointer arithmetic.
     // SAFETY: a, b, c, d are all distinct (a < b < c < d) and < work.lanes().
     let (a_ref, b_ref, c_ref, d_ref) = unsafe {
         let ptr = work as *mut FlatWork;
@@ -480,37 +486,21 @@ fn dit4_decode_direct(
     match dir {
         TransformDir::Forward => {
             fft_dit4_full_lut_scratch(
-                a_ref,
-                b_ref,
-                c_ref,
-                d_ref,
-                &mul01.value,
-                &mul01.low,
-                &mul01.high,
-                &mul23.value,
-                &mul23.low,
-                &mul23.high,
-                &mul02.value,
-                &mul02.low,
-                &mul02.high,
+                a_ref, b_ref, c_ref, d_ref,
+                log_m01, log_m23, log_m02,
+                &mul01.value, &mul01.low, &mul01.high,
+                &mul23.value, &mul23.low, &mul23.high,
+                &mul02.value, &mul02.low, &mul02.high,
                 scratch,
             );
         }
         TransformDir::Inverse => {
             ifft_dit4_full_lut_scratch(
-                a_ref,
-                b_ref,
-                c_ref,
-                d_ref,
-                &mul01.value,
-                &mul01.low,
-                &mul01.high,
-                &mul23.value,
-                &mul23.low,
-                &mul23.high,
-                &mul02.value,
-                &mul02.low,
-                &mul02.high,
+                a_ref, b_ref, c_ref, d_ref,
+                log_m01, log_m23, log_m02,
+                &mul01.value, &mul01.low, &mul01.high,
+                &mul23.value, &mul23.low, &mul23.high,
+                &mul02.value, &mul02.low, &mul02.high,
                 scratch,
             );
         }

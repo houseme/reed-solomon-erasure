@@ -68,6 +68,7 @@ struct Stage4Block {
 
 #[derive(Debug, Clone, Copy)]
 struct Stage2Block {
+    r: usize,
     dist: usize,
     log_m: u8,
 }
@@ -76,7 +77,7 @@ struct Stage2Block {
 struct FftDit8Plan {
     mtrunc: usize,
     stage4_blocks: Vec<Stage4Block>,
-    final_stage: Option<Stage2Block>,
+    final_stage: Vec<Stage2Block>,
 }
 
 #[derive(Debug, Clone)]
@@ -353,12 +354,19 @@ fn build_fft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8; MODULUS8]) -> Ff
     }
 
     let final_stage = if dist4 == 2 {
-        Some(Stage2Block {
-            dist: 1,
-            log_m: skew_lut[0],
-        })
+        let mut blocks = Vec::new();
+        let mut r = 0usize;
+        while r < mtrunc {
+            blocks.push(Stage2Block {
+                r,
+                dist: 1,
+                log_m: skew_lut[r],
+            });
+            r += 2;
+        }
+        blocks
     } else {
-        None
+        Vec::new()
     };
 
     FftDit8Plan {
@@ -423,8 +431,88 @@ fn build_ifft_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8]) -> IfftDit8Pla
 
     let final_stage = if dist < m {
         Some(Stage2Block {
+            r: 0,
             dist,
             log_m: skew_lut[dist],
+        })
+    } else {
+        None
+    };
+
+    IfftDit8Plan {
+        mtrunc,
+        m,
+        initial_blocks,
+        later_blocks,
+        clear_start: (mtrunc + 3) & !3usize,
+        final_stage,
+    }
+}
+
+/// IFFT plan builder for the decode path.
+///
+/// The decode path passes the full `fft_skew` array (no offset), so skew
+/// indices use `i_end - 1` style indexing (matching the FFT plan builder).
+/// The encoder uses `build_ifft_dit8_plan` with `fft_skew[m-1..]`, which
+/// effectively achieves the same result with `i_end` indexing.
+fn build_ifft_decode_dit8_plan(mtrunc: usize, m: usize, skew_lut: &[u8; MODULUS8]) -> IfftDit8Plan {
+    let mut initial_blocks = Vec::new();
+    let mut later_blocks = Vec::new();
+    let mut dist = 1usize;
+    let mut dist4 = 4usize;
+
+    if dist4 <= m {
+        let full_groups = mtrunc & !3usize;
+        let mut r = 0usize;
+        while r < full_groups {
+            let i_end = r + dist;
+            initial_blocks.push(Stage4Block {
+                r,
+                dist,
+                log_m01: skew_lut[i_end - 1],
+                log_m02: skew_lut[i_end + dist - 1],
+                log_m23: skew_lut[i_end + dist * 2 - 1],
+            });
+            r += dist4;
+        }
+
+        if full_groups < mtrunc {
+            let r = full_groups;
+            let i_end = r + dist;
+            initial_blocks.push(Stage4Block {
+                r,
+                dist,
+                log_m01: skew_lut[i_end - 1],
+                log_m02: skew_lut[i_end + dist - 1],
+                log_m23: skew_lut[i_end + dist * 2 - 1],
+            });
+        }
+
+        dist = dist4;
+        dist4 <<= 2;
+        while dist4 <= m {
+            let mut r = 0usize;
+            while r < mtrunc {
+                let i_end = r + dist;
+                later_blocks.push(Stage4Block {
+                    r,
+                    dist,
+                    log_m01: skew_lut[i_end - 1],
+                    log_m02: skew_lut[i_end + dist - 1],
+                    log_m23: skew_lut[i_end + dist * 2 - 1],
+                });
+                r += dist4;
+            }
+            dist = dist4;
+            dist4 <<= 2;
+        }
+    }
+
+    let final_stage = if dist < m {
+        Some(Stage2Block {
+            r: 0,
+            dist,
+            log_m: skew_lut[dist - 1],
         })
     } else {
         None
@@ -459,12 +547,14 @@ pub(crate) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
 }
 
 pub(crate) fn reconstruct_with_tables(
-    shards: &mut [Option<&mut [u8]>],
+    present: &[bool],
+    outputs: &mut [&mut [u8]],
+    input_data: &[Option<&[u8]>],
     data_shards: usize,
     parity_shards: usize,
 ) -> Result<(), Error> {
     let tables = init_leopard_gf8_tables();
-    decode::reconstruct_with_tables(shards, data_shards, parity_shards, tables)
+    decode::reconstruct_with_tables(present, outputs, input_data, data_shards, parity_shards, tables)
 }
 
 fn ceil_pow2(n: usize) -> usize {

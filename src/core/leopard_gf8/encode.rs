@@ -375,6 +375,7 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
                 TransformDir::Forward => {
                     fft_dit4_full_lut_scratch(
                         a_ref, b_ref, c_ref, d_ref,
+                        log_m01, log_m23, log_m02,
                         lut01, &mul01.low, &mul01.high,
                         lut23, &mul23.low, &mul23.high,
                         lut02, &mul02.low, &mul02.high,
@@ -384,6 +385,7 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
                 TransformDir::Inverse => {
                     ifft_dit4_full_lut_scratch(
                         a_ref, b_ref, c_ref, d_ref,
+                        log_m01, log_m23, log_m02,
                         lut01, &mul01.low, &mul01.high,
                         lut23, &mul23.low, &mul23.high,
                         lut02, &mul02.low, &mul02.high,
@@ -411,6 +413,7 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
                     TransformDir::Forward => {
                         fft_dit4_full_lut_scratch(
                             a_ref, b_ref, c_ref, d_ref,
+                            log_m01, log_m23, log_m02,
                             lut01, &mul01.low, &mul01.high,
                             lut23, &mul23.low, &mul23.high,
                             lut02, &mul02.low, &mul02.high,
@@ -420,6 +423,7 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
                     TransformDir::Inverse => {
                         ifft_dit4_full_lut_scratch(
                             a_ref, b_ref, c_ref, d_ref,
+                            log_m01, log_m23, log_m02,
                             lut01, &mul01.low, &mul01.high,
                             lut23, &mul23.low, &mul23.high,
                             lut02, &mul02.low, &mul02.high,
@@ -473,6 +477,7 @@ fn dit4_at_direct_safe<W: AsMut<[u8]>>(
                 TransformDir::Forward => {
                     fft_dit4_full_lut_scratch(
                         a_ref, b_ref, c_ref, d_ref,
+                        log_m01, log_m23, log_m02,
                         lut01, &mul01.low, &mul01.high,
                         lut23, &mul23.low, &mul23.high,
                         lut02, &mul02.low, &mul02.high,
@@ -482,6 +487,7 @@ fn dit4_at_direct_safe<W: AsMut<[u8]>>(
                 TransformDir::Inverse => {
                     ifft_dit4_full_lut_scratch(
                         a_ref, b_ref, c_ref, d_ref,
+                        log_m01, log_m23, log_m02,
                         lut01, &mul01.low, &mul01.high,
                         lut23, &mul23.low, &mul23.high,
                         lut02, &mul02.low, &mul02.high,
@@ -566,32 +572,24 @@ fn fft_dit8_with_plan<W: AsMut<[u8]>>(
     #[cfg(feature = "std")]
     PROFILE8.fft_stage_calls.fetch_add(1, Ordering::Relaxed);
     for block in &plan.stage4_blocks {
-        let i_end = block.r + block.dist;
-        let mut i = block.r;
-        while i < i_end {
-            dit4_at(
-                TransformDir::Forward,
-                work,
-                i,
-                block.dist,
-                block.log_m01,
-                block.log_m23,
-                block.log_m02,
-                tables,
-                shard_size,
-                scratch,
-            );
-            i += 1;
-        }
+        dit4_at(
+            TransformDir::Forward,
+            work,
+            block.r,
+            block.dist,
+            block.log_m01,
+            block.log_m23,
+            block.log_m02,
+            tables,
+            shard_size,
+            scratch,
+        );
     }
 
-    if let Some(stage) = plan.final_stage {
-        let mut r = 0usize;
-        while r < plan.mtrunc {
-            let (left, right) = work[r..r + stage.dist + 1].split_at_mut(stage.dist);
-            fft_dit2(left[0].as_mut(), right[0].as_mut(), stage.log_m, tables);
-            r += stage.dist * 2;
-        }
+    for stage in &plan.final_stage {
+        let r = stage.r;
+        let (left, right) = work[r..r + stage.dist + 1].split_at_mut(stage.dist);
+        fft_dit2(left[0].as_mut(), right[0].as_mut(), stage.log_m, tables);
     }
 }
 
@@ -660,23 +658,18 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
         PROFILE8.add_zero_fill_bytes(phase, plan.m.saturating_sub(plan.clear_start) * size);
 
         for block in &plan.later_blocks {
-            let i_end = block.r + block.dist;
-            let mut i = block.r;
-            while i < i_end {
-                dit4_at(
-                    TransformDir::Inverse,
-                    work,
-                    i,
-                    block.dist,
-                    block.log_m01,
-                    block.log_m23,
-                    block.log_m02,
-                    tables,
-                    shard_size,
-                    scratch,
-                );
-                i += 1;
-            }
+            dit4_at(
+                TransformDir::Inverse,
+                work,
+                block.r,
+                block.dist,
+                block.log_m01,
+                block.log_m23,
+                block.log_m02,
+                tables,
+                shard_size,
+                scratch,
+            );
         }
     }
 

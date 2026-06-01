@@ -420,11 +420,17 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     pub fn reconstruct<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
+        if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
+            return self.reconstruct_leopard_gf8(slices, false);
+        }
         self.ensure_classic_family_execution()?;
         self.reconstruct_internal(slices, false)
     }
 
     pub fn reconstruct_data<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
+        if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
+            return self.reconstruct_leopard_gf8(slices, true);
+        }
         self.ensure_classic_family_execution()?;
         self.reconstruct_internal(slices, true)
     }
@@ -434,6 +440,12 @@ impl<F: Field> ReedSolomon<F> {
         shards: &mut [T],
         required: &[bool],
     ) -> Result<(), Error> {
+        if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
+            // For leopard, reconstruct_some delegates to reconstruct (leopard always
+            // recovers all shards, then the caller picks which ones they needed).
+            self.reconstruct_leopard_gf8(shards, false)?;
+            return Ok(());
+        }
         self.ensure_classic_family_execution()?;
         if required.len() != self.total_shard_count {
             return Err(Error::InvalidShardFlags);
@@ -560,6 +572,92 @@ impl<F: Field> ReedSolomon<F> {
                     Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(recovered),
                     Err(Err(err)) => return Err(err),
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Leopard GF8 reconstruction dispatch.
+    ///
+    /// Builds the `present`, `outputs`, and `input_data` arrays required by
+    /// the Forney-based FFT decoder, calls it, then writes recovered data
+    /// back into the original shard objects.
+    fn reconstruct_leopard_gf8<T: ReconstructShard<F>>(
+        &self,
+        slices: &mut [T],
+        _data_only: bool,
+    ) -> Result<(), Error> {
+        use super::leopard_gf8;
+
+        check_piece_count!(all => self, slices);
+
+        let total = self.total_shard_count;
+        let shard_len_opt: Option<usize> = slices.iter().find_map(|s| s.len());
+        let Some(shard_len) = shard_len_opt else {
+            return Err(Error::EmptyShard);
+        };
+
+        // Determine which shards are present and collect raw data pointers.
+        // SAFETY: F::Elem = u8 for leopard GF8.
+        let mut present = vec![false; total];
+        let mut raw_data: Vec<Option<*const u8>> = vec![None; total];
+        for i in 0..total {
+            if let Some(data) = slices[i].get() {
+                present[i] = true;
+                raw_data[i] = Some(data as *const [F::Elem] as *const u8);
+            }
+        }
+
+        // Allocate output buffers for every shard.
+        let mut output_bufs: Vec<Vec<u8>> = (0..total)
+            .map(|_| vec![0u8; shard_len])
+            .collect();
+
+        // Copy present shard data into output buffers.
+        for i in 0..total {
+            if let Some(ptr) = raw_data[i] {
+                let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
+                output_bufs[i][..shard_len].copy_from_slice(src);
+            }
+        }
+
+        let mut outputs: Vec<&mut [u8]> = output_bufs
+            .iter_mut()
+            .map(|buf| buf.as_mut_slice())
+            .collect();
+
+        // Build input_data from raw pointers (immutable borrow only).
+        let mut input_data: Vec<Option<&[u8]>> = Vec::with_capacity(total);
+        for i in 0..total {
+            if let Some(ptr) = raw_data[i] {
+                let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
+                input_data.push(Some(src));
+            } else {
+                input_data.push(None);
+            }
+        }
+
+        // Call the Forney-based FFT decoder.
+        leopard_gf8::reconstruct_with_tables(
+            &present,
+            &mut outputs,
+            &input_data,
+            self.data_shard_count,
+            self.parity_shard_count,
+        )?;
+
+        // Write recovered data from output buffers into the original shard objects.
+        for i in 0..total {
+            if present[i] {
+                continue;
+            }
+            // SAFETY: F::Elem = u8 for leopard GF8.
+            let elem_slice: &[F::Elem] =
+                unsafe { &*(output_bufs[i].as_slice() as *const [u8] as *const [F::Elem]) };
+            match slices[i].get_or_initialize(shard_len) {
+                Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(elem_slice),
+                Err(Err(err)) => return Err(err),
             }
         }
 

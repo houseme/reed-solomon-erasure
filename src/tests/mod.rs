@@ -437,6 +437,269 @@ fn test_leopard_gf8_encode_sep_small_config() {
 }
 
 #[test]
+fn test_leopard_gf8_reconstruct_4_plus_4_one_missing() {
+    let codec = ReedSolomon::with_options(
+        4,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 1024;
+    let mut shards = make_random_shards!(shard_size, 8);
+
+    // Encode
+    let (data, parity) = shards.split_at_mut(4);
+    let data_refs: Vec<&[u8]> = data.iter().map(|s| s.as_slice()).collect();
+    codec.encode_sep(&data_refs, &mut parity.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+
+    let encoded: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+
+    // Lose one data shard
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[2] = None;
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    for i in 0..8 {
+        let recovered = reconstructable[i].as_ref().unwrap();
+        assert_eq!(recovered.as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
+    }
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_6_plus_2_one_missing() {
+    let codec = ReedSolomon::with_options(
+        6,
+        2,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 1024;
+    let mut shards = make_random_shards!(shard_size, 8);
+
+    // Encode
+    let (data, parity) = shards.split_at_mut(6);
+    let data_refs: Vec<&[u8]> = data.iter().map(|s| s.as_slice()).collect();
+    codec.encode_sep(&data_refs, &mut parity.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+
+    let encoded: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+
+    // Lose one data shard
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[1] = None;
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    for i in 0..8 {
+        let recovered = reconstructable[i].as_ref().unwrap();
+        assert_eq!(recovered.as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
+    }
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_one_missing_data_shard() {
+    let codec = ReedSolomon::with_options(
+        10,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 1024;
+    let mut shards = make_random_shards!(shard_size, 14);
+    let original: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+
+    // Encode
+    let (data, parity) = shards.split_at_mut(10);
+    let data_refs: Vec<&[u8]> = data.iter().map(|s| s.as_slice()).collect();
+    codec.encode_sep(&data_refs, &mut parity.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+
+    // Save encoded state
+    let encoded: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+
+    // Lose one data shard
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[3] = None;
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    // Verify the recovered shard matches the original
+    for i in 0..14 {
+        let recovered = reconstructable[i].as_ref().unwrap();
+        assert_eq!(recovered.as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
+    }
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_max_erasures() {
+    let codec = ReedSolomon::with_options(
+        10,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 1024;
+    let shards = make_random_shards!(shard_size, 14);
+    let data: Vec<&[u8]> = shards[..10].iter().map(|s| s.as_slice()).collect();
+
+    // Encode
+    let mut all_shards: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+    {
+        let (d, p) = all_shards.split_at_mut(10);
+        let data_refs: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        codec.encode_sep(&data_refs, &mut p.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+    }
+    let encoded: Vec<Vec<u8>> = all_shards.iter().map(|s| s.to_vec()).collect();
+
+    // Lose 4 shards (maximum erasures = parity count)
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[0] = None;  // data
+    reconstructable[5] = None;  // data
+    reconstructable[10] = None; // parity
+    reconstructable[13] = None; // parity
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    for i in 0..14 {
+        let recovered = reconstructable[i].as_ref().unwrap();
+        assert_eq!(recovered.as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
+    }
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_missing_parity_only() {
+    let codec = ReedSolomon::with_options(
+        10,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 1024;
+    let shards = make_random_shards!(shard_size, 14);
+
+    // Encode
+    let mut all_shards: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+    {
+        let (d, p) = all_shards.split_at_mut(10);
+        let data_refs: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        codec.encode_sep(&data_refs, &mut p.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+    }
+    let encoded: Vec<Vec<u8>> = all_shards.iter().map(|s| s.to_vec()).collect();
+
+    // Lose 2 parity shards
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[11] = None;
+    reconstructable[12] = None;
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    for i in 0..14 {
+        let recovered = reconstructable[i].as_ref().unwrap();
+        assert_eq!(recovered.as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
+    }
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_data_only() {
+    let codec = ReedSolomon::with_options(
+        10,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 1024;
+    let shards = make_random_shards!(shard_size, 14);
+
+    // Encode
+    let mut all_shards: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+    {
+        let (d, p) = all_shards.split_at_mut(10);
+        let data_refs: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        codec.encode_sep(&data_refs, &mut p.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+    }
+    let encoded: Vec<Vec<u8>> = all_shards.iter().map(|s| s.to_vec()).collect();
+
+    // Lose 2 data shards and 1 parity shard
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[2] = None;
+    reconstructable[7] = None;
+    reconstructable[10] = None;
+
+    codec.reconstruct_data(&mut reconstructable).unwrap();
+
+    // Verify data shards are recovered
+    for i in 0..10 {
+        let recovered = reconstructable[i].as_ref().unwrap();
+        assert_eq!(recovered.as_slice(), encoded[i].as_slice(), "data shard {i} mismatch");
+    }
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_small_config() {
+    let codec = ReedSolomon::with_options(
+        1,
+        1,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 64;
+    let shards = make_random_shards!(shard_size, 2);
+
+    // Encode
+    let mut all_shards: Vec<Vec<u8>> = shards.iter().map(|s| s.to_vec()).collect();
+    {
+        let (d, p) = all_shards.split_at_mut(1);
+        codec.encode_sep(&[d[0].as_slice()], &mut [p[0].as_mut_slice()]).unwrap();
+    }
+    let encoded: Vec<Vec<u8>> = all_shards.iter().map(|s| s.to_vec()).collect();
+
+    // Lose the data shard
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[0] = None;
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    for i in 0..2 {
+        let recovered = reconstructable[i].as_ref().unwrap();
+        assert_eq!(recovered.as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
+    }
+}
+
+#[test]
 fn test_alloc_aligned_shards_zeroed_and_aligned() {
     let shards = galois_8::alloc_aligned_shards(6, 1024);
 
@@ -5224,5 +5487,94 @@ fn test_encode_single_error_handling() {
             Error::InvalidIndex,
             r.encode_single(14, &mut slice_refs).unwrap_err()
         );
+    }
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_debug() {
+    let codec = ReedSolomon::with_options(
+        2,
+        2,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 64;
+    let mut shards: Vec<Vec<u8>> = (0..4).map(|i| {
+        (0..shard_size).map(|j| ((i * 17 + j * 3 + 42) & 0xFF) as u8).collect()
+    }).collect();
+
+    // Encode
+    let data_refs: Vec<&[u8]> = shards[..2].iter().map(|s| s.as_slice()).collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 2];
+    codec.encode_sep(&data_refs, &mut parity.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+    shards[2] = parity[0].clone();
+    shards[3] = parity[1].clone();
+
+    let encoded: Vec<Vec<u8>> = shards.clone();
+
+    // Lose data shard 0
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[0] = None;
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    assert_eq!(reconstructable[0].as_ref().unwrap().as_slice(), encoded[0].as_slice());
+}
+
+#[test]
+fn test_leopard_gf8_reconstruct_debug_4x4() {
+    let codec = ReedSolomon::with_options(
+        4,
+        4,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 64;
+    let mut shards: Vec<Vec<u8>> = (0..8).map(|i| {
+        (0..shard_size).map(|j| ((i * 17 + j * 3 + 42) & 0xFF) as u8).collect()
+    }).collect();
+
+    // Encode
+    let data_refs: Vec<&[u8]> = shards[..4].iter().map(|s| s.as_slice()).collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 4];
+    codec.encode_sep(&data_refs, &mut parity.iter_mut().map(|s| s.as_mut_slice()).collect::<Vec<_>>()).unwrap();
+    for i in 0..4 {
+        shards[4 + i] = parity[i].clone();
+    }
+
+    for i in 0..4 {
+        eprintln!("data[{}] first 8: {:?}", i, &shards[i][..8]);
+    }
+    for i in 0..4 {
+        eprintln!("parity[{}] first 8: {:?}", i, &shards[4+i][..8]);
+    }
+    // Check if parity[0] == data[0]
+    if shards[4][..8] == shards[0][..8] {
+        eprintln!("WARNING: parity[0] == data[0] — encode is identity!");
+    }
+
+    let encoded: Vec<Vec<u8>> = shards.clone();
+
+    // Lose data shard 2
+    let mut reconstructable: Vec<Option<Vec<u8>>> =
+        encoded.iter().map(|s| Some(s.to_vec())).collect();
+    reconstructable[2] = None;
+
+    codec.reconstruct(&mut reconstructable).unwrap();
+
+    eprintln!("recovered[2] first 8: {:?}", &reconstructable[2].as_ref().unwrap()[..8]);
+    eprintln!("expected[2]  first 8: {:?}", &encoded[2][..8]);
+
+    for i in 0..8 {
+        assert_eq!(reconstructable[i].as_ref().unwrap().as_slice(), encoded[i].as_slice(), "shard {i} mismatch");
     }
 }

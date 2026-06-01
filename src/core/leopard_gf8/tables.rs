@@ -81,9 +81,8 @@ fn init_fft_skew8(
             }
         }
 
-        temp[m] = (MODULUS8
-            - mul_log8(temp[m], log_lut[(temp[m] ^ 1) as usize], log_lut, exp_lut) as usize)
-            as u8;
+        let gf_prod = mul_log8(temp[m], log_lut[(temp[m] ^ 1) as usize], log_lut, exp_lut);
+        temp[m] = (MODULUS8 - log_lut[gf_prod as usize] as usize) as u8;
 
         for i in (m + 1)..(BITWIDTH8 - 1) {
             let sum = add_mod8(log_lut[(temp[i] ^ 1) as usize], temp[m]);

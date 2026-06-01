@@ -430,7 +430,9 @@ impl crate::ReedSolomon<super::Field> {
 
     #[cfg(feature = "std")]
     pub fn reconstruct_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
-        self.ensure_classic_family_execution()?;
+        if self.is_leopard_gf8_family() {
+            return self.reconstruct(shards);
+        }
         let plan = self.plan_option_vec_reconstruct(shards, None)?;
         if plan.shard_len == 0 {
             return Ok(());
@@ -459,7 +461,9 @@ impl crate::ReedSolomon<super::Field> {
 
     #[cfg(feature = "std")]
     pub fn reconstruct_data_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
-        self.ensure_classic_family_execution()?;
+        if self.is_leopard_gf8_family() {
+            return self.reconstruct_data(shards);
+        }
         let plan = self.plan_option_vec_reconstruct(shards, None)?;
         if plan.shard_len == 0 {
             return Ok(());
@@ -487,7 +491,9 @@ impl crate::ReedSolomon<super::Field> {
         shards: &mut [Option<Vec<u8>>],
         required: &[bool],
     ) -> Result<(), crate::Error> {
-        self.ensure_classic_family_execution()?;
+        if self.is_leopard_gf8_family() {
+            return self.reconstruct_some(shards, required);
+        }
         if required.len() != self.total_shard_count() {
             return Err(crate::Error::InvalidShardFlags);
         }

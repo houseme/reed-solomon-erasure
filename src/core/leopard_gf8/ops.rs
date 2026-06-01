@@ -18,10 +18,12 @@ pub(super) fn add_mod8(a: u8, b: u8) -> u8 {
 }
 
 pub(super) fn sub_mod8(a: u8, b: u8) -> u8 {
-    let dif = (a as isize) - (b as isize);
-    let dif = if dif < 0 { dif + ORDER8 as isize } else { dif };
-    let dif = dif as usize;
-    (dif + (dif >> BITWIDTH8)) as u8
+    // Match Go's `uint(a) - uint(b)` which uses unsigned wrapping on usize.
+    // The subtraction on usize creates a borrow that propagates into the high
+    // bits; `dif + dif>>8` folds the carry back, then truncation to u8 gives
+    // the correct mod-255 result.
+    let dif = (a as usize).wrapping_sub(b as usize);
+    (dif.wrapping_add(dif >> BITWIDTH8)) as u8
 }
 
 pub(super) fn fwht8(data: &mut [u8; ORDER8]) {
@@ -30,6 +32,43 @@ pub(super) fn fwht8(data: &mut [u8; ORDER8]) {
     while dist4 <= ORDER8 {
         let mut r = 0usize;
         while r < ORDER8 {
+            let mut off = r;
+            for _ in 0..dist {
+                let t0 = data[off];
+                let t1 = data[off + dist];
+                let t2 = data[off + dist * 2];
+                let t3 = data[off + dist * 3];
+
+                let (t0, t1) = fwht2_alt8(t0, t1);
+                let (t2, t3) = fwht2_alt8(t2, t3);
+                let (t0, t2) = fwht2_alt8(t0, t2);
+                let (t1, t3) = fwht2_alt8(t1, t3);
+
+                data[off] = t0;
+                data[off + dist] = t1;
+                data[off + dist * 2] = t2;
+                data[off + dist * 3] = t3;
+                off += 1;
+            }
+            r += dist4;
+        }
+        dist = dist4;
+        dist4 <<= 2;
+    }
+}
+
+/// FWHT with mtrunc: outer loop runs to ORDER8, inner loop limited to mtrunc.
+///
+/// Matches Go's `fwht8(data, mtrunc)` exactly — positions beyond mtrunc are
+/// touched at large distances (dist >= mtrunc) but contain only zeros, so the
+/// butterfly is a no-op for those positions.
+pub(super) fn fwht8_mtrunc(data: &mut [u8], mtrunc: usize) {
+    debug_assert_eq!(data.len(), ORDER8);
+    let mut dist = 1usize;
+    let mut dist4 = 4usize;
+    while dist4 <= ORDER8 {
+        let mut r = 0usize;
+        while r < mtrunc {
             let mut off = r;
             for _ in 0..dist {
                 let t0 = data[off];
@@ -444,12 +483,77 @@ pub(super) fn fft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardGf
     fft_dit2_lut(x, y, log_m, &tables.mul_luts[log_m as usize].value);
 }
 
+/// Forward butterfly step (FFT): dst ^= mul(src, g^log_m); src ^= dst.
+/// Both dst and src are modified.
+/// When log_m == MODULUS8 (255), just does src ^= dst (no multiply).
+#[inline(always)]
+fn dit2_step(dst: &mut [u8], src: &mut [u8], log_m: u8, lut: &[u8; 256]) {
+    if log_m == MODULUS8 as u8 {
+        slice_xor(dst, src);
+    } else {
+        lut_xor(dst, src, lut);
+        slice_xor(dst, src);
+    }
+}
+
+/// Inverse butterfly step (IFFT): src ^= dst; dst ^= mul(src, g^log_m).
+/// Both dst and src are modified.
+/// When log_m == MODULUS8 (255), just does src ^= dst (no multiply).
+#[inline(always)]
+fn dit2_step_inv(dst: &mut [u8], src: &mut [u8], log_m: u8, lut: &[u8; 256]) {
+    if log_m == MODULUS8 as u8 {
+        slice_xor(dst, src);
+    } else {
+        slice_xor(dst, src);
+        lut_xor(dst, src, lut);
+    }
+}
+
+/// Forward butterfly with pre-split nibble tables for SIMD acceleration.
+#[inline(always)]
+fn dit2_step_prebuilt(
+    dst: &mut [u8],
+    src: &mut [u8],
+    log_m: u8,
+    lut: &[u8; 256],
+    low: &[u8; 16],
+    high: &[u8; 16],
+) {
+    if log_m == MODULUS8 as u8 {
+        slice_xor(dst, src);
+    } else {
+        lut_xor_prebuilt(dst, src, low, high, lut);
+        slice_xor(dst, src);
+    }
+}
+
+/// Inverse butterfly with pre-split nibble tables for SIMD acceleration.
+#[inline(always)]
+fn dit2_step_inv_prebuilt(
+    dst: &mut [u8],
+    src: &mut [u8],
+    log_m: u8,
+    lut: &[u8; 256],
+    low: &[u8; 16],
+    high: &[u8; 16],
+) {
+    if log_m == MODULUS8 as u8 {
+        slice_xor(dst, src);
+    } else {
+        slice_xor(dst, src);
+        lut_xor_prebuilt(dst, src, low, high, lut);
+    }
+}
+
 pub(super) fn fft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256]) {
+    debug_assert_eq!(x.len(), y.len());
+    // Go fftDIT28: x ^= mul(y, g^log_m); y ^= x
+    // When log_m == modulus8 (255): just y ^= x (no multiply)
     if log_m == MODULUS8 as u8 {
         slice_xor(x, y);
     } else {
-        debug_assert_eq!(x.len(), y.len());
         lut_xor(x, y, lut);
+        slice_xor(x, y);
     }
 }
 
@@ -458,11 +562,14 @@ pub(super) fn ifft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardG
 }
 
 pub(super) fn ifft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256]) {
+    debug_assert_eq!(x.len(), y.len());
+    // Go ifftDIT28: y ^= x; x ^= mul(y, g^log_m)
+    // When log_m == modulus8 (255): just y ^= x (no multiply)
     if log_m == MODULUS8 as u8 {
         slice_xor(x, y);
     } else {
-        debug_assert_eq!(x.len(), y.len());
-        lut_xor(y, x, lut);
+        slice_xor(x, y);
+        lut_xor(x, y, lut);
     }
 }
 
@@ -472,6 +579,9 @@ pub(super) fn fft_dit4_full_lut(
     b: &mut [u8],
     c: &mut [u8],
     d: &mut [u8],
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
     lut01: &[u8; 256],
     lut23: &[u8; 256],
     lut02: &[u8; 256],
@@ -480,33 +590,27 @@ pub(super) fn fft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    // Step 1: b1 in-place.
-    lut_xor(b, d, lut02);
-
-    // Step 2: save a before overwriting.
-    let a_saved = a.to_vec();
-
-    // Step 3: a_f = a_saved ^ lut02[c] ^ lut01[b1].
-    a.copy_from_slice(&a_saved);
-    lut_xor(a, c, lut02);
-    lut_xor(a, b, lut01);
-
-    // Step 4: c_f in-place.
-    lut_xor(c, d, lut23);
-    // d unchanged.
+    // Go ARM64 fftDIT28(x, y): x ^= mul(y, g^log_m); y ^= x
+    // dit2_step(x, y) matches: x ^= mul(y); y ^= x
+    // First layer: pairs (a,c) and (b,d) with m02
+    dit2_step(a, c, log_m02, lut02);
+    dit2_step(b, d, log_m02, lut02);
+    // Second layer: pair (a,b) with m01, pair (c,d) with m23
+    dit2_step(a, b, log_m01, lut01);
+    dit2_step(c, d, log_m23, lut23);
 }
 
 /// Zero-copy forward radix-4 butterfly using pre-allocated scratch buffer
 /// and pre-split nibble tables.
-///
-/// Same algorithm as `fft_dit4_full_lut` but avoids both the per-call `to_vec()`
-/// heap allocation and the per-call nibble table construction.
 #[inline(always)]
 pub(super) fn fft_dit4_full_lut_scratch(
     a: &mut [u8],
     b: &mut [u8],
     c: &mut [u8],
     d: &mut [u8],
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
     lut01: &[u8; 256],
     lut01_low: &[u8; 16],
     lut01_high: &[u8; 16],
@@ -522,22 +626,15 @@ pub(super) fn fft_dit4_full_lut_scratch(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
     debug_assert!(scratch.len() >= a.len());
+    let _ = scratch; // not needed for forward butterfly
 
-    // Step 1: b1 in-place (b ^= lut02[d], reads d unchanged).
-    lut_xor_prebuilt(b, d, lut02_low, lut02_high, lut02);
-
-    // Step 2: save a into scratch (zero-copy — no heap allocation).
-    let len = a.len();
-    scratch[..len].copy_from_slice(a);
-
-    // Step 3: a_f = a_saved ^ lut02[c] ^ lut01[b1].
-    a.copy_from_slice(&scratch[..len]);
-    lut_xor_prebuilt(a, c, lut02_low, lut02_high, lut02);
-    lut_xor_prebuilt(a, b, lut01_low, lut01_high, lut01);
-
-    // Step 4: c_f in-place (c ^= lut23[d], reads d unchanged).
-    lut_xor_prebuilt(c, d, lut23_low, lut23_high, lut23);
-    // d unchanged.
+    // Go ARM64 fftDIT28(x, y): x ^= mul(y); y ^= x
+    // First layer: pairs (a,c) and (b,d) with m02
+    dit2_step_prebuilt(a, c, log_m02, lut02, lut02_low, lut02_high);
+    dit2_step_prebuilt(b, d, log_m02, lut02, lut02_low, lut02_high);
+    // Second layer: pair (a,b) with m01, pair (c,d) with m23
+    dit2_step_prebuilt(a, b, log_m01, lut01, lut01_low, lut01_high);
+    dit2_step_prebuilt(c, d, log_m23, lut23, lut23_low, lut23_high);
 }
 
 #[inline(always)]
@@ -546,6 +643,9 @@ pub(super) fn ifft_dit4_full_lut(
     b: &mut [u8],
     c: &mut [u8],
     d: &mut [u8],
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
     lut01: &[u8; 256],
     lut23: &[u8; 256],
     lut02: &[u8; 256],
@@ -554,33 +654,30 @@ pub(super) fn ifft_dit4_full_lut(
     debug_assert_eq!(a.len(), c.len());
     debug_assert_eq!(a.len(), d.len());
 
-    // Step 1: b1 in-place.
-    lut_xor(b, a, lut01);
+    // Go ARM64 ifftDIT28(x, y): y ^= x; x ^= mul(y, g^log_m)
+    // dit2_step_inv(x, y) matches: y ^= x; x ^= mul(y)
+    // Step 1: (a,b) with m01.
+    dit2_step_inv(a, b, log_m01, lut01);
 
-    // Step 2: save d before c is overwritten (d_f needs original c).
-    let d_saved = d.to_vec();
+    // Step 2: (c,d) with m23, then (b,d) with m02.
+    dit2_step_inv(c, d, log_m23, lut23);
+    dit2_step_inv(b, d, log_m02, lut02);
 
-    // Step 3: d_f = d_saved ^ lut23[c] ^ lut02[b1].
-    d.copy_from_slice(&d_saved);
-    lut_xor(d, c, lut23);
-    lut_xor(d, b, lut02);
-
-    // Step 4: c_f in-place.
-    lut_xor(c, a, lut02);
-    // a unchanged.
+    // Step 3: (a,c) with m02.
+    dit2_step_inv(a, c, log_m02, lut02);
 }
 
 /// Zero-copy inverse radix-4 butterfly using pre-allocated scratch buffer
 /// and pre-split nibble tables.
-///
-/// Same algorithm as `ifft_dit4_full_lut` but avoids both the per-call `to_vec()`
-/// heap allocation and the per-call nibble table construction.
 #[inline(always)]
 pub(super) fn ifft_dit4_full_lut_scratch(
     a: &mut [u8],
     b: &mut [u8],
     c: &mut [u8],
     d: &mut [u8],
+    log_m01: u8,
+    log_m23: u8,
+    log_m02: u8,
     lut01: &[u8; 256],
     lut01_low: &[u8; 16],
     lut01_high: &[u8; 16],
@@ -597,21 +694,16 @@ pub(super) fn ifft_dit4_full_lut_scratch(
     debug_assert_eq!(a.len(), d.len());
     debug_assert!(scratch.len() >= a.len());
 
-    // Step 1: b1 in-place (b ^= lut01[a], a unchanged).
-    lut_xor_prebuilt(b, a, lut01_low, lut01_high, lut01);
+    // Go ARM64 ifftDIT28(x, y): y ^= x; x ^= mul(y)
+    // Step 1: (a,b) with m01.
+    dit2_step_inv_prebuilt(a, b, log_m01, lut01, lut01_low, lut01_high);
 
-    // Step 2: save d into scratch (zero-copy — no heap allocation).
-    let len = d.len();
-    scratch[..len].copy_from_slice(d);
+    // Step 2: (c,d) with m23, then (b,d) with m02.
+    dit2_step_inv_prebuilt(c, d, log_m23, lut23, lut23_low, lut23_high);
+    dit2_step_inv_prebuilt(b, d, log_m02, lut02, lut02_low, lut02_high);
 
-    // Step 3: d_f = d_saved ^ lut23[c] ^ lut02[b1].
-    d.copy_from_slice(&scratch[..len]);
-    lut_xor_prebuilt(d, c, lut23_low, lut23_high, lut23);
-    lut_xor_prebuilt(d, b, lut02_low, lut02_high, lut02);
-
-    // Step 4: c_f in-place (c ^= lut02[a], a unchanged).
-    lut_xor_prebuilt(c, a, lut02_low, lut02_high, lut02);
-    // a unchanged.
+    // Step 3: (a,c) with m02.
+    dit2_step_inv_prebuilt(a, c, log_m02, lut02, lut02_low, lut02_high);
 }
 
 /// NEON nibble-lookup with pre-split tables: `dst[i] ^= lut[src[i]]`, 16 bytes/iter.
