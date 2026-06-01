@@ -6,6 +6,7 @@ mod codec;
 mod encode;
 mod leopard;
 pub(crate) mod leopard_gf8;
+pub(crate) mod leopard_gf16;
 mod metrics;
 mod options;
 #[cfg(feature = "std")]
