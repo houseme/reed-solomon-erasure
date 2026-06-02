@@ -182,8 +182,16 @@ pub(crate) fn reconstruct_with_tables(
     // Compute error locator values.
     let err_locs = compute_error_locs(&missing_parity, &missing_data, &driver, tables);
 
+    // Compute input_count: m + last_present_data_index + 1 (matches Go's inputCount).
+    let mut input_count = driver.m;
+    for i in 0..data_shards {
+        if present[i] {
+            input_count = driver.m + i + 1;
+        }
+    }
+
     // Build FFT and IFFT plans.
-    let ifft_plan = build_ifft_decode_dit8_plan(driver.work_size, driver.n, &*tables.fft_skew);
+    let ifft_plan = build_ifft_decode_dit8_plan(input_count, driver.n, &*tables.fft_skew);
     let fft_plan = build_fft_dit8_plan(driver.work_size, driver.n, &*tables.fft_skew);
 
     // Allocate work buffers and scratch.

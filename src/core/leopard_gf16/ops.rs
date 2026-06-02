@@ -24,7 +24,9 @@ pub(super) fn gf16_mul(a: u16, b: u16, log_lut: &[u16; ORDER16], exp_lut: &[u16;
 #[inline]
 pub(super) fn add_mod16(a: u16, b: u16) -> u16 {
     let sum = a as u32 + b as u32;
-    (sum + (sum >> BITWIDTH16)) as u16
+    let result = (sum + (sum >> BITWIDTH16)) as u16;
+    // When sum == 65535 exactly, the carry-free path yields 65535 instead of 0.
+    if result == MODULUS16 as u16 { 0 } else { result }
 }
 
 /// Modular subtraction in GF(2^16) log domain: `(a - b) % 65535`.
@@ -48,12 +50,13 @@ pub(super) fn mulgf16(out: &mut [u16], input: &[u16], log_m: u16, tables: &Leopa
     }
 }
 
-/// Multiply each element of `input` by `g^log_m` and XOR into `out`.
+/// Multiply each element of `input` by `g^log_m` and XOR into `out` (first arg).
+/// Matches GF8 `lut_xor(dst, src, lut)` convention: first arg is modified.
 #[inline]
 pub(super) fn mulgf16_xor(out: &mut [u16], input: &[u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(input.len(), out.len());
     if log_m == MODULUS16 as u16 {
-        slice_xor_u16(input, out);
+        slice_xor_u16(out, input);
     } else {
         for (dst, &src) in out.iter_mut().zip(input.iter()) {
             *dst ^= mul_log16(src, log_m, &tables.log_lut, &tables.exp_lut);
@@ -61,34 +64,19 @@ pub(super) fn mulgf16_xor(out: &mut [u16], input: &[u16], log_m: u16, tables: &L
     }
 }
 
-/// XOR two u16 slices: `out[i] ^= input[i]`.
+/// XOR two u16 slices: `dst[i] ^= src[i]`.
+/// Matches GF8 `slice_xor(dst, src)` convention: first arg is modified.
 #[inline]
-pub(super) fn slice_xor_u16(input: &[u16], out: &mut [u16]) {
-    debug_assert_eq!(input.len(), out.len());
-    // Process 32 bytes (16 u16s) at a time via u64 blocks.
-    let (in16, in_tail) = input.as_chunks::<16>();
-    let (out16, out_tail) = out.as_chunks_mut::<16>();
-
-    for (src, dst) in in16.iter().zip(out16.iter_mut()) {
-        for i in 0..8 {
-            let off = i * 2;
-            let s = unsafe { core::ptr::read_unaligned(src[off..].as_ptr().cast::<u64>()) };
-            let d = unsafe { core::ptr::read_unaligned(dst[off..].as_ptr().cast::<u64>()) };
-            unsafe {
-                core::ptr::write_unaligned(dst[off..].as_mut_ptr().cast::<u64>(), d ^ s);
-            }
-        }
-    }
-
-    // Scalar tail.
-    for (src, dst) in in_tail.iter().zip(out_tail.iter_mut()) {
-        *dst ^= *src;
+pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
+    debug_assert_eq!(dst.len(), src.len());
+    for (d, &s) in dst.iter_mut().zip(src.iter()) {
+        *d ^= s;
     }
 }
 
 /// FWHT (Fast Walsh-Hadamard Transform) for GF(2^16) log-domain values.
 ///
-/// Same structure as `fwht8` but with u16 elements and mod-65535 arithmetic.
+/// Same structure as Go's `fwht`: sequential radix-2 butterflies within each block.
 pub(super) fn fwht16(data: &mut [u16; ORDER16]) {
     let mut dist = 1usize;
     let mut dist4 = 4usize;
@@ -97,19 +85,17 @@ pub(super) fn fwht16(data: &mut [u16; ORDER16]) {
         while r < ORDER16 {
             let mut off = r;
             for _ in 0..dist {
-                let t0 = data[off];
-                let t1 = data[off + dist];
-                let t2 = data[off + dist * 2];
-                let t3 = data[off + dist * 3];
-
-                let (t0, t1) = fwht2_alt16(t0, t1);
-                let (t2, t3) = fwht2_alt16(t2, t3);
-                let (t0, t2) = fwht2_alt16(t0, t2);
-                let (t1, t3) = fwht2_alt16(t1, t3);
-
+                let (t0, t1) = fwht2_alt16(data[off], data[off + dist]);
                 data[off] = t0;
                 data[off + dist] = t1;
+                let (t2, t3) = fwht2_alt16(data[off + dist * 2], data[off + dist * 3]);
                 data[off + dist * 2] = t2;
+                data[off + dist * 3] = t3;
+                let (t0, t2) = fwht2_alt16(data[off], data[off + dist * 2]);
+                data[off] = t0;
+                data[off + dist * 2] = t2;
+                let (t1, t3) = fwht2_alt16(data[off + dist], data[off + dist * 3]);
+                data[off + dist] = t1;
                 data[off + dist * 3] = t3;
                 off += 1;
             }
@@ -121,6 +107,8 @@ pub(super) fn fwht16(data: &mut [u16; ORDER16]) {
 }
 
 /// FWHT with mtrunc: inner loop limited to mtrunc.
+///
+/// Matches Go's `fwht(data, mtrunc)` — sequential radix-2 butterflies within each block.
 pub(super) fn fwht16_mtrunc(data: &mut [u16], mtrunc: usize) {
     debug_assert_eq!(data.len(), ORDER16);
     let mut dist = 1usize;
@@ -130,19 +118,17 @@ pub(super) fn fwht16_mtrunc(data: &mut [u16], mtrunc: usize) {
         while r < mtrunc {
             let mut off = r;
             for _ in 0..dist {
-                let t0 = data[off];
-                let t1 = data[off + dist];
-                let t2 = data[off + dist * 2];
-                let t3 = data[off + dist * 3];
-
-                let (t0, t1) = fwht2_alt16(t0, t1);
-                let (t2, t3) = fwht2_alt16(t2, t3);
-                let (t0, t2) = fwht2_alt16(t0, t2);
-                let (t1, t3) = fwht2_alt16(t1, t3);
-
+                let (t0, t1) = fwht2_alt16(data[off], data[off + dist]);
                 data[off] = t0;
                 data[off + dist] = t1;
+                let (t2, t3) = fwht2_alt16(data[off + dist * 2], data[off + dist * 3]);
                 data[off + dist * 2] = t2;
+                data[off + dist * 3] = t3;
+                let (t0, t2) = fwht2_alt16(data[off], data[off + dist * 2]);
+                data[off] = t0;
+                data[off + dist * 2] = t2;
+                let (t1, t3) = fwht2_alt16(data[off + dist], data[off + dist * 3]);
+                data[off + dist] = t1;
                 data[off + dist * 3] = t3;
                 off += 1;
             }
@@ -154,6 +140,8 @@ pub(super) fn fwht16_mtrunc(data: &mut [u16], mtrunc: usize) {
 }
 
 /// Flexible-size FWHT for slices whose length is a power of 2 and <= ORDER16.
+///
+/// Matches Go's `fwht(data, len)` — sequential radix-2 butterflies within each block.
 pub(super) fn fwht16_variable(data: &mut [u16]) {
     let n = data.len();
     debug_assert!(n.is_power_of_two());
@@ -167,19 +155,17 @@ pub(super) fn fwht16_variable(data: &mut [u16]) {
             while r < n {
                 let mut off = r;
                 for _ in 0..dist {
-                    let t0 = data[off];
-                    let t1 = data[off + dist];
-                    let t2 = data[off + dist * 2];
-                    let t3 = data[off + dist * 3];
-
-                    let (t0, t1) = fwht2_alt16(t0, t1);
-                    let (t2, t3) = fwht2_alt16(t2, t3);
-                    let (t0, t2) = fwht2_alt16(t0, t2);
-                    let (t1, t3) = fwht2_alt16(t1, t3);
-
+                    let (t0, t1) = fwht2_alt16(data[off], data[off + dist]);
                     data[off] = t0;
                     data[off + dist] = t1;
+                    let (t2, t3) = fwht2_alt16(data[off + dist * 2], data[off + dist * 3]);
                     data[off + dist * 2] = t2;
+                    data[off + dist * 3] = t3;
+                    let (t0, t2) = fwht2_alt16(data[off], data[off + dist * 2]);
+                    data[off] = t0;
+                    data[off + dist * 2] = t2;
+                    let (t1, t3) = fwht2_alt16(data[off + dist], data[off + dist * 3]);
+                    data[off + dist] = t1;
                     data[off + dist * 3] = t3;
                     off += 1;
                 }
@@ -193,9 +179,7 @@ pub(super) fn fwht16_variable(data: &mut [u16]) {
                 while r < n {
                     let mut off = r;
                     for _ in 0..dist {
-                        let t0 = data[off];
-                        let t1 = data[off + dist];
-                        let (t0, t1) = fwht2_alt16(t0, t1);
+                        let (t0, t1) = fwht2_alt16(data[off], data[off + dist]);
                         data[off] = t0;
                         data[off + dist] = t1;
                         off += 1;
@@ -213,7 +197,14 @@ fn fwht2_alt16(a: u16, b: u16) -> (u16, u16) {
     (add_mod16(a, b), sub_mod16(a, b))
 }
 
+#[cfg(test)]
+#[inline]
+pub(super) fn fwht2_alt16_test(a: u16, b: u16) -> (u16, u16) {
+    fwht2_alt16(a, b)
+}
+
 /// Forward butterfly step (FFT): `dst ^= mul(src, g^log_m); src ^= dst`.
+/// Matches GF8 `dit2_step(dst, src)`.
 #[inline]
 pub(super) fn dit2_step16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(dst.len(), src.len());
@@ -221,44 +212,42 @@ pub(super) fn dit2_step16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: 
         slice_xor_u16(dst, src);
     } else {
         mulgf16_xor(dst, src, log_m, tables);
-        slice_xor_u16(dst, src);
+        slice_xor_u16(src, dst);
     }
 }
 
 /// Inverse butterfly step (IFFT): `src ^= dst; dst ^= mul(src, g^log_m)`.
+/// Matches GF8 `dit2_step_inv(dst, src)`.
+///
+/// Note: no MODULUS16 shortcut — the general path handles g^m=1 correctly
+/// via mulgf16_xor's own shortcut, but the operation order matters for the inverse.
 #[inline]
 pub(super) fn dit2_step_inv16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(dst.len(), src.len());
-    if log_m == MODULUS16 as u16 {
-        slice_xor_u16(dst, src);
-    } else {
-        slice_xor_u16(dst, src);
-        mulgf16_xor(dst, src, log_m, tables);
-    }
+    slice_xor_u16(src, dst);
+    mulgf16_xor(dst, src, log_m, tables);
 }
 
-/// Forward radix-2 FFT butterfly.
+/// Forward radix-2 FFT butterfly: `x ^= mul(y, m); y ^= x`.
+/// Matches GF8 `fft_dit2_lut(x, y)`.
 pub(super) fn fft_dit2_16(x: &mut [u16], y: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(x.len(), y.len());
-    // Go fftDIT2: x ^= mul(y, g^log_m); y ^= x
     if log_m == MODULUS16 as u16 {
         slice_xor_u16(x, y);
     } else {
         mulgf16_xor(x, y, log_m, tables);
-        slice_xor_u16(x, y);
+        slice_xor_u16(y, x);
     }
 }
 
-/// Inverse radix-2 IFFT butterfly.
+/// Inverse radix-2 IFFT butterfly: `y ^= x; x ^= mul(y, m)`.
+/// Matches GF8 `ifft_dit2_lut(x, y)`.
+///
+/// Note: no MODULUS16 shortcut — the general path handles g^m=1 correctly.
 pub(super) fn ifft_dit2_16(x: &mut [u16], y: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(x.len(), y.len());
-    // Go ifftDIT2: y ^= x; x ^= mul(y, g^log_m)
-    if log_m == MODULUS16 as u16 {
-        slice_xor_u16(x, y);
-    } else {
-        slice_xor_u16(x, y);
-        mulgf16_xor(x, y, log_m, tables);
-    }
+    slice_xor_u16(y, x);
+    mulgf16_xor(x, y, log_m, tables);
 }
 
 /// Forward radix-4 butterfly.

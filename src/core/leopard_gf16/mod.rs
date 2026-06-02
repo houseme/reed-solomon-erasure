@@ -18,7 +18,7 @@ pub(crate) mod work;
 pub(crate) const BITWIDTH16: usize = 16;
 pub(crate) const ORDER16: usize = 1 << BITWIDTH16;
 pub(crate) const MODULUS16: usize = ORDER16 - 1;
-pub(crate) const POLYNOMIAL16: u32 = 0x1100B;
+pub(crate) const POLYNOMIAL16: u32 = 0x1002D;
 pub(crate) const WORK_SIZE16: usize = 32 << 10;
 
 #[derive(Debug)]
@@ -102,6 +102,63 @@ fn build_fft_dit16_plan(mtrunc: usize, m: usize, skew_lut: &[u16; MODULUS16]) ->
                 log_m02: skew_lut[i_end + dist - 1],
                 log_m23: skew_lut[i_end + dist * 2 - 1],
             });
+            r += dist4;
+        }
+        dist4 = dist;
+        dist >>= 2;
+    }
+
+    let final_stage = if dist4 == 2 {
+        let mut blocks = Vec::new();
+        let mut r = 0usize;
+        while r < mtrunc {
+            blocks.push(Stage2Block {
+                r,
+                dist: 1,
+                log_m: skew_lut[r],
+            });
+            r += 2;
+        }
+        blocks
+    } else {
+        Vec::new()
+    };
+
+    FftDit16Plan {
+        mtrunc,
+        stage4_blocks,
+        final_stage,
+    }
+}
+
+/// Build FFT plan for the decode path.
+///
+/// Matches Go's `fftDIT` loop structure exactly:
+///   dist4 = n; dist = n >> 2;
+///   for dist != 0:
+///     for r = 0; r < mtrunc; r += dist4:
+///       for i = r; i < r+dist; i++:
+///         stage4 block at (i, dist)
+///     dist4 = dist; dist >>= 2
+///   final stage: for r = 0; r < mtrunc; r += 2:
+///     stage2 block at (r, 1)
+pub(crate) fn build_fft_decode_dit16_plan(mtrunc: usize, n: usize, skew_lut: &[u16; MODULUS16]) -> FftDit16Plan {
+    let mut stage4_blocks = Vec::new();
+    let mut dist4 = n;
+    let mut dist = n >> 2;
+    while dist != 0 {
+        let mut r = 0usize;
+        while r < mtrunc {
+            let i_end = r + dist;
+            for i in r..i_end {
+                stage4_blocks.push(Stage4Block {
+                    r: i,
+                    dist,
+                    log_m01: skew_lut[i_end - 1],
+                    log_m02: skew_lut[i_end + dist - 1],
+                    log_m23: skew_lut[i_end + dist * 2 - 1],
+                });
+            }
             r += dist4;
         }
         dist4 = dist;

@@ -99,3 +99,60 @@ fn test_encode_decode_roundtrip_direct() {
     // Verify recovered shard 0 matches original data[0].
     assert_eq!(output_bufs[0], data[0], "recovered shard 0 should match original data[0]");
 }
+
+/// Test GF8 with (3,2) parameters and uniform data — mirrors the failing GF16 test.
+#[test]
+fn test_gf8_roundtrip_3_2_uniform() {
+    let data_shards = 3usize;
+    let parity_shards = 2usize;
+    let total = data_shards + parity_shards;
+    let shard_size = 64usize;
+    let tables = init_leopard_gf8_tables();
+
+    // Uniform data: each shard is [i+1; shard_size].
+    let mut shards: Vec<Vec<u8>> = (0..total)
+        .map(|i| vec![(i + 1) as u8; shard_size])
+        .collect();
+
+    // Encode.
+    {
+        let (data_part, parity_part) = shards.split_at_mut(data_shards);
+        let data_refs: Vec<&[u8]> = data_part.iter().map(|d| d.as_slice()).collect();
+        let mut parity_refs: Vec<&mut [u8]> = parity_part.iter_mut().map(|p| p.as_mut_slice()).collect();
+        encode::encode_with_tables(data_shards, parity_shards, &data_refs, &mut parity_refs).unwrap();
+    }
+
+    println!("shard[0][..8] = {:?}", &shards[0][..8]);
+    println!("shard[1][..8] = {:?}", &shards[1][..8]);
+    println!("shard[2][..8] = {:?}", &shards[2][..8]);
+    println!("shard[3][..8] = {:?}", &shards[3][..8]);
+    println!("shard[4][..8] = {:?}", &shards[4][..8]);
+
+    let original_0 = shards[0].clone();
+    shards[0] = vec![0u8; shard_size];
+
+    let present: Vec<bool> = (0..total).map(|i| i != 0).collect();
+    let input_snapshots: Vec<Option<Vec<u8>>> = shards
+        .iter()
+        .enumerate()
+        .map(|(i, s)| if i != 0 { Some(s.clone()) } else { None })
+        .collect();
+    let input_data: Vec<Option<&[u8]>> = input_snapshots
+        .iter()
+        .map(|o| o.as_deref())
+        .collect();
+    let mut outputs: Vec<&mut [u8]> = shards.iter_mut().map(|s| s.as_mut_slice()).collect();
+
+    decode::reconstruct_with_tables(
+        &present,
+        &mut outputs,
+        &input_data,
+        data_shards,
+        parity_shards,
+        tables,
+    )
+    .unwrap();
+
+    println!("recovered[0][..8] = {:?}", &outputs[0][..8]);
+    assert_eq!(outputs[0], original_0.as_slice(), "recovered shard 0 should match original");
+}

@@ -303,7 +303,7 @@ fn ifft_dit_encoder16_with_plan<T: AsRef<[u16]>>(
     if let Some(xor_dst) = xor_dst.as_mut() {
         for idx in 0..plan.m {
             if idx < work.len() && idx < xor_dst.len() {
-                slice_xor_u16(work[idx], xor_dst[idx]);
+                slice_xor_u16(xor_dst[idx], work[idx]);
             }
         }
     }
