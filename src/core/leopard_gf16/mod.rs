@@ -142,7 +142,11 @@ fn build_fft_dit16_plan(mtrunc: usize, m: usize, skew_lut: &[u16; MODULUS16]) ->
 ///     dist4 = dist; dist >>= 2
 ///   final stage: for r = 0; r < mtrunc; r += 2:
 ///     stage2 block at (r, 1)
-pub(crate) fn build_fft_decode_dit16_plan(mtrunc: usize, n: usize, skew_lut: &[u16; MODULUS16]) -> FftDit16Plan {
+pub(crate) fn build_fft_decode_dit16_plan(
+    mtrunc: usize,
+    n: usize,
+    skew_lut: &[u16; MODULUS16],
+) -> FftDit16Plan {
     // Go: skewLUT := fftSkew[m-1:]
     // skewLUT[i] = fftSkew[m-1+i], so we need base = n/2 - 1 (= m-1 in Go)
     // Actually, the caller passes n (the FFT size), but Go uses m = n/2 for the base.

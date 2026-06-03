@@ -4,7 +4,12 @@ use super::{BITWIDTH16, LeopardGf16Tables, MODULUS16, ORDER16};
 ///
 /// `log_b` is the log of the second operand (used when one operand's log is precomputed).
 #[inline]
-pub(super) fn mul_log16(a: u16, log_b: u16, log_lut: &[u16; ORDER16], exp_lut: &[u16; ORDER16 * 2]) -> u16 {
+pub(super) fn mul_log16(
+    a: u16,
+    log_b: u16,
+    log_lut: &[u16; ORDER16],
+    exp_lut: &[u16; ORDER16 * 2],
+) -> u16 {
     if a == 0 {
         return 0;
     }
@@ -13,7 +18,12 @@ pub(super) fn mul_log16(a: u16, log_b: u16, log_lut: &[u16; ORDER16], exp_lut: &
 
 /// GF(2^16) multiply: `a * b` using log/exp tables.
 #[inline]
-pub(super) fn gf16_mul(a: u16, b: u16, log_lut: &[u16; ORDER16], exp_lut: &[u16; ORDER16 * 2]) -> u16 {
+pub(super) fn gf16_mul(
+    a: u16,
+    b: u16,
+    log_lut: &[u16; ORDER16],
+    exp_lut: &[u16; ORDER16 * 2],
+) -> u16 {
     if a == 0 || b == 0 {
         return 0;
     }
@@ -77,6 +87,7 @@ pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
 /// FWHT (Fast Walsh-Hadamard Transform) for GF(2^16) log-domain values.
 ///
 /// Same structure as Go's `fwht`: sequential radix-2 butterflies within each block.
+#[allow(clippy::explicit_counter_loop)]
 pub(super) fn fwht16(data: &mut [u16; ORDER16]) {
     let mut dist = 1usize;
     let mut dist4 = 4usize;
@@ -109,6 +120,7 @@ pub(super) fn fwht16(data: &mut [u16; ORDER16]) {
 /// FWHT with mtrunc: outer loop limited to `m`, inner loop limited to mtrunc.
 ///
 /// Matches Go's `fwht(data, m, mtrunc)` — sequential radix-2 butterflies within each block.
+#[allow(clippy::explicit_counter_loop)]
 pub(super) fn fwht16_mtrunc(data: &mut [u16], m: usize, mtrunc: usize) {
     debug_assert_eq!(data.len(), ORDER16);
     let mut dist = 1usize;
@@ -142,6 +154,7 @@ pub(super) fn fwht16_mtrunc(data: &mut [u16], m: usize, mtrunc: usize) {
 /// Flexible-size FWHT for slices whose length is a power of 2 and <= ORDER16.
 ///
 /// Matches Go's `fwht(data, len)` — sequential radix-2 butterflies within each block.
+#[allow(clippy::explicit_counter_loop)]
 pub(super) fn fwht16_variable(data: &mut [u16]) {
     let n = data.len();
     debug_assert!(n.is_power_of_two());
@@ -210,7 +223,12 @@ pub(super) fn fwht2_alt16_test(a: u16, b: u16) -> (u16, u16) {
 /// the second argument: `src ^= dst`. The general path gives the same final result
 /// via `dst ^= src*g^m; src ^= dst`, but the modulus shortcut must match exactly.
 #[inline]
-pub(super) fn dit2_step16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
+pub(super) fn dit2_step16(
+    dst: &mut [u16],
+    src: &mut [u16],
+    log_m: u16,
+    tables: &LeopardGf16Tables,
+) {
     debug_assert_eq!(dst.len(), src.len());
     if log_m == MODULUS16 as u16 {
         slice_xor_u16(src, dst);
@@ -227,7 +245,12 @@ pub(super) fn dit2_step16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: 
 /// the second argument only: `src ^= dst`. The general path gives a different result
 /// because it also modifies `dst`, but Go's shortcut must be matched exactly.
 #[inline]
-pub(super) fn dit2_step_inv16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
+pub(super) fn dit2_step_inv16(
+    dst: &mut [u16],
+    src: &mut [u16],
+    log_m: u16,
+    tables: &LeopardGf16Tables,
+) {
     debug_assert_eq!(dst.len(), src.len());
     if log_m == MODULUS16 as u16 {
         slice_xor_u16(src, dst);
@@ -269,6 +292,7 @@ pub(super) fn ifft_dit2_16(x: &mut [u16], y: &mut [u16], log_m: u16, tables: &Le
 
 /// Forward radix-4 butterfly.
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn fft_dit4_16(
     a: &mut [u16],
     b: &mut [u16],
@@ -291,6 +315,7 @@ pub(super) fn fft_dit4_16(
 
 /// Inverse radix-4 butterfly.
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn ifft_dit4_16(
     a: &mut [u16],
     b: &mut [u16],
@@ -323,7 +348,7 @@ pub(super) fn ifft_dit4_16(
 ///   dst[2*i] = src[i], dst[2*i+1] = src[i+32]   per 64-byte chunk
 pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
-    debug_assert!(src.len() % 64 == 0);
+    debug_assert!(src.len().is_multiple_of(64));
     for chunk in src.chunks(64) {
         let base = chunk.as_ptr() as usize - src.as_ptr() as usize;
         let dst_chunk = &mut dst[base..base + 64];
@@ -340,7 +365,7 @@ pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
 ///   dst[i] = src[2*i], dst[i+32] = src[2*i+1]   per 64-byte chunk
 pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
-    debug_assert!(src.len() % 64 == 0);
+    debug_assert!(src.len().is_multiple_of(64));
     for (chunk_idx, chunk) in src.chunks(64).enumerate() {
         let base = chunk_idx * 64;
         let dst_chunk = &mut dst[base..base + 64];

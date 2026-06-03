@@ -2,7 +2,6 @@
 ///
 /// Detects L2 cache size per core on Linux (via sysfs) and macOS (via sysctl).
 /// Falls back to a conservative default of 256 KiB when detection fails.
-
 /// Default L2 cache estimate when detection fails (256 KiB per core).
 pub(crate) const DEFAULT_L2_CACHE_BYTES: usize = 256 * 1024;
 
@@ -28,10 +27,7 @@ pub(crate) fn detect_l2_cache_bytes() -> Option<usize> {
 /// Linux: read `/sys/devices/system/cpu/cpu0/cache/index2/size`.
 #[cfg(target_os = "linux")]
 fn detect_l2_cache_linux() -> Option<usize> {
-    let content = std::fs::read_to_string(
-        "/sys/devices/system/cpu/cpu0/cache/index2/size",
-    )
-    .ok()?;
+    let content = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cache/index2/size").ok()?;
     parse_cache_size(&content)
 }
 

@@ -21,8 +21,8 @@ impl FlatWork {
     /// Create a new FlatWork with zeroed memory.
     pub(super) fn new(lanes: usize, lane_len: usize) -> Self {
         let len = lanes * lane_len;
-        let layout = Layout::from_size_align(len, WORK_ALIGNMENT)
-            .expect("FlatWork layout overflow");
+        let layout =
+            Layout::from_size_align(len, WORK_ALIGNMENT).expect("FlatWork layout overflow");
         // SAFETY: layout is non-zero (lanes > 0, lane_len > 0).
         let ptr = unsafe { alloc_zeroed(layout) };
         if ptr.is_null() {
@@ -44,8 +44,8 @@ impl FlatWork {
     /// `zero_trailing_lanes` or `fill(0)`.
     pub(super) unsafe fn new_uninit(lanes: usize, lane_len: usize) -> Self {
         let len = lanes * lane_len;
-        let layout = Layout::from_size_align(len, WORK_ALIGNMENT)
-            .expect("FlatWork layout overflow");
+        let layout =
+            Layout::from_size_align(len, WORK_ALIGNMENT).expect("FlatWork layout overflow");
         // SAFETY: layout is non-zero (lanes > 0, lane_len > 0).
         let ptr = unsafe { alloc(layout) };
         if ptr.is_null() {
@@ -74,14 +74,22 @@ impl FlatWork {
     }
 
     pub(super) fn lane(&self, idx: usize) -> &[u8] {
-        debug_assert!(idx < self.lanes, "lane index {idx} out of bounds (lanes={})", self.lanes);
+        debug_assert!(
+            idx < self.lanes,
+            "lane index {idx} out of bounds (lanes={})",
+            self.lanes
+        );
         let start = idx * self.lane_len;
         // SAFETY: start..start+lane_len is within allocated bounds, self.ptr is valid.
         unsafe { core::slice::from_raw_parts(self.ptr.add(start), self.lane_len) }
     }
 
     pub(super) fn lane_mut(&mut self, idx: usize) -> &mut [u8] {
-        debug_assert!(idx < self.lanes, "lane index {idx} out of bounds (lanes={})", self.lanes);
+        debug_assert!(
+            idx < self.lanes,
+            "lane index {idx} out of bounds (lanes={})",
+            self.lanes
+        );
         let start = idx * self.lane_len;
         // SAFETY: start..start+lane_len is within allocated bounds, self.ptr is valid,
         // and we have exclusive access through &mut self.
@@ -96,8 +104,16 @@ impl FlatWork {
         size: usize,
         f: impl FnOnce(&mut [&mut [u8]]) -> R,
     ) -> R {
-        debug_assert!(size <= self.lane_len, "view size {size} exceeds lane_len {}", self.lane_len);
-        debug_assert!(lanes <= self.lanes, "requested lanes {lanes} exceeds capacity {}", self.lanes);
+        debug_assert!(
+            size <= self.lane_len,
+            "view size {size} exceeds lane_len {}",
+            self.lane_len
+        );
+        debug_assert!(
+            lanes <= self.lanes,
+            "requested lanes {lanes} exceeds capacity {}",
+            self.lanes
+        );
 
         // Build view pointers. We use a SmallVec on the stack because the views
         // contain mutable references that cannot be cached across calls.

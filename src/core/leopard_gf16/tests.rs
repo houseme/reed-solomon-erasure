@@ -1,6 +1,8 @@
-use super::*;
+use super::ops::{
+    add_mod16, fft_dit2_16, gf16_mul, ifft_dit2_16, mul_log16, mulgf16, slice_xor_u16, sub_mod16,
+};
 use super::tables::build_tables16;
-use super::ops::{gf16_mul, fft_dit2_16, ifft_dit2_16, slice_xor_u16, mulgf16, mul_log16, add_mod16, sub_mod16};
+use super::*;
 
 #[test]
 fn test_leopard_gf16_tables_shapes() {
@@ -33,10 +35,17 @@ fn test_leopard_gf16_check_luts() {
         if x >= ORDER16 as u32 {
             x ^= super::POLYNOMIAL16;
         }
-        if x == 1 { break; }
-        if count > MODULUS16 { break; }
+        if x == 1 {
+            break;
+        }
+        if count > MODULUS16 {
+            break;
+        }
     }
-    assert_eq!(count, MODULUS16, "LFSR should cycle through all 65535 nonzero elements");
+    assert_eq!(
+        count, MODULUS16,
+        "LFSR should cycle through all 65535 nonzero elements"
+    );
 }
 
 #[test]
@@ -67,13 +76,23 @@ fn test_leopard_gf16_fft_ifft_roundtrip() {
     // Apply FFT butterflies using split_at_mut.
     for i in 0..n / 2 {
         let (left, right) = data.split_at_mut(n / 2);
-        fft_dit2_16(&mut left[i..i + 1], &mut right[i..i + 1], (i + 1) as u16, &tables);
+        fft_dit2_16(
+            &mut left[i..i + 1],
+            &mut right[i..i + 1],
+            (i + 1) as u16,
+            &tables,
+        );
     }
 
     // Apply inverse FFT butterflies (reverse order).
     for i in (0..n / 2).rev() {
         let (left, right) = data.split_at_mut(n / 2);
-        ifft_dit2_16(&mut left[i..i + 1], &mut right[i..i + 1], (i + 1) as u16, &tables);
+        ifft_dit2_16(
+            &mut left[i..i + 1],
+            &mut right[i..i + 1],
+            (i + 1) as u16,
+            &tables,
+        );
     }
 
     assert_eq!(data, original, "FFT -> IFFT should recover original data");
@@ -100,7 +119,15 @@ fn test_leopard_gf16_slice_xor_u16() {
     let a = vec![0x1234u16, 0x5678, 0x9ABC, 0xDEF0];
     let mut b = vec![0xFFFFu16, 0x0000, 0x1234, 0x5678];
     slice_xor_u16(&mut b, &a);
-    assert_eq!(b, vec![0x1234 ^ 0xFFFF, 0x5678 ^ 0x0000, 0x9ABC ^ 0x1234, 0xDEF0 ^ 0x5678]);
+    assert_eq!(
+        b,
+        vec![
+            0x1234 ^ 0xFFFF,
+            0x5678,
+            0x9ABC ^ 0x1234,
+            0xDEF0 ^ 0x5678
+        ]
+    );
 }
 
 #[test]
@@ -223,7 +250,11 @@ fn test_leopard_gf16_reconstruct_nonuniform() {
     )
     .unwrap();
 
-    assert_eq!(outputs[0], original_0.as_slice(), "recovered shard 0 should match original");
+    assert_eq!(
+        outputs[0],
+        original_0.as_slice(),
+        "recovered shard 0 should match original"
+    );
 }
 
 /// Verify basic GF16 arithmetic properties.
@@ -261,8 +292,16 @@ fn test_leopard_gf16_arithmetic() {
     for &a in &test_vals {
         for &b in &test_vals {
             let r1 = gf16_mul(a, b, &tables.log_lut, &tables.exp_lut);
-            let r2 = mul_log16(a, tables.log_lut[b as usize], &tables.log_lut, &tables.exp_lut);
-            assert_eq!(r1, r2, "gf16_mul({a},{b})={r1} != mul_log16({a},log({b}))={r2}");
+            let r2 = mul_log16(
+                a,
+                tables.log_lut[b as usize],
+                &tables.log_lut,
+                &tables.exp_lut,
+            );
+            assert_eq!(
+                r1, r2,
+                "gf16_mul({a},{b})={r1} != mul_log16({a},log({b}))={r2}"
+            );
         }
     }
 
@@ -271,7 +310,10 @@ fn test_leopard_gf16_arithmetic() {
         for b in 0u16..100 {
             let sum = add_mod16(a, b);
             let diff = sub_mod16(sum, b);
-            assert_eq!(diff, a, "add_mod16/sub_mod16 roundtrip failed for ({a}, {b})");
+            assert_eq!(
+                diff, a,
+                "add_mod16/sub_mod16 roundtrip failed for ({a}, {b})"
+            );
         }
     }
 }
@@ -282,7 +324,9 @@ fn test_leopard_gf16_fft_skew_values() {
     let tables = init_leopard_gf16_tables();
 
     // Expected values from Go (verified via dump test).
-    let expected_skew: [u16; 8] = [0xFFFF, 0xFFFF, 0x5555, 0xFFFF, 0x4444, 0x5555, 0x8888, 0xFFFF];
+    let expected_skew: [u16; 8] = [
+        0xFFFF, 0xFFFF, 0x5555, 0xFFFF, 0x4444, 0x5555, 0x8888, 0xFFFF,
+    ];
     for (i, &exp) in expected_skew.iter().enumerate() {
         assert_eq!(
             tables.fft_skew[i], exp,
@@ -299,12 +343,13 @@ fn test_leopard_gf16_fft_skew_values() {
     let n = work_size.next_power_of_two();
     let input_count = 5usize;
 
-    let _ifft_plan = super::build_ifft_decode_dit16_plan(input_count, n, &*tables.fft_skew);
-    let _fft_plan = super::build_fft_dit16_plan(work_size, n, &*tables.fft_skew);
+    let _ifft_plan = super::build_ifft_decode_dit16_plan(input_count, n, &tables.fft_skew);
+    let _fft_plan = super::build_fft_dit16_plan(work_size, n, &tables.fft_skew);
 }
 
 /// Test encode+decode roundtrip directly using encode_with_tables16 and reconstruct_with_tables16.
 #[test]
+#[allow(clippy::needless_range_loop)]
 fn test_leopard_gf16_encode_decode_roundtrip() {
     let data_shards = 3;
     let parity_shards = 2;
@@ -355,7 +400,11 @@ fn test_leopard_gf16_encode_decode_roundtrip() {
     )
     .unwrap();
 
-    assert_eq!(outputs[0], original_0.as_slice(), "recovered shard 0 should match original");
+    assert_eq!(
+        outputs[0],
+        original_0.as_slice(),
+        "recovered shard 0 should match original"
+    );
 }
 
 #[test]
@@ -373,8 +422,10 @@ fn test_leopard_gf16_reconstruct_single_missing() {
     {
         let (data_part, parity_part) = shards.split_at_mut(data_shards);
         let data_refs: Vec<&[u8]> = data_part.iter().map(|d| d.as_slice()).collect();
-        let mut parity_refs: Vec<&mut [u8]> = parity_part.iter_mut().map(|p| p.as_mut_slice()).collect();
-        encode::encode_with_tables16(data_shards, parity_shards, &data_refs, &mut parity_refs).unwrap();
+        let mut parity_refs: Vec<&mut [u8]> =
+            parity_part.iter_mut().map(|p| p.as_mut_slice()).collect();
+        encode::encode_with_tables16(data_shards, parity_shards, &data_refs, &mut parity_refs)
+            .unwrap();
     }
 
     let original_0 = shards[0].clone();
@@ -387,10 +438,7 @@ fn test_leopard_gf16_reconstruct_single_missing() {
         .enumerate()
         .map(|(i, s)| if i != 0 { Some(s.clone()) } else { None })
         .collect();
-    let input_data: Vec<Option<&[u8]>> = input_snapshots
-        .iter()
-        .map(|o| o.as_deref())
-        .collect();
+    let input_data: Vec<Option<&[u8]>> = input_snapshots.iter().map(|o| o.as_deref()).collect();
     let mut outputs: Vec<&mut [u8]> = shards.iter_mut().map(|s| s.as_mut_slice()).collect();
 
     decode::reconstruct_with_tables16(
@@ -403,7 +451,11 @@ fn test_leopard_gf16_reconstruct_single_missing() {
     )
     .unwrap();
 
-    assert_eq!(outputs[0], original_0.as_slice(), "recovered shard 0 should match original");
+    assert_eq!(
+        outputs[0],
+        original_0.as_slice(),
+        "recovered shard 0 should match original"
+    );
 }
 
 #[test]
@@ -424,8 +476,10 @@ fn test_leopard_gf16_reconstruct_multiple_missing() {
     {
         let (data_part, parity_part) = shards.split_at_mut(data_shards);
         let data_refs: Vec<&[u8]> = data_part.iter().map(|d| d.as_slice()).collect();
-        let mut parity_refs: Vec<&mut [u8]> = parity_part.iter_mut().map(|p| p.as_mut_slice()).collect();
-        encode::encode_with_tables16(data_shards, parity_shards, &data_refs, &mut parity_refs).unwrap();
+        let mut parity_refs: Vec<&mut [u8]> =
+            parity_part.iter_mut().map(|p| p.as_mut_slice()).collect();
+        encode::encode_with_tables16(data_shards, parity_shards, &data_refs, &mut parity_refs)
+            .unwrap();
     }
 
     let erased = [0, 2, 5];
@@ -438,12 +492,15 @@ fn test_leopard_gf16_reconstruct_multiple_missing() {
     let input_snapshots: Vec<Option<Vec<u8>>> = shards
         .iter()
         .enumerate()
-        .map(|(i, s)| if !erased.contains(&i) { Some(s.clone()) } else { None })
+        .map(|(i, s)| {
+            if !erased.contains(&i) {
+                Some(s.clone())
+            } else {
+                None
+            }
+        })
         .collect();
-    let input_data: Vec<Option<&[u8]>> = input_snapshots
-        .iter()
-        .map(|o| o.as_deref())
-        .collect();
+    let input_data: Vec<Option<&[u8]>> = input_snapshots.iter().map(|o| o.as_deref()).collect();
     let mut outputs: Vec<&mut [u8]> = shards.iter_mut().map(|s| s.as_mut_slice()).collect();
 
     decode::reconstruct_with_tables16(
@@ -457,12 +514,17 @@ fn test_leopard_gf16_reconstruct_multiple_missing() {
     .unwrap();
 
     for (i, original) in &originals {
-        assert_eq!(outputs[*i], original.as_slice(), "recovered shard {i} should match original");
+        assert_eq!(
+            outputs[*i],
+            original.as_slice(),
+            "recovered shard {i} should match original"
+        );
     }
 }
 
 /// Verify the full decode pipeline with manual step-by-step computation.
 #[test]
+#[allow(clippy::needless_range_loop, clippy::vec_init_then_push)]
 fn test_leopard_gf16_decode_pipeline_manual() {
     let data_shards = 3;
     let parity_shards = 2;
@@ -510,7 +572,11 @@ fn test_leopard_gf16_decode_pipeline_manual() {
     )
     .unwrap();
 
-    assert_eq!(outputs[0], original_0.as_slice(), "recovered shard 0 should match original");
+    assert_eq!(
+        outputs[0],
+        original_0.as_slice(),
+        "recovered shard 0 should match original"
+    );
 }
 
 #[test]
@@ -524,9 +590,10 @@ fn test_leopard_gf16_reconstruct_simple_1plus1() {
 
     encode::encode_with_tables16(data_shards, parity_shards, &data, &mut parity).unwrap();
 
-    let mut shards: Vec<Vec<u8>> = Vec::new();
-    shards.push(vec![0u8; shard_size]); // missing data shard 0
-    shards.push(parity[0].clone());
+    let mut shards: Vec<Vec<u8>> = vec![
+        vec![0u8; shard_size], // missing data shard 0
+        parity[0].clone(),
+    ];
 
     let original_0 = data[0].clone();
 
@@ -549,7 +616,11 @@ fn test_leopard_gf16_reconstruct_simple_1plus1() {
     )
     .unwrap();
 
-    assert_eq!(outputs[0], original_0.as_slice(), "recovered shard 0 should match original");
+    assert_eq!(
+        outputs[0],
+        original_0.as_slice(),
+        "recovered shard 0 should match original"
+    );
 }
 
 #[test]
@@ -563,14 +634,22 @@ fn test_leopard_gf16_encode_parity_values() {
 
     // Print the fft_skew values used for encoding
     let m = 2usize;
-    let skew = &tables.fft_skew[m-1..]; // fft_skew[1..]
+    let skew = &tables.fft_skew[m - 1..]; // fft_skew[1..]
     println!("skew (fft_skew[1..]): {:?}", &skew[..8]);
-    println!("skew[1] = 0x{:04x} (used by first IFFT final_stage)", skew[1]);
-    println!("skew[3] = 0x{:04x} (used by second IFFT final_stage)", skew[3]);
+    println!(
+        "skew[1] = 0x{:04x} (used by first IFFT final_stage)",
+        skew[1]
+    );
+    println!(
+        "skew[3] = 0x{:04x} (used by second IFFT final_stage)",
+        skew[3]
+    );
 
     let mut data: Vec<Vec<u8>> = Vec::new();
     for i in 0..data_shards {
-        let shard: Vec<u8> = (0..shard_size).map(|j| ((i * 64 + j) & 0xFF) as u8).collect();
+        let shard: Vec<u8> = (0..shard_size)
+            .map(|j| ((i * 64 + j) & 0xFF) as u8)
+            .collect();
         data.push(shard);
     }
     let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; parity_shards];
@@ -581,8 +660,12 @@ fn test_leopard_gf16_encode_parity_values() {
     println!("parity[1][:16] = {:?}", &parity[1][..16]);
 
     // Go reference parity values for the same input:
-    let go_parity0: [u8; 16] = [59, 148, 199, 104, 147, 60, 111, 192, 227, 76, 31, 176, 75, 228, 183, 24];
-    let go_parity1: [u8; 16] = [251, 85, 5, 171, 87, 249, 169, 7, 43, 133, 213, 123, 135, 41, 121, 215];
+    let go_parity0: [u8; 16] = [
+        59, 148, 199, 104, 147, 60, 111, 192, 227, 76, 31, 176, 75, 228, 183, 24,
+    ];
+    let go_parity1: [u8; 16] = [
+        251, 85, 5, 171, 87, 249, 169, 7, 43, 133, 213, 123, 135, 41, 121, 215,
+    ];
 
     assert_eq!(&parity[0][..16], &go_parity0, "parity[0] mismatch with Go");
     assert_eq!(&parity[1][..16], &go_parity1, "parity[1] mismatch with Go");
@@ -615,7 +698,10 @@ fn test_leopard_gf16_encode_coefficients() {
         for p in 0..parity_shards {
             let got = parity[p][0] as u16 | ((parity[p][1] as u16) << 8);
             let exp = expected[p][data_idx];
-            assert_eq!(got, exp, "coeff[data{data_idx}][parity{p}] = 0x{got:04x}, expected 0x{exp:04x}");
+            assert_eq!(
+                got, exp,
+                "coeff[data{data_idx}][parity{p}] = 0x{got:04x}, expected 0x{exp:04x}"
+            );
         }
     }
 }

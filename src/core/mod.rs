@@ -5,8 +5,8 @@ pub(crate) mod cache_detect;
 mod codec;
 mod encode;
 mod leopard;
-pub(crate) mod leopard_gf8;
 pub(crate) mod leopard_gf16;
+pub(crate) mod leopard_gf8;
 mod metrics;
 mod options;
 #[cfg(feature = "std")]

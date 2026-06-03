@@ -234,7 +234,7 @@ fn write_block<W: std::io::Write>(
                     return Err(StreamError::write(
                         shard_offset + i,
                         std::io::Error::new(std::io::ErrorKind::WriteZero, "write returned 0"),
-                    ))
+                    ));
                 }
                 Ok(n) => written += n,
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
@@ -292,8 +292,10 @@ impl super::ReedSolomon<crate::galois_8::Field> {
 
             // Encode.
             let data_refs: Vec<&[u8]> = data_bufs.iter().map(|b| &b[..actual_len]).collect();
-            let mut parity_refs: Vec<&mut [u8]> =
-                parity_bufs.iter_mut().map(|b| &mut b[..actual_len]).collect();
+            let mut parity_refs: Vec<&mut [u8]> = parity_bufs
+                .iter_mut()
+                .map(|b| &mut b[..actual_len])
+                .collect();
 
             self.encode_sep(&data_refs, &mut parity_refs)
                 .map_err(|e| StreamError::codec(0, e))?;
@@ -320,9 +322,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
 
         debug_assert_eq!(shards.len(), total);
 
-        let mut bufs: Vec<Vec<u8>> = (0..total)
-            .map(|_| Vec::with_capacity(block_size))
-            .collect();
+        let mut bufs: Vec<Vec<u8>> = (0..total).map(|_| Vec::with_capacity(block_size)).collect();
 
         loop {
             let (all_eof, actual_len) = read_block_all(shards, &mut bufs, block_size)?;
@@ -374,10 +374,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
 
         let missing_count = present.iter().filter(|&&p| !p).count();
         if missing_count > self.parity_shard_count {
-            return Err(StreamError::codec(
-                0,
-                crate::Error::TooFewShardsPresent,
-            ));
+            return Err(StreamError::codec(0, crate::Error::TooFewShardsPresent));
         }
 
         // Strategy: read present shards into buffers per block, reconstruct,
@@ -385,7 +382,13 @@ impl super::ReedSolomon<crate::galois_8::Field> {
 
         // Pre-allocate read buffers for present shards only.
         let mut bufs: Vec<Vec<u8>> = (0..total)
-            .map(|i| if present[i] { Vec::with_capacity(block_size) } else { Vec::new() })
+            .map(|i| {
+                if present[i] {
+                    Vec::with_capacity(block_size)
+                } else {
+                    Vec::new()
+                }
+            })
             .collect();
 
         loop {
@@ -415,7 +418,9 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             }
 
             // Compute actual_len from present shards only.
-            let actual_len = bufs.iter().enumerate()
+            let actual_len = bufs
+                .iter()
+                .enumerate()
                 .filter(|(idx, _)| present[*idx])
                 .find_map(|(_, b)| if b.is_empty() { None } else { Some(b.len()) })
                 .unwrap_or(0);
@@ -429,7 +434,13 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             }
 
             let mut reconstruct_bufs: Vec<Option<Vec<u8>>> = (0..total)
-                .map(|i| if present[i] { Some(bufs[i].clone()) } else { None })
+                .map(|i| {
+                    if present[i] {
+                        Some(bufs[i].clone())
+                    } else {
+                        None
+                    }
+                })
                 .collect();
 
             self.reconstruct(&mut reconstruct_bufs)
@@ -460,7 +471,9 @@ mod tests {
 
     fn random_data(len: usize) -> Vec<u8> {
         // Simple deterministic fill for reproducibility.
-        (0..len).map(|i| (i.wrapping_mul(73).wrapping_add(17)) as u8).collect()
+        (0..len)
+            .map(|i| (i.wrapping_mul(73).wrapping_add(17)) as u8)
+            .collect()
     }
 
     #[test]
@@ -585,9 +598,10 @@ mod tests {
         }
         let mut all_readers: Vec<&[u8]> = all_data;
 
-        assert!(rs
-            .verify_stream(&mut all_readers, &StreamOptions::default())
-            .unwrap());
+        assert!(
+            rs.verify_stream(&mut all_readers, &StreamOptions::default())
+                .unwrap()
+        );
     }
 
     #[test]
@@ -610,9 +624,10 @@ mod tests {
         }
         let mut all_readers: Vec<&[u8]> = all_data;
 
-        assert!(!rs
-            .verify_stream(&mut all_readers, &StreamOptions::default())
-            .unwrap());
+        assert!(
+            !rs.verify_stream(&mut all_readers, &StreamOptions::default())
+                .unwrap()
+        );
     }
 
     #[test]
@@ -628,7 +643,7 @@ mod tests {
 
         // data[0] is missing — use empty Cursor.
         let mut shards: Vec<std::io::Cursor<Vec<u8>>> = vec![
-            std::io::Cursor::new(Vec::new()),           // missing
+            std::io::Cursor::new(Vec::new()), // missing
             std::io::Cursor::new(d[1].clone()),
             std::io::Cursor::new(d[2].clone()),
             std::io::Cursor::new(parity_writers[0].clone()),
@@ -691,7 +706,7 @@ mod tests {
 
         // Missing shard 0 — empty Cursor; present shards have data.
         let mut shards: Vec<std::io::Cursor<Vec<u8>>> = vec![
-            std::io::Cursor::new(Vec::new()),           // missing
+            std::io::Cursor::new(Vec::new()), // missing
             std::io::Cursor::new(d[1].clone()),
             std::io::Cursor::new(d[2].clone()),
             std::io::Cursor::new(parity_writers[0].clone()),
@@ -703,8 +718,20 @@ mod tests {
 
         // Shard 0 recovered into the empty cursor's inner Vec.
         let recovered = shards[0].get_ref();
-        assert_eq!(recovered.len(), d[0].len(), "recovered len {} != expected len {}", recovered.len(), d[0].len());
-        assert_eq!(recovered, &d[0], "recovered: {:?}, expected: {:?}", &recovered[..8], &d[0][..8]);
+        assert_eq!(
+            recovered.len(),
+            d[0].len(),
+            "recovered len {} != expected len {}",
+            recovered.len(),
+            d[0].len()
+        );
+        assert_eq!(
+            recovered,
+            &d[0],
+            "recovered: {:?}, expected: {:?}",
+            &recovered[..8],
+            &d[0][..8]
+        );
     }
 
     #[test]
@@ -719,7 +746,10 @@ mod tests {
 
     #[test]
     fn test_stream_error_display() {
-        let e = StreamError::read(3, std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof"));
+        let e = StreamError::read(
+            3,
+            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof"),
+        );
         let s = format!("{e}");
         assert!(s.contains("shard 3"));
         assert!(s.contains("eof"));

@@ -91,6 +91,7 @@ struct IfftDit8Plan {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
 enum IfftProfilePhase {
     FirstGroup,
     LaterGroup,
@@ -246,9 +247,7 @@ pub(crate) fn leopard_gf8_profile_stats() -> LeopardGf8ProfileStats {
         ifft_stage_calls: PROFILE8.ifft_stage_calls.load(Ordering::Relaxed),
         first_group_ifft_calls: PROFILE8.first_group_ifft_calls.load(Ordering::Relaxed),
         later_group_ifft_calls: PROFILE8.later_group_ifft_calls.load(Ordering::Relaxed),
-        remainder_group_ifft_calls: PROFILE8
-            .remainder_group_ifft_calls
-            .load(Ordering::Relaxed),
+        remainder_group_ifft_calls: PROFILE8.remainder_group_ifft_calls.load(Ordering::Relaxed),
         first_group_input_copy_bytes: PROFILE8
             .first_group_input_copy_bytes
             .load(Ordering::Relaxed),
@@ -258,19 +257,13 @@ pub(crate) fn leopard_gf8_profile_stats() -> LeopardGf8ProfileStats {
         remainder_group_input_copy_bytes: PROFILE8
             .remainder_group_input_copy_bytes
             .load(Ordering::Relaxed),
-        first_group_zero_fill_bytes: PROFILE8
-            .first_group_zero_fill_bytes
-            .load(Ordering::Relaxed),
-        later_group_zero_fill_bytes: PROFILE8
-            .later_group_zero_fill_bytes
-            .load(Ordering::Relaxed),
+        first_group_zero_fill_bytes: PROFILE8.first_group_zero_fill_bytes.load(Ordering::Relaxed),
+        later_group_zero_fill_bytes: PROFILE8.later_group_zero_fill_bytes.load(Ordering::Relaxed),
         remainder_group_zero_fill_bytes: PROFILE8
             .remainder_group_zero_fill_bytes
             .load(Ordering::Relaxed),
         later_group_xor_bytes: PROFILE8.later_group_xor_bytes.load(Ordering::Relaxed),
-        remainder_group_xor_bytes: PROFILE8
-            .remainder_group_xor_bytes
-            .load(Ordering::Relaxed),
+        remainder_group_xor_bytes: PROFILE8.remainder_group_xor_bytes.load(Ordering::Relaxed),
         output_writeback_calls: PROFILE8.output_writeback_calls.load(Ordering::Relaxed),
         input_copy_bytes: PROFILE8.input_copy_bytes.load(Ordering::Relaxed),
         zero_fill_bytes: PROFILE8.zero_fill_bytes.load(Ordering::Relaxed),
@@ -554,7 +547,14 @@ pub(crate) fn reconstruct_with_tables(
     parity_shards: usize,
 ) -> Result<(), Error> {
     let tables = init_leopard_gf8_tables();
-    decode::reconstruct_with_tables(present, outputs, input_data, data_shards, parity_shards, tables)
+    decode::reconstruct_with_tables(
+        present,
+        outputs,
+        input_data,
+        data_shards,
+        parity_shards,
+        tables,
+    )
 }
 
 fn ceil_pow2(n: usize) -> usize {

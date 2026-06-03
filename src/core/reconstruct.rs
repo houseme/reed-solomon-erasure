@@ -133,7 +133,6 @@ impl<F: Field> ReedSolomon<F> {
             .enumerate()
             .for_each(|(i_row, output)| {
                 let matrix_row = matrix_rows[i_row];
-                let output = output.as_mut();
 
                 let mut start = 0;
                 while start < shard_len {
@@ -556,7 +555,7 @@ impl<F: Field> ReedSolomon<F> {
 
             for (idx, recovered) in required_missing_data_indices
                 .into_iter()
-                .zip(recovered_data.into_iter())
+                .zip(recovered_data)
             {
                 match shards[idx].get_or_initialize(shard_len) {
                     Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(&recovered),
@@ -593,6 +592,7 @@ impl<F: Field> ReedSolomon<F> {
     /// Builds the `present`, `outputs`, and `input_data` arrays required by
     /// the Forney-based FFT decoder, calls it, then writes recovered data
     /// back into the original shard objects.
+    #[allow(clippy::needless_range_loop)]
     fn reconstruct_leopard_gf8<T: ReconstructShard<F>>(
         &self,
         slices: &mut [T],
@@ -620,9 +620,7 @@ impl<F: Field> ReedSolomon<F> {
         }
 
         // Allocate output buffers for every shard.
-        let mut output_bufs: Vec<Vec<u8>> = (0..total)
-            .map(|_| vec![0u8; shard_len])
-            .collect();
+        let mut output_bufs: Vec<Vec<u8>> = (0..total).map(|_| vec![0u8; shard_len]).collect();
 
         // Copy present shard data into output buffers.
         for i in 0..total {
@@ -675,6 +673,7 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     /// Leopard GF16 reconstruction dispatch.
+    #[allow(clippy::needless_range_loop)]
     fn reconstruct_leopard_gf16<T: ReconstructShard<F>>(
         &self,
         slices: &mut [T],
@@ -698,9 +697,7 @@ impl<F: Field> ReedSolomon<F> {
             }
         }
 
-        let mut output_bufs: Vec<Vec<u8>> = (0..total)
-            .map(|_| vec![0u8; shard_len])
-            .collect();
+        let mut output_bufs: Vec<Vec<u8>> = (0..total).map(|_| vec![0u8; shard_len]).collect();
 
         for i in 0..total {
             if let Some(ptr) = raw_data[i] {

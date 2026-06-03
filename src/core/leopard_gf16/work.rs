@@ -24,8 +24,8 @@ impl FlatWork16 {
     pub(crate) fn new(lanes: usize, lane_len: usize) -> Self {
         let len_elems = lanes * lane_len;
         let len_bytes = len_elems * core::mem::size_of::<u16>();
-        let layout = Layout::from_size_align(len_bytes, WORK_ALIGNMENT)
-            .expect("FlatWork16 layout overflow");
+        let layout =
+            Layout::from_size_align(len_bytes, WORK_ALIGNMENT).expect("FlatWork16 layout overflow");
         let ptr = unsafe { alloc_zeroed(layout) }.cast::<u16>();
         if ptr.is_null() {
             handle_alloc_error(layout);

@@ -22,10 +22,8 @@ pub(crate) fn build_tables16() -> LeopardGf16Tables {
 fn init_luts16() -> (Box<[u16; ORDER16]>, Box<[u16; ORDER16 * 2]>) {
     // Cantor basis for GF(2^16), matching the Go library (klauspost/reedsolomon).
     const CANTOR_BASIS16: [u16; super::BITWIDTH16] = [
-        0x0001, 0xACCA, 0x3C0E, 0x163E,
-        0xC582, 0xED2E, 0x914C, 0x4012,
-        0x6C98, 0x10D8, 0x6A72, 0xB900,
-        0xFDB8, 0xFB34, 0xFF38, 0x991E,
+        0x0001, 0xACCA, 0x3C0E, 0x163E, 0xC582, 0xED2E, 0x914C, 0x4012, 0x6C98, 0x10D8, 0x6A72,
+        0xB900, 0xFDB8, 0xFB34, 0xFF38, 0x991E,
     ];
 
     let mut log_lut = Box::new([0u16; ORDER16]);
@@ -67,6 +65,7 @@ fn init_luts16() -> (Box<[u16; ORDER16]>, Box<[u16; ORDER16 * 2]>) {
     (log_lut, exp_lut)
 }
 
+#[allow(clippy::needless_range_loop)]
 fn init_fft_skew16(
     log_lut: &[u16; ORDER16],
     exp_lut: &[u16; ORDER16 * 2],

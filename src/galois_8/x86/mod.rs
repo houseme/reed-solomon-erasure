@@ -32,7 +32,12 @@ pub(crate) mod codegen;
 
 /// Shared helper: returns the low and high nibble multiplication table halves for coefficient `c`.
 #[cfg(all(
-    any(feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
+    any(
+        feature = "simd-ssse3",
+        feature = "simd-avx2",
+        feature = "simd-avx512",
+        feature = "simd-gfni"
+    ),
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))

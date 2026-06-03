@@ -56,6 +56,7 @@ fn init_luts8() -> (Box<[u8; ORDER8]>, Box<[u8; ORDER8]>) {
     (log_lut, exp_lut)
 }
 
+#[allow(clippy::needless_range_loop)]
 fn init_fft_skew8(
     log_lut: &[u8; ORDER8],
     exp_lut: &[u8; ORDER8],
@@ -104,11 +105,13 @@ fn init_fft_skew8(
 }
 
 fn init_mul8_lut(log_lut: &[u8; ORDER8], exp_lut: &[u8; ORDER8]) -> Box<[Mul8Lut; ORDER8]> {
-    let mut mul_luts = Box::new([Mul8Lut {
-        value: [0u8; 256],
-        low: [0u8; 16],
-        high: [0u8; 16],
-    }; ORDER8]);
+    let mut mul_luts = Box::new(
+        [Mul8Lut {
+            value: [0u8; 256],
+            low: [0u8; 16],
+            high: [0u8; 16],
+        }; ORDER8],
+    );
 
     for log_m in 0..ORDER8 {
         let mut tmp = [0u8; 64];

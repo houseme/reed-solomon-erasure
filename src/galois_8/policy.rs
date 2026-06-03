@@ -168,7 +168,7 @@ impl crate::ReedSolomon<super::Field> {
         for (idx, recovered) in plan
             .required_missing_data_indices
             .into_iter()
-            .zip(recovered_data.into_iter())
+            .zip(recovered_data)
         {
             shards[idx] = Some(recovered);
         }
@@ -235,7 +235,7 @@ impl crate::ReedSolomon<super::Field> {
                     .filter(|&i| required[i] && shards[i].is_none())
                     .collect()
             })
-            .unwrap_or_else(smallvec::SmallVec::new);
+            .unwrap_or_default();
 
         Ok(OptionVecReconstructPlan {
             shard_len,
@@ -525,6 +525,7 @@ impl crate::ReedSolomon<super::Field> {
     }
 
     #[cfg(feature = "std")]
+    #[allow(clippy::needless_range_loop)]
     pub fn decode_idx(
         &self,
         dst: &mut [Option<Vec<u8>>],
@@ -653,7 +654,7 @@ impl crate::ReedSolomon<super::Field> {
                 }
             }
 
-            for (&idx, recovered) in output_indices.iter().zip(recovered_data.into_iter()) {
+            for (&idx, recovered) in output_indices.iter().zip(recovered_data) {
                 let dst_shard = dst[idx]
                     .as_deref_mut()
                     .expect("output index was collected only for present destinations");

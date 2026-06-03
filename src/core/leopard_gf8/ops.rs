@@ -26,6 +26,7 @@ pub(super) fn sub_mod8(a: u8, b: u8) -> u8 {
     (dif.wrapping_add(dif >> BITWIDTH8)) as u8
 }
 
+#[allow(clippy::explicit_counter_loop)]
 pub(super) fn fwht8(data: &mut [u8; ORDER8]) {
     let mut dist = 1usize;
     let mut dist4 = 4usize;
@@ -59,6 +60,7 @@ pub(super) fn fwht8(data: &mut [u8; ORDER8]) {
 ///
 /// Matches Go's `fwht(data, mtrunc)` exactly — sequential radix-2 butterflies
 /// within each block, positions beyond mtrunc untouched.
+#[allow(clippy::explicit_counter_loop)]
 pub(super) fn fwht8_mtrunc(data: &mut [u8], mtrunc: usize) {
     debug_assert_eq!(data.len(), ORDER8);
     let mut dist = 1usize;
@@ -93,6 +95,7 @@ pub(super) fn fwht8_mtrunc(data: &mut [u8], mtrunc: usize) {
 ///
 /// Used by the decode path where the transform size is `m + data_shards`
 /// (not necessarily ORDER8). Matches Go's `fwht(data, len)`.
+#[allow(clippy::explicit_counter_loop)]
 pub(super) fn fwht_variable(data: &mut [u8]) {
     let n = data.len();
     debug_assert!(n.is_power_of_two());
@@ -168,7 +171,6 @@ pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
         unsafe {
             slice_xor_neon(input, out);
         }
-        return;
     }
 
     #[cfg(not(target_arch = "aarch64"))]
@@ -311,13 +313,7 @@ fn lut_xor_prebuilt(dst: &mut [u8], src: &[u8], low: &[u8; 16], high: &[u8; 16],
 }
 
 #[inline]
-fn lut_xor_impl(
-    dst: &mut [u8],
-    src: &[u8],
-    low: &[u8; 16],
-    high: &[u8; 16],
-    lut: &[u8; 256],
-) {
+fn lut_xor_impl(dst: &mut [u8], src: &[u8], low: &[u8; 16], high: &[u8; 16], lut: &[u8; 256]) {
     debug_assert_eq!(dst.len(), src.len());
 
     #[cfg(target_arch = "x86_64")]
@@ -422,8 +418,8 @@ unsafe fn lut_xor_ssse3_prebuilt(
     lut: &[u8; 256],
 ) {
     use core::arch::x86_64::{
-        __m128i, _mm_and_si128, _mm_loadu_si128, _mm_set1_epi8, _mm_shuffle_epi8,
-        _mm_srli_epi64, _mm_storeu_si128, _mm_xor_si128,
+        __m128i, _mm_and_si128, _mm_loadu_si128, _mm_set1_epi8, _mm_shuffle_epi8, _mm_srli_epi64,
+        _mm_storeu_si128, _mm_xor_si128,
     };
 
     let low_tbl: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
@@ -564,6 +560,7 @@ pub(super) fn ifft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 25
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(super) fn fft_dit4_full_lut(
     a: &mut [u8],
@@ -593,6 +590,7 @@ pub(super) fn fft_dit4_full_lut(
 
 /// Zero-copy forward radix-4 butterfly using pre-allocated scratch buffer
 /// and pre-split nibble tables.
+#[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(super) fn fft_dit4_full_lut_scratch(
     a: &mut [u8],
@@ -628,6 +626,7 @@ pub(super) fn fft_dit4_full_lut_scratch(
     dit2_step_prebuilt(c, d, log_m23, lut23, lut23_low, lut23_high);
 }
 
+#[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(super) fn ifft_dit4_full_lut(
     a: &mut [u8],
@@ -660,6 +659,7 @@ pub(super) fn ifft_dit4_full_lut(
 
 /// Zero-copy inverse radix-4 butterfly using pre-allocated scratch buffer
 /// and pre-split nibble tables.
+#[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(super) fn ifft_dit4_full_lut_scratch(
     a: &mut [u8],
@@ -710,8 +710,7 @@ unsafe fn lut_xor_neon_prebuilt(
     lut: &[u8; 256],
 ) {
     use core::arch::aarch64::{
-        uint8x16_t, vandq_u8, vdupq_n_u8, vld1q_u8, vqtbl1q_u8, vshrq_n_u8, vst1q_u8,
-        veorq_u8,
+        uint8x16_t, vandq_u8, vdupq_n_u8, veorq_u8, vld1q_u8, vqtbl1q_u8, vshrq_n_u8, vst1q_u8,
     };
 
     // SAFETY: low and high are valid 16-byte arrays.
@@ -728,10 +727,7 @@ unsafe fn lut_xor_neon_prebuilt(
         let dv = unsafe { vld1q_u8(d_chunk.as_ptr()) };
         let lo = vandq_u8(sv, nibble_mask);
         let hi = vandq_u8(vshrq_n_u8::<4>(sv), nibble_mask);
-        let product = veorq_u8(
-            vqtbl1q_u8(low_tbl, lo),
-            vqtbl1q_u8(high_tbl, hi),
-        );
+        let product = veorq_u8(vqtbl1q_u8(low_tbl, lo), vqtbl1q_u8(high_tbl, hi));
         unsafe { vst1q_u8(d_chunk.as_mut_ptr(), veorq_u8(dv, product)) };
     }
 

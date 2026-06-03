@@ -34,6 +34,7 @@ fn test_print_tables() {
 
 /// Direct encode-then-decode roundtrip at the low-level API.
 #[test]
+#[allow(clippy::needless_range_loop)]
 fn test_encode_decode_roundtrip_direct() {
     let data_shards = 2usize;
     let parity_shards = 2usize;
@@ -59,7 +60,10 @@ fn test_encode_decode_roundtrip_direct() {
 
     // Verify parity is non-trivial.
     for p in 0..parity_shards {
-        assert_ne!(parity[p], data[0], "parity[{p}] should not be trivial copy of data[0]");
+        assert_ne!(
+            parity[p], data[0],
+            "parity[{p}] should not be trivial copy of data[0]"
+        );
     }
     // Go produces: parity[0] = [168, 169, ...], parity[1] = [232, 233, ...]
     println!("parity[0] first 8: {:?}", &parity[0][..8]);
@@ -94,10 +98,14 @@ fn test_encode_decode_roundtrip_direct() {
         data_shards,
         parity_shards,
         tables,
-    ).unwrap();
+    )
+    .unwrap();
 
     // Verify recovered shard 0 matches original data[0].
-    assert_eq!(output_bufs[0], data[0], "recovered shard 0 should match original data[0]");
+    assert_eq!(
+        output_bufs[0], data[0],
+        "recovered shard 0 should match original data[0]"
+    );
 }
 
 /// Test GF8 with (3,2) parameters and uniform data — mirrors the failing GF16 test.
@@ -118,8 +126,10 @@ fn test_gf8_roundtrip_3_2_uniform() {
     {
         let (data_part, parity_part) = shards.split_at_mut(data_shards);
         let data_refs: Vec<&[u8]> = data_part.iter().map(|d| d.as_slice()).collect();
-        let mut parity_refs: Vec<&mut [u8]> = parity_part.iter_mut().map(|p| p.as_mut_slice()).collect();
-        encode::encode_with_tables(data_shards, parity_shards, &data_refs, &mut parity_refs).unwrap();
+        let mut parity_refs: Vec<&mut [u8]> =
+            parity_part.iter_mut().map(|p| p.as_mut_slice()).collect();
+        encode::encode_with_tables(data_shards, parity_shards, &data_refs, &mut parity_refs)
+            .unwrap();
     }
 
     println!("shard[0][..8] = {:?}", &shards[0][..8]);
@@ -137,10 +147,7 @@ fn test_gf8_roundtrip_3_2_uniform() {
         .enumerate()
         .map(|(i, s)| if i != 0 { Some(s.clone()) } else { None })
         .collect();
-    let input_data: Vec<Option<&[u8]>> = input_snapshots
-        .iter()
-        .map(|o| o.as_deref())
-        .collect();
+    let input_data: Vec<Option<&[u8]>> = input_snapshots.iter().map(|o| o.as_deref()).collect();
     let mut outputs: Vec<&mut [u8]> = shards.iter_mut().map(|s| s.as_mut_slice()).collect();
 
     decode::reconstruct_with_tables(
@@ -154,5 +161,9 @@ fn test_gf8_roundtrip_3_2_uniform() {
     .unwrap();
 
     println!("recovered[0][..8] = {:?}", &outputs[0][..8]);
-    assert_eq!(outputs[0], original_0.as_slice(), "recovered shard 0 should match original");
+    assert_eq!(
+        outputs[0],
+        original_0.as_slice(),
+        "recovered shard 0 should match original"
+    );
 }

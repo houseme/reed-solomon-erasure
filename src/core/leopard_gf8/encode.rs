@@ -7,8 +7,8 @@ use crate::errors::Error;
 use std::sync::atomic::Ordering;
 
 use super::ops::{
-    fft_dit2, fft_dit4_full_lut_scratch, get_pair_mut, ifft_dit2,
-    ifft_dit4_full_lut_scratch, slice_xor,
+    fft_dit2, fft_dit4_full_lut_scratch, get_pair_mut, ifft_dit2, ifft_dit4_full_lut_scratch,
+    slice_xor,
 };
 use super::work::FlatWork;
 
@@ -17,7 +17,7 @@ use super::work::FlatWork;
 #[cfg(feature = "std")]
 thread_local! {
     static FLAT_WORK_CACHE: std::cell::RefCell<Option<FlatWork>> =
-        std::cell::RefCell::new(None);
+        const { std::cell::RefCell::new(None) };
 }
 
 // Thread-local scratch buffer for zero-copy FFT butterflies.
@@ -26,7 +26,7 @@ thread_local! {
 #[cfg(feature = "std")]
 thread_local! {
     static SCRATCH_CACHE: std::cell::RefCell<Option<Vec<u8>>> =
-        std::cell::RefCell::new(None);
+        const { std::cell::RefCell::new(None) };
 }
 use super::{
     FftDit8Plan, IfftDit8Plan, IfftProfilePhase, LeopardGf8EncodeDriver, LeopardGf8Tables,
@@ -309,10 +309,14 @@ fn dit4_at<W: AsMut<[u8]>>(
             dit4_at_decomposed(dir, work, base, dist, log_m01, log_m23, log_m02, tables);
         }
         Dit4Strategy::Direct => {
-            dit4_at_direct(dir, work, base, dist, log_m01, log_m23, log_m02, tables, scratch);
+            dit4_at_direct(
+                dir, work, base, dist, log_m01, log_m23, log_m02, tables, scratch,
+            );
         }
         Dit4Strategy::DirectSafe => {
-            dit4_at_direct_safe(dir, work, base, dist, log_m01, log_m23, log_m02, tables, scratch);
+            dit4_at_direct_safe(
+                dir, work, base, dist, log_m01, log_m23, log_m02, tables, scratch,
+            );
         }
         Dit4Strategy::Auto => unreachable!("Auto resolved in active_dit4_strategy"),
     }
@@ -320,6 +324,7 @@ fn dit4_at<W: AsMut<[u8]>>(
 
 /// Strategy A: safe pairwise decomposition via get_pair_mut + fft_dit2.
 /// Each byte position is touched 4 times (once per dit2 call).
+#[allow(clippy::too_many_arguments)]
 fn dit4_at_decomposed<W: AsMut<[u8]>>(
     dir: TransformDir,
     work: &mut [W],
@@ -339,6 +344,7 @@ fn dit4_at_decomposed<W: AsMut<[u8]>>(
 /// Uses raw pointer arithmetic for the common case (all 4 lanes in bounds),
 /// falls back to safe pairwise decomposition for boundary cases.
 /// Uses pre-allocated `scratch` buffer and pre-split nibble tables.
+#[allow(clippy::too_many_arguments)]
 fn dit4_at_direct<W: AsMut<[u8]>>(
     dir: TransformDir,
     work: &mut [W],
@@ -374,21 +380,43 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
             match dir {
                 TransformDir::Forward => {
                     fft_dit4_full_lut_scratch(
-                        a_ref, b_ref, c_ref, d_ref,
-                        log_m01, log_m23, log_m02,
-                        lut01, &mul01.low, &mul01.high,
-                        lut23, &mul23.low, &mul23.high,
-                        lut02, &mul02.low, &mul02.high,
+                        a_ref,
+                        b_ref,
+                        c_ref,
+                        d_ref,
+                        log_m01,
+                        log_m23,
+                        log_m02,
+                        lut01,
+                        &mul01.low,
+                        &mul01.high,
+                        lut23,
+                        &mul23.low,
+                        &mul23.high,
+                        lut02,
+                        &mul02.low,
+                        &mul02.high,
                         scratch,
                     );
                 }
                 TransformDir::Inverse => {
                     ifft_dit4_full_lut_scratch(
-                        a_ref, b_ref, c_ref, d_ref,
-                        log_m01, log_m23, log_m02,
-                        lut01, &mul01.low, &mul01.high,
-                        lut23, &mul23.low, &mul23.high,
-                        lut02, &mul02.low, &mul02.high,
+                        a_ref,
+                        b_ref,
+                        c_ref,
+                        d_ref,
+                        log_m01,
+                        log_m23,
+                        log_m02,
+                        lut01,
+                        &mul01.low,
+                        &mul01.high,
+                        lut23,
+                        &mul23.low,
+                        &mul23.high,
+                        lut02,
+                        &mul02.low,
+                        &mul02.high,
                         scratch,
                     );
                 }
@@ -412,21 +440,43 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
                 match dir {
                     TransformDir::Forward => {
                         fft_dit4_full_lut_scratch(
-                            a_ref, b_ref, c_ref, d_ref,
-                            log_m01, log_m23, log_m02,
-                            lut01, &mul01.low, &mul01.high,
-                            lut23, &mul23.low, &mul23.high,
-                            lut02, &mul02.low, &mul02.high,
+                            a_ref,
+                            b_ref,
+                            c_ref,
+                            d_ref,
+                            log_m01,
+                            log_m23,
+                            log_m02,
+                            lut01,
+                            &mul01.low,
+                            &mul01.high,
+                            lut23,
+                            &mul23.low,
+                            &mul23.high,
+                            lut02,
+                            &mul02.low,
+                            &mul02.high,
                             scratch,
                         );
                     }
                     TransformDir::Inverse => {
                         ifft_dit4_full_lut_scratch(
-                            a_ref, b_ref, c_ref, d_ref,
-                            log_m01, log_m23, log_m02,
-                            lut01, &mul01.low, &mul01.high,
-                            lut23, &mul23.low, &mul23.high,
-                            lut02, &mul02.low, &mul02.high,
+                            a_ref,
+                            b_ref,
+                            c_ref,
+                            d_ref,
+                            log_m01,
+                            log_m23,
+                            log_m02,
+                            lut01,
+                            &mul01.low,
+                            &mul01.high,
+                            lut23,
+                            &mul23.low,
+                            &mul23.high,
+                            lut02,
+                            &mul02.low,
+                            &mul02.high,
                             scratch,
                         );
                     }
@@ -442,6 +492,7 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
 /// Each byte position is touched once (single-pass), but has extra index
 /// arithmetic overhead from 3 split_at_mut calls per iteration.
 /// Uses pre-allocated `scratch` buffer and pre-split nibble tables.
+#[allow(clippy::too_many_arguments)]
 fn dit4_at_direct_safe<W: AsMut<[u8]>>(
     dir: TransformDir,
     work: &mut [W],
@@ -476,21 +527,43 @@ fn dit4_at_direct_safe<W: AsMut<[u8]>>(
             match dir {
                 TransformDir::Forward => {
                     fft_dit4_full_lut_scratch(
-                        a_ref, b_ref, c_ref, d_ref,
-                        log_m01, log_m23, log_m02,
-                        lut01, &mul01.low, &mul01.high,
-                        lut23, &mul23.low, &mul23.high,
-                        lut02, &mul02.low, &mul02.high,
+                        a_ref,
+                        b_ref,
+                        c_ref,
+                        d_ref,
+                        log_m01,
+                        log_m23,
+                        log_m02,
+                        lut01,
+                        &mul01.low,
+                        &mul01.high,
+                        lut23,
+                        &mul23.low,
+                        &mul23.high,
+                        lut02,
+                        &mul02.low,
+                        &mul02.high,
                         scratch,
                     );
                 }
                 TransformDir::Inverse => {
                     ifft_dit4_full_lut_scratch(
-                        a_ref, b_ref, c_ref, d_ref,
-                        log_m01, log_m23, log_m02,
-                        lut01, &mul01.low, &mul01.high,
-                        lut23, &mul23.low, &mul23.high,
-                        lut02, &mul02.low, &mul02.high,
+                        a_ref,
+                        b_ref,
+                        c_ref,
+                        d_ref,
+                        log_m01,
+                        log_m23,
+                        log_m02,
+                        lut01,
+                        &mul01.low,
+                        &mul01.high,
+                        lut23,
+                        &mul23.low,
+                        &mul23.high,
+                        lut02,
+                        &mul02.low,
+                        &mul02.high,
                         scratch,
                     );
                 }
@@ -503,6 +576,7 @@ fn dit4_at_direct_safe<W: AsMut<[u8]>>(
 
 /// Single-iteration pairwise decomposition for boundary cases.
 /// Used by direct and direct-safe strategies when d >= work.len().
+#[allow(clippy::too_many_arguments)]
 fn dit4_pairwise_one<W: AsMut<[u8]>>(
     dir: TransformDir,
     work: &mut [W],
@@ -526,36 +600,61 @@ fn dit4_pairwise_one<W: AsMut<[u8]>>(
     }
     match dir {
         TransformDir::Forward => {
-            if has_a && has_c && let Some((r1, r2)) = get_pair_mut(work, a, c) {
+            if has_a
+                && has_c
+                && let Some((r1, r2)) = get_pair_mut(work, a, c)
+            {
                 fft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
             }
-            if has_b && has_d && let Some((r1, r2)) = get_pair_mut(work, b, d) {
+            if has_b
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut(work, b, d)
+            {
                 fft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
             }
-            if has_a && has_b && let Some((r1, r2)) = get_pair_mut(work, a, b) {
+            if has_a
+                && has_b
+                && let Some((r1, r2)) = get_pair_mut(work, a, b)
+            {
                 fft_dit2(r1.as_mut(), r2.as_mut(), log_m01, tables);
             }
-            if has_c && has_d && let Some((r1, r2)) = get_pair_mut(work, c, d) {
+            if has_c
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut(work, c, d)
+            {
                 fft_dit2(r1.as_mut(), r2.as_mut(), log_m23, tables);
             }
         }
         TransformDir::Inverse => {
-            if has_a && has_b && let Some((r1, r2)) = get_pair_mut(work, a, b) {
+            if has_a
+                && has_b
+                && let Some((r1, r2)) = get_pair_mut(work, a, b)
+            {
                 ifft_dit2(r1.as_mut(), r2.as_mut(), log_m01, tables);
             }
-            if has_c && has_d && let Some((r1, r2)) = get_pair_mut(work, c, d) {
+            if has_c
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut(work, c, d)
+            {
                 ifft_dit2(r1.as_mut(), r2.as_mut(), log_m23, tables);
             }
-            if has_a && has_c && let Some((r1, r2)) = get_pair_mut(work, a, c) {
+            if has_a
+                && has_c
+                && let Some((r1, r2)) = get_pair_mut(work, a, c)
+            {
                 ifft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
             }
-            if has_b && has_d && let Some((r1, r2)) = get_pair_mut(work, b, d) {
+            if has_b
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut(work, b, d)
+            {
                 ifft_dit2(r1.as_mut(), r2.as_mut(), log_m02, tables);
             }
         }
     }
 }
 
+#[allow(clippy::needless_range_loop)]
 fn zero_trailing_lanes<W: AsMut<[u8]>>(work: &mut [W], start_lane: usize, count: usize) {
     for i in start_lane..start_lane + count {
         work[i].as_mut().fill(0);
@@ -593,6 +692,7 @@ fn fft_dit8_with_plan<W: AsMut<[u8]>>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     data: &[T],
     plan: &IfftDit8Plan,
@@ -653,7 +753,11 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
             );
         }
 
-        zero_trailing_lanes(work, plan.clear_start, plan.m.saturating_sub(plan.clear_start));
+        zero_trailing_lanes(
+            work,
+            plan.clear_start,
+            plan.m.saturating_sub(plan.clear_start),
+        );
         #[cfg(feature = "std")]
         PROFILE8.add_zero_fill_bytes(phase, plan.m.saturating_sub(plan.clear_start) * size);
 
@@ -704,4 +808,3 @@ pub(super) fn fft_dit8<W: AsRef<[u8]> + AsMut<[u8]>>(
     let mut scratch = vec![0u8; lane_len];
     fft_dit8_with_plan(work, &plan, tables, 0, &mut scratch);
 }
-

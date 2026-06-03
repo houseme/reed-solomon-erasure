@@ -275,7 +275,7 @@ fn selected_small_file_cases() -> Vec<BenchCase> {
     cases
         .iter()
         .copied()
-        .filter(|case| wanted.iter().any(|label| *label == case.label))
+        .filter(|case| wanted.contains(&case.label))
         .collect()
 }
 

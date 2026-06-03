@@ -1,8 +1,6 @@
 use crate::errors::Error;
 
-use super::{
-    LeopardGf16EncodeDriver, MODULUS16, WORK_SIZE16, ceil_pow2, init_leopard_gf16_tables,
-};
+use super::{LeopardGf16EncodeDriver, MODULUS16, WORK_SIZE16, ceil_pow2, init_leopard_gf16_tables};
 use crate::core::leopard::validate_leopard_shard_len;
 
 pub(super) fn build_leopard_gf16_encode_driver(

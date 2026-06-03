@@ -89,7 +89,6 @@ struct LeopardEncodeProfileResult {
     output_writeback_bytes: usize,
 }
 
-
 fn run_operation(case: BenchCase, operation: Operation, iterations: usize) -> SmokeResult {
     let seed = derived_seed(operation, case);
     let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
@@ -299,6 +298,7 @@ fn write_results(results: &[SmokeResult]) {
     assert!(csv_path.exists());
 }
 
+#[allow(clippy::needless_range_loop)]
 fn run_update_compare(
     case: BenchCase,
     changed_shards: usize,
@@ -410,6 +410,7 @@ fn write_update_compare_results(case: BenchCase, results: &[UpdateCompareResult]
     assert!(csv_path.exists());
 }
 
+#[allow(clippy::needless_range_loop)]
 fn run_decode_idx_compare(case: BenchCase, iterations: usize) -> DecodeIdxCompareResult {
     let seed = derived_seed(Operation::ReconstructData, case) ^ 0xD1u64;
     let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();

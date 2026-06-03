@@ -105,7 +105,7 @@ pub(crate) fn leopard_gf8_state<F: Field>(
 }
 
 pub(crate) fn validate_leopard_shard_len(shard_len: usize) -> Result<(), Error> {
-    if shard_len == 0 || shard_len % 64 != 0 {
+    if shard_len == 0 || !shard_len.is_multiple_of(64) {
         return Err(Error::IncorrectShardSize);
     }
 
@@ -210,6 +210,6 @@ pub(crate) fn leopard_gf16_reconstruct(
         input_data,
         data_shards,
         parity_shards,
-        &tables,
+        tables,
     )
 }

@@ -300,7 +300,7 @@ impl<F: Field> ReedSolomon<F> {
         let mut _parity_refs: smallvec::SmallVec<[&[u8]; 32]> =
             smallvec::SmallVec::with_capacity(parity_rows.len());
         for r in parity_rows.iter() {
-            let slice: &[F::Elem] = *r;
+            let slice: &[F::Elem] = r;
             _parity_refs.push(unsafe {
                 core::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len())
             });
@@ -454,7 +454,10 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
-    pub(crate) fn encode_leopard_gf8_sep<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+    pub(crate) fn encode_leopard_gf8_sep<
+        T: AsRef<[F::Elem]>,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
+    >(
         &self,
         data: &[T],
         parity: &mut [U],
@@ -485,7 +488,10 @@ impl<F: Field> ReedSolomon<F> {
         )
     }
 
-    pub(crate) fn encode_leopard_gf16_sep<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
+    pub(crate) fn encode_leopard_gf16_sep<
+        T: AsRef<[F::Elem]>,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
+    >(
         &self,
         data: &[T],
         parity: &mut [U],

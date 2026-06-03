@@ -4,25 +4,26 @@ use alloc::vec::Vec;
 
 use crate::errors::Error;
 
-use super::ops::{fft_dit2_16, fft_dit4_16, get_pair_mut_16, ifft_dit2_16, ifft_dit4_16, slice_xor_u16};
+use super::ops::{
+    fft_dit2_16, fft_dit4_16, get_pair_mut_16, ifft_dit2_16, ifft_dit4_16, slice_xor_u16,
+};
 use super::work::FlatWork16;
 
 use super::{
-    FftDit16Plan, IfftDit16Plan, LeopardGf16EncodeDriver, LeopardGf16Tables,
-    build_fft_dit16_plan, build_ifft_dit16_plan,
-    build_leopard_gf16_encode_driver, init_leopard_gf16_tables,
+    FftDit16Plan, IfftDit16Plan, LeopardGf16EncodeDriver, LeopardGf16Tables, build_fft_dit16_plan,
+    build_ifft_dit16_plan, build_leopard_gf16_encode_driver, init_leopard_gf16_tables,
 };
 
 #[cfg(feature = "std")]
 thread_local! {
     static FLAT_WORK16_CACHE: std::cell::RefCell<Option<FlatWork16>> =
-        std::cell::RefCell::new(None);
+        const { std::cell::RefCell::new(None) };
 }
 
 #[cfg(feature = "std")]
 thread_local! {
     static SCRATCH16_CACHE: std::cell::RefCell<Option<Vec<u16>>> =
-        std::cell::RefCell::new(None);
+        const { std::cell::RefCell::new(None) };
 }
 
 pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
@@ -113,9 +114,7 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
     // Reinterpret split-layout data as u16 slices.
     let data_u16: Vec<&[u16]> = converted_data
         .iter()
-        .map(|d| {
-            unsafe { core::slice::from_raw_parts(d.as_ptr().cast::<u16>(), shard_u16_len) }
-        })
+        .map(|d| unsafe { core::slice::from_raw_parts(d.as_ptr().cast::<u16>(), shard_u16_len) })
         .collect();
 
     let mut offset = 0usize;
@@ -171,12 +170,7 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
                 );
             }
 
-            fft_dit16_with_plan(
-                &mut work_views[..driver.m],
-                &fft_plan,
-                tables,
-                &mut scratch,
-            );
+            fft_dit16_with_plan(&mut work_views[..driver.m], &fft_plan, tables, &mut scratch);
 
             // Write back parity shards (u16 → u8 reinterpretation).
             for (idx, output) in parity.iter_mut().enumerate() {
@@ -251,6 +245,7 @@ fn fft_dit16_with_plan(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn ifft_dit_encoder16_with_plan<T: AsRef<[u16]>>(
     data: &[T],
     plan: &IfftDit16Plan,
@@ -295,7 +290,11 @@ fn ifft_dit_encoder16_with_plan<T: AsRef<[u16]>>(
             );
         }
 
-        zero_trailing_lanes_16(work, plan.clear_start, plan.m.saturating_sub(plan.clear_start));
+        zero_trailing_lanes_16(
+            work,
+            plan.clear_start,
+            plan.m.saturating_sub(plan.clear_start),
+        );
 
         for block in &plan.later_blocks {
             dit4_at_16(
@@ -330,6 +329,7 @@ fn ifft_dit_encoder16_with_plan<T: AsRef<[u16]>>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dit4_at_16(
     forward: bool,
     work: &mut [&mut [u16]],
@@ -357,9 +357,13 @@ fn dit4_at_16(
                 (a_ref, b_ref, c_ref, d_ref)
             };
             if forward {
-                fft_dit4_16(a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables);
+                fft_dit4_16(
+                    a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables,
+                );
             } else {
-                ifft_dit4_16(a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables);
+                ifft_dit4_16(
+                    a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables,
+                );
             }
             let _ = scratch;
         } else {
@@ -368,6 +372,7 @@ fn dit4_at_16(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dit4_pairwise_16(
     forward: bool,
     work: &mut [&mut [u16]],
@@ -387,46 +392,38 @@ fn dit4_pairwise_16(
     let has_d = d < work.len();
 
     if forward {
-        if has_a && has_c {
-            if let Some((r1, r2)) = get_pair_mut_16(work, a, c) {
+        if has_a && has_c
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, c) {
                 fft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
-        if has_b && has_d {
-            if let Some((r1, r2)) = get_pair_mut_16(work, b, d) {
+        if has_b && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, b, d) {
                 fft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
-        if has_a && has_b {
-            if let Some((r1, r2)) = get_pair_mut_16(work, a, b) {
+        if has_a && has_b
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, b) {
                 fft_dit2_16(r1, r2, log_m01, tables);
             }
-        }
-        if has_c && has_d {
-            if let Some((r1, r2)) = get_pair_mut_16(work, c, d) {
+        if has_c && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, c, d) {
                 fft_dit2_16(r1, r2, log_m23, tables);
             }
-        }
     } else {
-        if has_a && has_b {
-            if let Some((r1, r2)) = get_pair_mut_16(work, a, b) {
+        if has_a && has_b
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, b) {
                 ifft_dit2_16(r1, r2, log_m01, tables);
             }
-        }
-        if has_c && has_d {
-            if let Some((r1, r2)) = get_pair_mut_16(work, c, d) {
+        if has_c && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, c, d) {
                 ifft_dit2_16(r1, r2, log_m23, tables);
             }
-        }
-        if has_a && has_c {
-            if let Some((r1, r2)) = get_pair_mut_16(work, a, c) {
+        if has_a && has_c
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, c) {
                 ifft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
-        if has_b && has_d {
-            if let Some((r1, r2)) = get_pair_mut_16(work, b, d) {
+        if has_b && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, b, d) {
                 ifft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
     }
 }

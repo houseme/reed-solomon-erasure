@@ -286,7 +286,10 @@ mod tests {
     #[test]
     fn test_default_policy_has_l2_cache() {
         let policy = ParallelPolicy::default();
-        assert!(policy.l2_cache_bytes > 0, "L2 cache should be detected or defaulted");
+        assert!(
+            policy.l2_cache_bytes > 0,
+            "L2 cache should be detected or defaulted"
+        );
     }
 
     #[test]

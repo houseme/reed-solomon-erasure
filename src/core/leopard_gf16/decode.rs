@@ -5,8 +5,8 @@ use alloc::vec::Vec;
 use crate::errors::Error;
 
 use super::ops::{
-    fft_dit2_16, fft_dit4_16, fwht16_mtrunc, fwht16_variable,
-    ifft_dit2_16, ifft_dit4_16, mulgf16, slice_xor_u16,
+    fft_dit2_16, fft_dit4_16, fwht16_mtrunc, fwht16_variable, ifft_dit2_16, ifft_dit4_16, mulgf16,
+    slice_xor_u16,
 };
 use super::work::FlatWork16;
 use super::{
@@ -30,7 +30,7 @@ pub(crate) fn build_leopard_gf16_decode_driver(
     parity_shards: usize,
     shard_size: usize,
 ) -> Result<LeopardGf16DecodeDriver, Error> {
-    if shard_size == 0 || shard_size % 64 != 0 {
+    if shard_size == 0 || !shard_size.is_multiple_of(64) {
         return Err(Error::IncorrectShardSize);
     }
     let _tables = init_leopard_gf16_tables();
@@ -56,6 +56,7 @@ pub(crate) fn build_leopard_gf16_decode_driver(
     })
 }
 
+#[allow(clippy::needless_range_loop)]
 fn compute_error_locs16(
     missing_parity: &[usize],
     missing_data: &[usize],
@@ -92,6 +93,7 @@ fn compute_error_locs16(
     err_locs
 }
 
+#[allow(clippy::needless_range_loop)]
 pub(crate) fn reconstruct_with_tables16(
     present: &[bool],
     outputs: &mut [&mut [u8]],
@@ -101,12 +103,15 @@ pub(crate) fn reconstruct_with_tables16(
     tables: &LeopardGf16Tables,
 ) -> Result<(), Error> {
     let total_shards = data_shards + parity_shards;
-    if present.len() != total_shards || outputs.len() != total_shards || input_data.len() != total_shards {
+    if present.len() != total_shards
+        || outputs.len() != total_shards
+        || input_data.len() != total_shards
+    {
         return Err(Error::IncorrectShardSize);
     }
 
     let shard_size = outputs.first().map(|s| s.len()).unwrap_or(0);
-    if shard_size == 0 || shard_size % 64 != 0 {
+    if shard_size == 0 || !shard_size.is_multiple_of(64) {
         return Err(Error::IncorrectShardSize);
     }
 
@@ -152,8 +157,8 @@ pub(crate) fn reconstruct_with_tables16(
         }
     }
 
-    let ifft_plan = build_ifft_decode_dit16_plan(input_count, driver.n, &*tables.fft_skew);
-    let fft_plan = super::build_fft_dit16_plan(driver.work_size, driver.n, &*tables.fft_skew);
+    let ifft_plan = build_ifft_decode_dit16_plan(input_count, driver.n, &tables.fft_skew);
+    let fft_plan = super::build_fft_dit16_plan(driver.work_size, driver.n, &tables.fft_skew);
 
     // Convert all present input shards from user byte layout to Go's GF16 split layout.
     let converted_inputs: Vec<Option<Vec<u8>>> = input_data
@@ -185,7 +190,9 @@ pub(crate) fn reconstruct_with_tables16(
         for i in 0..data_shards {
             let work_idx = driver.m + i;
             if present[i] {
-                let data_bytes = converted_inputs[i].as_ref().ok_or(Error::TooFewShardsPresent)?;
+                let data_bytes = converted_inputs[i]
+                    .as_ref()
+                    .ok_or(Error::TooFewShardsPresent)?;
                 let data_u16: &[u16] = unsafe {
                     core::slice::from_raw_parts(data_bytes.as_ptr().cast::<u16>(), shard_u16_len)
                 };
@@ -202,7 +209,9 @@ pub(crate) fn reconstruct_with_tables16(
         for i in 0..parity_shards {
             let shard_idx = data_shards + i;
             if present[shard_idx] {
-                let data_bytes = converted_inputs[shard_idx].as_ref().ok_or(Error::TooFewShardsPresent)?;
+                let data_bytes = converted_inputs[shard_idx]
+                    .as_ref()
+                    .ok_or(Error::TooFewShardsPresent)?;
                 let data_u16: &[u16] = unsafe {
                     core::slice::from_raw_parts(data_bytes.as_ptr().cast::<u16>(), shard_u16_len)
                 };
@@ -333,11 +342,10 @@ pub(super) fn ifft_dit_decode16_with_plan(
         for i in 0..stage.dist {
             let a = i;
             let b = i + stage.dist;
-            if b < n {
-                if let Some((ra, rb)) = get_pair_mut_flat16(work, a, b) {
+            if b < n
+                && let Some((ra, rb)) = get_pair_mut_flat16(work, a, b) {
                     ifft_dit2_16(ra, rb, stage.log_m, tables);
                 }
-            }
         }
     }
 }
@@ -368,11 +376,10 @@ pub(super) fn fft_dit_decode16_with_plan(
     for stage in &plan.final_stage {
         let a = stage.r;
         let b = stage.r + stage.dist;
-        if b < n {
-            if let Some((ra, rb)) = get_pair_mut_flat16(work, a, b) {
+        if b < n
+            && let Some((ra, rb)) = get_pair_mut_flat16(work, a, b) {
                 fft_dit2_16(ra, rb, stage.log_m, tables);
             }
-        }
     }
 }
 
@@ -394,11 +401,11 @@ fn compute_formal_derivative16(work: &mut FlatWork16, n: usize, _size: usize) {
     }
 }
 
-fn get_pair_mut_flat16<'a>(
-    work: &'a mut FlatWork16,
+fn get_pair_mut_flat16(
+    work: &mut FlatWork16,
     i: usize,
     j: usize,
-) -> Option<(&'a mut [u16], &'a mut [u16])> {
+) -> Option<(&mut [u16], &mut [u16])> {
     if i == j || i >= work.lanes() || j >= work.lanes() {
         return None;
     }
@@ -410,6 +417,7 @@ fn get_pair_mut_flat16<'a>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dit4_decode_at_16(
     forward: bool,
     work: &mut FlatWork16,
@@ -440,15 +448,20 @@ fn dit4_decode_at_16(
             let c_ref = &mut *(*ptr).lane_mut(c);
             let d_ref = &mut *(*ptr).lane_mut(d);
             if forward {
-                fft_dit4_16(a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables);
+                fft_dit4_16(
+                    a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables,
+                );
             } else {
-                ifft_dit4_16(a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables);
+                ifft_dit4_16(
+                    a_ref, b_ref, c_ref, d_ref, log_m01, log_m23, log_m02, tables,
+                );
             }
         }
         let _ = scratch;
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dit4_decode_pairwise_16(
     forward: bool,
     work: &mut FlatWork16,
@@ -472,46 +485,38 @@ fn dit4_decode_pairwise_16(
     }
 
     if forward {
-        if has_a && has_c {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, a, c) {
+        if has_a && has_c
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, a, c) {
                 fft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
-        if has_b && has_d {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, b, d) {
+        if has_b && has_d
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, b, d) {
                 fft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
-        if has_a && has_b {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, a, b) {
+        if has_a && has_b
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, a, b) {
                 fft_dit2_16(r1, r2, log_m01, tables);
             }
-        }
-        if has_c && has_d {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, c, d) {
+        if has_c && has_d
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, c, d) {
                 fft_dit2_16(r1, r2, log_m23, tables);
             }
-        }
     } else {
-        if has_a && has_b {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, a, b) {
+        if has_a && has_b
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, a, b) {
                 ifft_dit2_16(r1, r2, log_m01, tables);
             }
-        }
-        if has_c && has_d {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, c, d) {
+        if has_c && has_d
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, c, d) {
                 ifft_dit2_16(r1, r2, log_m23, tables);
             }
-        }
-        if has_a && has_c {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, a, c) {
+        if has_a && has_c
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, a, c) {
                 ifft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
-        if has_b && has_d {
-            if let Some((r1, r2)) = get_pair_mut_flat16(work, b, d) {
+        if has_b && has_d
+            && let Some((r1, r2)) = get_pair_mut_flat16(work, b, d) {
                 ifft_dit2_16(r1, r2, log_m02, tables);
             }
-        }
     }
 }

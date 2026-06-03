@@ -316,7 +316,13 @@ fn test_same_as_maybe_ffi() {
 }
 
 #[cfg(all(
-    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
+    any(
+        feature = "simd-neon",
+        feature = "simd-ssse3",
+        feature = "simd-avx2",
+        feature = "simd-avx512",
+        feature = "simd-gfni"
+    ),
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -342,7 +348,13 @@ fn test_simd_c_matches_scalar_mul_slice() {
 }
 
 #[cfg(all(
-    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
+    any(
+        feature = "simd-neon",
+        feature = "simd-ssse3",
+        feature = "simd-avx2",
+        feature = "simd-avx512",
+        feature = "simd-gfni"
+    ),
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios")),
@@ -515,7 +527,13 @@ fn test_rust_neon_xor_schedule_env_constant() {
 #[test]
 fn test_active_backend_metadata() {
     #[cfg(all(
-        any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
+        any(
+            feature = "simd-neon",
+            feature = "simd-ssse3",
+            feature = "simd-avx2",
+            feature = "simd-avx512",
+            feature = "simd-gfni"
+        ),
         any(target_arch = "x86_64", target_arch = "aarch64"),
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
@@ -576,7 +594,13 @@ fn test_active_backend_metadata() {
     }
 
     #[cfg(not(all(
-        any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
+        any(
+            feature = "simd-neon",
+            feature = "simd-ssse3",
+            feature = "simd-avx2",
+            feature = "simd-avx512",
+            feature = "simd-gfni"
+        ),
         any(target_arch = "x86_64", target_arch = "aarch64"),
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
@@ -588,7 +612,13 @@ fn test_active_backend_metadata() {
 }
 
 #[cfg(all(
-    any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"),
+    any(
+        feature = "simd-neon",
+        feature = "simd-ssse3",
+        feature = "simd-avx2",
+        feature = "simd-avx512",
+        feature = "simd-gfni"
+    ),
     feature = "std",
     any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),

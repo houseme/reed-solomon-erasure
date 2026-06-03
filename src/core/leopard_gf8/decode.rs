@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use crate::errors::Error;
 
 use super::ops::{
-    fft_dit2, fft_dit4_full_lut_scratch, fwht8_mtrunc, fwht_variable, ifft_dit2,
+    fft_dit2, fft_dit4_full_lut_scratch, fwht_variable, fwht8_mtrunc, ifft_dit2,
     ifft_dit4_full_lut_scratch, mulgf8, slice_xor,
 };
 use super::work::FlatWork;
@@ -31,7 +31,7 @@ pub(crate) fn build_leopard_gf8_decode_driver(
     parity_shards: usize,
     shard_size: usize,
 ) -> Result<LeopardGf8DecodeDriver, Error> {
-    if shard_size == 0 || shard_size % 64 != 0 {
+    if shard_size == 0 || !shard_size.is_multiple_of(64) {
         return Err(Error::IncorrectShardSize);
     }
     let _tables = init_leopard_gf8_tables();
@@ -65,9 +65,10 @@ pub(crate) fn build_leopard_gf8_decode_driver(
 /// - Positions m..m+data_shards: data shard erasures
 ///
 /// Returns an ORDER8-sized array of error locator values in log domain.
+#[allow(clippy::needless_range_loop)]
 fn compute_error_locs(
-    missing_parity: &[usize],  // shard indices (data_shards..total) of missing parity
-    missing_data: &[usize],    // shard indices (0..data_shards) of missing data
+    missing_parity: &[usize], // shard indices (data_shards..total) of missing parity
+    missing_data: &[usize],   // shard indices (0..data_shards) of missing data
     driver: &LeopardGf8DecodeDriver,
     tables: &LeopardGf8Tables,
 ) -> [u8; super::ORDER8] {
@@ -121,13 +122,14 @@ fn compute_error_locs(
 ///
 /// # Arguments
 /// * `present` - Slice indicating which shards are present (true = present, false = missing).
-///               Length must be `data_shards + parity_shards`.
-///               Parity shards at indices `data_shards..total`, data at `0..data_shards`.
+///   Length must be `data_shards + parity_shards`.
+///   Parity shards at indices `data_shards..total`, data at `0..data_shards`.
 /// * `outputs` - Mutable slice of output buffers, one per shard. All must be the same length.
-///               Present shards are overwritten with their input (no-op for correctness).
-///               Missing shards are recovered and written here.
+///   Present shards are overwritten with their input (no-op for correctness).
+///   Missing shards are recovered and written here.
 /// * `input_data` - Slice of input shard data for present shards. Only present shard
-///                  data is read; missing shard entries are ignored.
+///   data is read; missing shard entries are ignored.
+#[allow(clippy::needless_range_loop)]
 pub(crate) fn reconstruct_with_tables(
     present: &[bool],
     outputs: &mut [&mut [u8]],
@@ -137,13 +139,16 @@ pub(crate) fn reconstruct_with_tables(
     tables: &LeopardGf8Tables,
 ) -> Result<(), Error> {
     let total_shards = data_shards + parity_shards;
-    if present.len() != total_shards || outputs.len() != total_shards || input_data.len() != total_shards {
+    if present.len() != total_shards
+        || outputs.len() != total_shards
+        || input_data.len() != total_shards
+    {
         return Err(Error::IncorrectShardSize);
     }
 
     // Find shard size from first present shard.
     let shard_size = outputs.first().map(|s| s.len()).unwrap_or(0);
-    if shard_size == 0 || shard_size % 64 != 0 {
+    if shard_size == 0 || !shard_size.is_multiple_of(64) {
         return Err(Error::IncorrectShardSize);
     }
 
@@ -191,8 +196,8 @@ pub(crate) fn reconstruct_with_tables(
     }
 
     // Build FFT and IFFT plans.
-    let ifft_plan = build_ifft_decode_dit8_plan(input_count, driver.n, &*tables.fft_skew);
-    let fft_plan = build_fft_dit8_plan(driver.work_size, driver.n, &*tables.fft_skew);
+    let ifft_plan = build_ifft_decode_dit8_plan(input_count, driver.n, &tables.fft_skew);
+    let fft_plan = build_fft_dit8_plan(driver.work_size, driver.n, &tables.fft_skew);
 
     // Allocate work buffers and scratch.
     let chunk_cap = core::cmp::min(driver.shard_size, driver.chunk_size);
@@ -228,13 +233,10 @@ pub(crate) fn reconstruct_with_tables(
         for i in 0..parity_shards {
             let shard_idx = data_shards + i;
             if present[shard_idx] {
-                let data = input_data[shard_idx].as_ref().ok_or(Error::TooFewShardsPresent)?;
-                mulgf8(
-                    work.lane_mut(i),
-                    &data[offset..end],
-                    err_locs[i],
-                    tables,
-                );
+                let data = input_data[shard_idx]
+                    .as_ref()
+                    .ok_or(Error::TooFewShardsPresent)?;
+                mulgf8(work.lane_mut(i), &data[offset..end], err_locs[i], tables);
             } else {
                 work.lane_mut(i)[..size].fill(0);
             }
@@ -343,11 +345,10 @@ fn ifft_dit_decode8_with_plan(
         for i in 0..stage.dist {
             let a = i;
             let b = i + stage.dist;
-            if b < n {
-                if let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
+            if b < n
+                && let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
                     ifft_dit2(ra, rb, stage.log_m, tables);
                 }
-            }
         }
     }
 }
@@ -379,11 +380,10 @@ fn fft_dit_decode8_with_plan(
     for stage in &plan.final_stage {
         let a = stage.r;
         let b = stage.r + stage.dist;
-        if b < n {
-            if let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
+        if b < n
+            && let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
                 fft_dit2(ra, rb, stage.log_m, tables);
             }
-        }
     }
 }
 
@@ -398,21 +398,20 @@ fn compute_formal_derivative(work: &mut FlatWork, n: usize, _size: usize) {
         for j in 0..width {
             let dst_idx = i - width + j;
             let src_idx = i + j;
-            if src_idx < n && dst_idx < n {
-                if let Some((s, d)) = get_pair_mut_flat(work, src_idx, dst_idx) {
+            if src_idx < n && dst_idx < n
+                && let Some((s, d)) = get_pair_mut_flat(work, src_idx, dst_idx) {
                     slice_xor(s, d);
                 }
-            }
         }
     }
 }
 
 /// Helper to get two mutable lane references from FlatWork.
-fn get_pair_mut_flat<'a>(
-    work: &'a mut FlatWork,
+fn get_pair_mut_flat(
+    work: &mut FlatWork,
     i: usize,
     j: usize,
-) -> Option<(&'a mut [u8], &'a mut [u8])> {
+) -> Option<(&mut [u8], &mut [u8])> {
     if i == j || i >= work.lanes() || j >= work.lanes() {
         return None;
     }
@@ -459,11 +458,14 @@ fn dit4_decode_at(
             continue;
         }
 
-        dit4_decode_direct(dir, work, a, dist, log_m01, log_m23, log_m02, mul01, mul23, mul02, scratch);
+        dit4_decode_direct(
+            dir, work, a, dist, log_m01, log_m23, log_m02, mul01, mul23, mul02, scratch,
+        );
     }
 }
 
 /// Direct 4-lane butterfly using FlatWork split.
+#[allow(clippy::too_many_arguments)]
 fn dit4_decode_direct(
     dir: TransformDir,
     work: &mut FlatWork,
@@ -494,21 +496,43 @@ fn dit4_decode_direct(
     match dir {
         TransformDir::Forward => {
             fft_dit4_full_lut_scratch(
-                a_ref, b_ref, c_ref, d_ref,
-                log_m01, log_m23, log_m02,
-                &mul01.value, &mul01.low, &mul01.high,
-                &mul23.value, &mul23.low, &mul23.high,
-                &mul02.value, &mul02.low, &mul02.high,
+                a_ref,
+                b_ref,
+                c_ref,
+                d_ref,
+                log_m01,
+                log_m23,
+                log_m02,
+                &mul01.value,
+                &mul01.low,
+                &mul01.high,
+                &mul23.value,
+                &mul23.low,
+                &mul23.high,
+                &mul02.value,
+                &mul02.low,
+                &mul02.high,
                 scratch,
             );
         }
         TransformDir::Inverse => {
             ifft_dit4_full_lut_scratch(
-                a_ref, b_ref, c_ref, d_ref,
-                log_m01, log_m23, log_m02,
-                &mul01.value, &mul01.low, &mul01.high,
-                &mul23.value, &mul23.low, &mul23.high,
-                &mul02.value, &mul02.low, &mul02.high,
+                a_ref,
+                b_ref,
+                c_ref,
+                d_ref,
+                log_m01,
+                log_m23,
+                log_m02,
+                &mul01.value,
+                &mul01.low,
+                &mul01.high,
+                &mul23.value,
+                &mul23.low,
+                &mul23.high,
+                &mul02.value,
+                &mul02.low,
+                &mul02.high,
                 scratch,
             );
         }
@@ -516,6 +540,7 @@ fn dit4_decode_direct(
 }
 
 /// Pairwise fallback for boundary cases in decode path.
+#[allow(clippy::too_many_arguments)]
 fn dit4_decode_pairwise_one(
     dir: TransformDir,
     work: &mut FlatWork,
@@ -540,48 +565,40 @@ fn dit4_decode_pairwise_one(
 
     match dir {
         TransformDir::Forward => {
-            if has_a && has_c {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, a, c) {
+            if has_a && has_c
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, c) {
                     fft_dit2(r1, r2, log_m02, tables);
                 }
-            }
-            if has_b && has_d {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, b, d) {
+            if has_b && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, b, d) {
                     fft_dit2(r1, r2, log_m02, tables);
                 }
-            }
-            if has_a && has_b {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, a, b) {
+            if has_a && has_b
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, b) {
                     fft_dit2(r1, r2, log_m01, tables);
                 }
-            }
-            if has_c && has_d {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, c, d) {
+            if has_c && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, c, d) {
                     fft_dit2(r1, r2, log_m23, tables);
                 }
-            }
         }
         TransformDir::Inverse => {
-            if has_a && has_b {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, a, b) {
+            if has_a && has_b
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, b) {
                     ifft_dit2(r1, r2, log_m01, tables);
                 }
-            }
-            if has_c && has_d {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, c, d) {
+            if has_c && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, c, d) {
                     ifft_dit2(r1, r2, log_m23, tables);
                 }
-            }
-            if has_a && has_c {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, a, c) {
+            if has_a && has_c
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, c) {
                     ifft_dit2(r1, r2, log_m02, tables);
                 }
-            }
-            if has_b && has_d {
-                if let Some((r1, r2)) = get_pair_mut_flat(work, b, d) {
+            if has_b && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, b, d) {
                     ifft_dit2(r1, r2, log_m02, tables);
                 }
-            }
         }
     }
 }
