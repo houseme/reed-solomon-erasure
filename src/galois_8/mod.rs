@@ -7,6 +7,7 @@ mod aligned;
 mod backend;
 mod legacy;
 mod policy;
+mod ppc64;
 mod profile;
 mod scalar;
 pub(crate) mod x86;

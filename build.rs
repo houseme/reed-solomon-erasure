@@ -9,6 +9,7 @@ use std::path::Path;
     feature = "simd-avx2",
     feature = "simd-avx512",
     feature = "simd-gfni",
+    feature = "simd-vsx",
 ))]
 extern crate cc;
 
@@ -22,6 +23,7 @@ const GENERATING_POLYNOMIAL: usize = 29;
     feature = "simd-avx2",
     feature = "simd-avx512",
     feature = "simd-gfni",
+    feature = "simd-vsx",
 ))]
 #[derive(Copy, Clone)]
 enum SimdCBuildTarget {
@@ -167,7 +169,8 @@ fn write_tables() {
         feature = "simd-ssse3",
         feature = "simd-avx2",
         feature = "simd-avx512",
-        feature = "simd-gfni"
+        feature = "simd-gfni",
+        feature = "simd-vsx"
     )) {
         let (mul_table_low, mul_table_high) = gen_mul_table_half(&log_table, &exp_table);
 
@@ -199,7 +202,7 @@ fn should_compile_simd_c_for_target() -> bool {
     let target_env = target_cfg("CARGO_CFG_TARGET_ENV");
     let target_os = target_cfg("CARGO_CFG_TARGET_OS");
 
-    let arch_supported = matches!(target_arch.as_str(), "x86_64" | "aarch64");
+    let arch_supported = matches!(target_arch.as_str(), "x86_64" | "aarch64" | "powerpc64");
     let env_supported = target_env != "msvc";
     let os_supported = !matches!(target_os.as_str(), "android" | "ios");
 
@@ -278,7 +281,8 @@ fn compile_simd_c() {
     feature = "simd-ssse3",
     feature = "simd-avx2",
     feature = "simd-avx512",
-    feature = "simd-gfni"
+    feature = "simd-gfni",
+    feature = "simd-vsx"
 )))]
 fn compile_simd_c() {}
 

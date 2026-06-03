@@ -449,7 +449,9 @@ impl super::ReedSolomon<crate::galois_8::Field> {
 
             let refs: Vec<&[u8]> = bufs.iter().map(|b| &b[..actual_len]).collect();
 
-            let valid = self.verify_par(&refs).map_err(|e| StreamError::codec(0, e))?;
+            let valid = self
+                .verify_par(&refs)
+                .map_err(|e| StreamError::codec(0, e))?;
             if !valid {
                 return Ok(false);
             }
@@ -940,7 +942,10 @@ mod tests {
             all.push(w.as_slice());
         }
         let mut all_readers: Vec<&[u8]> = all;
-        assert!(rs.verify_stream(&mut all_readers, &StreamOptions::default()).unwrap());
+        assert!(
+            rs.verify_stream(&mut all_readers, &StreamOptions::default())
+                .unwrap()
+        );
 
         // Corrupted case.
         let mut corrupted = writers[0].clone();
@@ -948,7 +953,10 @@ mod tests {
         let mut all_corrupt: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
         all_corrupt.push(corrupted.as_slice());
         all_corrupt.push(writers[1].as_slice());
-        assert!(!rs.verify_stream(&mut all_corrupt, &StreamOptions::default()).unwrap());
+        assert!(
+            !rs.verify_stream(&mut all_corrupt, &StreamOptions::default())
+                .unwrap()
+        );
     }
 
     #[test]
@@ -982,15 +990,14 @@ mod tests {
     fn test_concurrent_stream_large_blocks() {
         let rs = make_codec(10, 4);
         let total_size = 1024 * 1024; // 1 MiB
-        let block_size = 256 * 1024;  // 256 KiB blocks
+        let block_size = 256 * 1024; // 256 KiB blocks
 
         let data: Vec<Vec<u8>> = (0..10).map(|_| random_data(total_size)).collect();
         let mut readers: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
         let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 4];
 
         let opts = StreamOptions::new().with_block_size(block_size);
-        rs.encode_stream(&mut readers, &mut writers, &opts)
-            .unwrap();
+        rs.encode_stream(&mut readers, &mut writers, &opts).unwrap();
 
         // Verify all blocks.
         let mut all: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();

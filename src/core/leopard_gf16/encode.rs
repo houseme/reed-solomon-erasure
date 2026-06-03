@@ -392,38 +392,54 @@ fn dit4_pairwise_16(
     let has_d = d < work.len();
 
     if forward {
-        if has_a && has_c
-            && let Some((r1, r2)) = get_pair_mut_16(work, a, c) {
-                fft_dit2_16(r1, r2, log_m02, tables);
-            }
-        if has_b && has_d
-            && let Some((r1, r2)) = get_pair_mut_16(work, b, d) {
-                fft_dit2_16(r1, r2, log_m02, tables);
-            }
-        if has_a && has_b
-            && let Some((r1, r2)) = get_pair_mut_16(work, a, b) {
-                fft_dit2_16(r1, r2, log_m01, tables);
-            }
-        if has_c && has_d
-            && let Some((r1, r2)) = get_pair_mut_16(work, c, d) {
-                fft_dit2_16(r1, r2, log_m23, tables);
-            }
+        if has_a
+            && has_c
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, c)
+        {
+            fft_dit2_16(r1, r2, log_m02, tables);
+        }
+        if has_b
+            && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, b, d)
+        {
+            fft_dit2_16(r1, r2, log_m02, tables);
+        }
+        if has_a
+            && has_b
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, b)
+        {
+            fft_dit2_16(r1, r2, log_m01, tables);
+        }
+        if has_c
+            && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, c, d)
+        {
+            fft_dit2_16(r1, r2, log_m23, tables);
+        }
     } else {
-        if has_a && has_b
-            && let Some((r1, r2)) = get_pair_mut_16(work, a, b) {
-                ifft_dit2_16(r1, r2, log_m01, tables);
-            }
-        if has_c && has_d
-            && let Some((r1, r2)) = get_pair_mut_16(work, c, d) {
-                ifft_dit2_16(r1, r2, log_m23, tables);
-            }
-        if has_a && has_c
-            && let Some((r1, r2)) = get_pair_mut_16(work, a, c) {
-                ifft_dit2_16(r1, r2, log_m02, tables);
-            }
-        if has_b && has_d
-            && let Some((r1, r2)) = get_pair_mut_16(work, b, d) {
-                ifft_dit2_16(r1, r2, log_m02, tables);
-            }
+        if has_a
+            && has_b
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, b)
+        {
+            ifft_dit2_16(r1, r2, log_m01, tables);
+        }
+        if has_c
+            && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, c, d)
+        {
+            ifft_dit2_16(r1, r2, log_m23, tables);
+        }
+        if has_a
+            && has_c
+            && let Some((r1, r2)) = get_pair_mut_16(work, a, c)
+        {
+            ifft_dit2_16(r1, r2, log_m02, tables);
+        }
+        if has_b
+            && has_d
+            && let Some((r1, r2)) = get_pair_mut_16(work, b, d)
+        {
+            ifft_dit2_16(r1, r2, log_m02, tables);
+        }
     }
 }

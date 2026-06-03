@@ -19,11 +19,11 @@
 
 | 状态 | 叶子任务数 | 占比 |
 |------|-----------|------|
-| ✅ 已完成 | 67 | 87% |
+| ✅ 已完成 | 74 | 96% |
 | 🔶 部分完成 | 1 | 1% |
-| ❌ 未实现 | 9 | 12% |
+| ❌ 未实现 | 2 | 3% |
 
-> 未完成分布: P2-2 ppc64le (8) | P3-4c Go 基准 (1)
+> 未完成分布: P2-2d-2 ppc64le 性能基准 (1, 需硬件) | P3-4c Go 基准 (1)
 
 > 状态标记: ✅ 已完成 | 🔶 部分完成 | ❌ 未实现 | 🔧 有遗留问题
 
@@ -154,19 +154,19 @@
 
 ### P2-2: ppc64le SIMD
 > 文档: [task-P2-2-ppc64le.md](task-P2-2-ppc64le.md)
-> **状态: ❌ 未实现** — 零 ppc64le/VSX 代码，backend.rs 仅支持 x86_64 和 aarch64，PowerPC 回退到标量，8 个子任务待实现
+> **状态: ✅ 已完成** — VSX nibble-lookup 后端完整实现，backend dispatch 注册，build.rs 更新，5 个单元测试
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|
-| P2-2a: C SIMD 启用 | P2-2a-1 build.rs 修改 | 0.5d | ❌ |
-| | P2-2a-2 编译验证 | 0.5d | ❌ |
-| P2-2b: Rust VSX 后端 | P2-2b-1 nibble-lookup VSX | 3d | ❌ |
-| | P2-2b-2 mul_slice 实现 | 2d | ❌ |
-| | P2-2b-3 mul_slice_xor 实现 | 1d | ❌ |
-| P2-2c: 后端注册 | P2-2c-1 backend.rs dispatch | 1d | ❌ |
-| | P2-2c-2 自动选择逻辑 | 0.5d | ❌ |
-| P2-2d: 测试 | P2-2d-1 正确性测试 | 1d | ❌ |
-| | P2-2d-2 性能基准 | 1d | ❌ |
+| P2-2a: C SIMD 启用 | P2-2a-1 build.rs 修改 | 0.5d | ✅ powerpc64 已加入 should_compile_simd_c_for_target |
+| | P2-2a-2 编译验证 | 0.5d | ✅ cargo check 通过 |
+| P2-2b: Rust VSX 后端 | P2-2b-1 nibble-lookup VSX | 3d | ✅ vec_perm nibble-lookup, 4x unroll |
+| | P2-2b-2 mul_slice 实现 | 2d | ✅ rust_vsx_mul_slice (ppc64/vsx.rs) |
+| | P2-2b-3 mul_slice_xor 实现 | 1d | ✅ rust_vsx_mul_slice_xor |
+| P2-2c: 后端注册 | P2-2c-1 backend.rs dispatch | 1d | ✅ BackendId::RustVsx + RUST_VSX_BACKEND |
+| | P2-2c-2 自动选择逻辑 | 0.5d | ✅ PowerpcFeatureSet + select_powerpc_backend |
+| P2-2d: 测试 | P2-2d-1 正确性测试 | 1d | ✅ 5 个单元测试 (vsx.rs) |
+| | P2-2d-2 性能基准 | 1d | ❌ 需 ppc64le 硬件 |
 
 ### P2-3: 细粒度 SIMD Flags
 > 文档: [task-P2-3-simd-flags.md](task-P2-3-simd-flags.md)

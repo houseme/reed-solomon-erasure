@@ -346,9 +346,10 @@ fn ifft_dit_decode8_with_plan(
             let a = i;
             let b = i + stage.dist;
             if b < n
-                && let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
-                    ifft_dit2(ra, rb, stage.log_m, tables);
-                }
+                && let Some((ra, rb)) = get_pair_mut_flat(work, a, b)
+            {
+                ifft_dit2(ra, rb, stage.log_m, tables);
+            }
         }
     }
 }
@@ -381,9 +382,10 @@ fn fft_dit_decode8_with_plan(
         let a = stage.r;
         let b = stage.r + stage.dist;
         if b < n
-            && let Some((ra, rb)) = get_pair_mut_flat(work, a, b) {
-                fft_dit2(ra, rb, stage.log_m, tables);
-            }
+            && let Some((ra, rb)) = get_pair_mut_flat(work, a, b)
+        {
+            fft_dit2(ra, rb, stage.log_m, tables);
+        }
     }
 }
 
@@ -398,20 +400,18 @@ fn compute_formal_derivative(work: &mut FlatWork, n: usize, _size: usize) {
         for j in 0..width {
             let dst_idx = i - width + j;
             let src_idx = i + j;
-            if src_idx < n && dst_idx < n
-                && let Some((s, d)) = get_pair_mut_flat(work, src_idx, dst_idx) {
-                    slice_xor(s, d);
-                }
+            if src_idx < n
+                && dst_idx < n
+                && let Some((s, d)) = get_pair_mut_flat(work, src_idx, dst_idx)
+            {
+                slice_xor(s, d);
+            }
         }
     }
 }
 
 /// Helper to get two mutable lane references from FlatWork.
-fn get_pair_mut_flat(
-    work: &mut FlatWork,
-    i: usize,
-    j: usize,
-) -> Option<(&mut [u8], &mut [u8])> {
+fn get_pair_mut_flat(work: &mut FlatWork, i: usize, j: usize) -> Option<(&mut [u8], &mut [u8])> {
     if i == j || i >= work.lanes() || j >= work.lanes() {
         return None;
     }
@@ -565,40 +565,56 @@ fn dit4_decode_pairwise_one(
 
     match dir {
         TransformDir::Forward => {
-            if has_a && has_c
-                && let Some((r1, r2)) = get_pair_mut_flat(work, a, c) {
-                    fft_dit2(r1, r2, log_m02, tables);
-                }
-            if has_b && has_d
-                && let Some((r1, r2)) = get_pair_mut_flat(work, b, d) {
-                    fft_dit2(r1, r2, log_m02, tables);
-                }
-            if has_a && has_b
-                && let Some((r1, r2)) = get_pair_mut_flat(work, a, b) {
-                    fft_dit2(r1, r2, log_m01, tables);
-                }
-            if has_c && has_d
-                && let Some((r1, r2)) = get_pair_mut_flat(work, c, d) {
-                    fft_dit2(r1, r2, log_m23, tables);
-                }
+            if has_a
+                && has_c
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, c)
+            {
+                fft_dit2(r1, r2, log_m02, tables);
+            }
+            if has_b
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, b, d)
+            {
+                fft_dit2(r1, r2, log_m02, tables);
+            }
+            if has_a
+                && has_b
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, b)
+            {
+                fft_dit2(r1, r2, log_m01, tables);
+            }
+            if has_c
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, c, d)
+            {
+                fft_dit2(r1, r2, log_m23, tables);
+            }
         }
         TransformDir::Inverse => {
-            if has_a && has_b
-                && let Some((r1, r2)) = get_pair_mut_flat(work, a, b) {
-                    ifft_dit2(r1, r2, log_m01, tables);
-                }
-            if has_c && has_d
-                && let Some((r1, r2)) = get_pair_mut_flat(work, c, d) {
-                    ifft_dit2(r1, r2, log_m23, tables);
-                }
-            if has_a && has_c
-                && let Some((r1, r2)) = get_pair_mut_flat(work, a, c) {
-                    ifft_dit2(r1, r2, log_m02, tables);
-                }
-            if has_b && has_d
-                && let Some((r1, r2)) = get_pair_mut_flat(work, b, d) {
-                    ifft_dit2(r1, r2, log_m02, tables);
-                }
+            if has_a
+                && has_b
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, b)
+            {
+                ifft_dit2(r1, r2, log_m01, tables);
+            }
+            if has_c
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, c, d)
+            {
+                ifft_dit2(r1, r2, log_m23, tables);
+            }
+            if has_a
+                && has_c
+                && let Some((r1, r2)) = get_pair_mut_flat(work, a, c)
+            {
+                ifft_dit2(r1, r2, log_m02, tables);
+            }
+            if has_b
+                && has_d
+                && let Some((r1, r2)) = get_pair_mut_flat(work, b, d)
+            {
+                ifft_dit2(r1, r2, log_m02, tables);
+            }
         }
     }
 }

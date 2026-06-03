@@ -20,6 +20,7 @@ pub enum BackendId {
     RustAvx512,
     RustGfniAvx2,
     RustGfniAvx512,
+    RustVsx,
 }
 
 #[derive(Copy, Clone)]
@@ -123,6 +124,15 @@ const RUST_SSSE3_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64"))]
+const RUST_VSX_BACKEND: GaloisBackend = GaloisBackend {
+    id: BackendId::RustVsx,
+    mul_slice: super::ppc64::vsx::rust_vsx_mul_slice,
+    mul_slice_xor: super::ppc64::vsx::rust_vsx_mul_slice_xor,
+    name: "rust-vsx",
+    kind: BackendKind::RustSimd,
+};
+
 static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
 
 #[cfg(all(
@@ -131,9 +141,10 @@ static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
         feature = "simd-ssse3",
         feature = "simd-avx2",
         feature = "simd-avx512",
-        feature = "simd-gfni"
+        feature = "simd-gfni",
+        feature = "simd-vsx"
     ),
-    any(target_arch = "x86_64", target_arch = "aarch64"),
+    any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
@@ -157,6 +168,7 @@ enum BackendOverride {
     RustAvx512,
     RustGfniAvx2,
     RustGfniAvx512,
+    RustVsx,
 }
 
 #[cfg(all(
@@ -211,6 +223,10 @@ struct Aarch64FeatureSet {
         target_arch = "aarch64",
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
+    ),
+    all(
+        feature = "simd-vsx",
+        target_arch = "powerpc64"
     )
 ))]
 fn runtime_select_backend() -> GaloisBackend {
@@ -234,6 +250,7 @@ fn parse_backend_override(value: &str) -> Option<BackendOverride> {
         "rust-avx512" => Some(BackendOverride::RustAvx512),
         "rust-gfni-avx2" => Some(BackendOverride::RustGfniAvx2),
         "rust-gfni-avx512" => Some(BackendOverride::RustGfniAvx512),
+        "rust-vsx" => Some(BackendOverride::RustVsx),
         _ => None,
     }
 }
@@ -289,6 +306,11 @@ fn auto_select_backend() -> GaloisBackend {
         target_arch = "aarch64",
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios")),
+        not(feature = "std")
+    ),
+    all(
+        feature = "simd-vsx",
+        target_arch = "powerpc64",
         not(feature = "std")
     )
 ))]
@@ -455,6 +477,7 @@ fn select_x86_override_backend(
             supports_rust_gfni_avx512(features).then_some(RUST_GFNI_AVX512_BACKEND)
         }
         BackendOverride::RustNeon => None,
+        BackendOverride::RustVsx => None,
     }
 }
 
@@ -557,7 +580,8 @@ fn select_aarch64_override_backend(
         | BackendOverride::RustAvx2
         | BackendOverride::RustAvx512
         | BackendOverride::RustGfniAvx2
-        | BackendOverride::RustGfniAvx512 => None,
+        | BackendOverride::RustGfniAvx512
+        | BackendOverride::RustVsx => None,
     }
 }
 
@@ -578,6 +602,61 @@ fn select_aarch64_backend(features: Aarch64FeatureSet) -> GaloisBackend {
         return SIMD_C_BACKEND;
     }
     SCALAR_BACKEND
+}
+
+// --- ppc64le VSX backend selection ---
+
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+struct PowerpcFeatureSet {
+    vsx: bool,
+}
+
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+fn detect_powerpc_features() -> PowerpcFeatureSet {
+    // VSX is always available on ppc64le (little-endian PowerPC).
+    // There is no runtime feature detection macro for powerpc64 in std,
+    // so we rely on the compile-time target_feature check.
+    PowerpcFeatureSet {
+        vsx: cfg!(target_feature = "vsx"),
+    }
+}
+
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+fn supports_rust_vsx(features: PowerpcFeatureSet) -> bool {
+    features.vsx
+}
+
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+fn select_powerpc_backend(features: PowerpcFeatureSet) -> GaloisBackend {
+    if supports_rust_vsx(features) {
+        return RUST_VSX_BACKEND;
+    }
+    SCALAR_BACKEND
+}
+
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+fn select_powerpc_override_backend(
+    backend_override: BackendOverride,
+    features: PowerpcFeatureSet,
+) -> Option<GaloisBackend> {
+    match backend_override {
+        BackendOverride::Auto => None,
+        BackendOverride::Scalar => Some(SCALAR_BACKEND),
+        BackendOverride::RustVsx => supports_rust_vsx(features).then_some(RUST_VSX_BACKEND),
+        BackendOverride::SimdC
+        | BackendOverride::RustNeon
+        | BackendOverride::RustSsse3
+        | BackendOverride::RustAvx2
+        | BackendOverride::RustAvx512
+        | BackendOverride::RustGfniAvx2
+        | BackendOverride::RustGfniAvx512 => None,
+    }
+}
+
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+fn auto_select_backend() -> GaloisBackend {
+    select_powerpc_backend(detect_powerpc_features())
 }
 
 #[cfg(feature = "std")]
@@ -608,6 +687,12 @@ fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBa
 }
 
 #[cfg(feature = "std")]
+#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64"))]
+fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBackend> {
+    select_powerpc_override_backend(backend_override, detect_powerpc_features())
+}
+
+#[cfg(feature = "std")]
 #[cfg(not(any(
     all(
         any(
@@ -625,6 +710,10 @@ fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBa
         target_arch = "aarch64",
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
+    ),
+    all(
+        feature = "simd-vsx",
+        target_arch = "powerpc64"
     )
 )))]
 fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBackend> {
@@ -637,7 +726,8 @@ fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBa
         | BackendOverride::RustAvx2
         | BackendOverride::RustAvx512
         | BackendOverride::RustGfniAvx2
-        | BackendOverride::RustGfniAvx512 => None,
+        | BackendOverride::RustGfniAvx512
+        | BackendOverride::RustVsx => None,
     }
 }
 
@@ -670,6 +760,10 @@ pub(super) fn runtime_override_backend_id_for_test() -> Option<BackendId> {
         target_arch = "aarch64",
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
+    ),
+    all(
+        feature = "simd-vsx",
+        target_arch = "powerpc64"
     )
 ))]
 pub(super) fn active_backend() -> &'static GaloisBackend {
@@ -693,6 +787,10 @@ pub(super) fn active_backend() -> &'static GaloisBackend {
         target_arch = "aarch64",
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
+    ),
+    all(
+        feature = "simd-vsx",
+        target_arch = "powerpc64"
     )
 )))]
 pub(super) fn active_backend() -> &'static GaloisBackend {
@@ -750,6 +848,10 @@ mod tests {
         assert!(matches!(
             parse_backend_override("rust-gfni-avx512"),
             Some(BackendOverride::RustGfniAvx512)
+        ));
+        assert!(matches!(
+            parse_backend_override("rust-vsx"),
+            Some(BackendOverride::RustVsx)
         ));
         assert!(parse_backend_override("bogus").is_none());
     }

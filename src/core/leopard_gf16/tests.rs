@@ -121,12 +121,7 @@ fn test_leopard_gf16_slice_xor_u16() {
     slice_xor_u16(&mut b, &a);
     assert_eq!(
         b,
-        vec![
-            0x1234 ^ 0xFFFF,
-            0x5678,
-            0x9ABC ^ 0x1234,
-            0xDEF0 ^ 0x5678
-        ]
+        vec![0x1234 ^ 0xFFFF, 0x5678, 0x9ABC ^ 0x1234, 0xDEF0 ^ 0x5678]
     );
 }
 

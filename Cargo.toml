@@ -57,8 +57,9 @@ simd-ssse3 = ["cc", "libc"]
 simd-avx2 = ["cc", "libc"]
 simd-avx512 = ["cc", "libc"]
 simd-gfni = ["cc", "libc"]
+simd-vsx = ["cc", "libc"]
 # Backwards-compatible umbrella: enables all SIMD backends.
-simd-accel = ["simd-neon", "simd-ssse3", "simd-avx2", "simd-avx512", "simd-gfni"]
+simd-accel = ["simd-neon", "simd-ssse3", "simd-avx2", "simd-avx512", "simd-gfni", "simd-vsx"]
 benchmark-metrics = []
 
 [badges]
