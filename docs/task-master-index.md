@@ -1,6 +1,6 @@
 # 任务主索引
 
-> 最后更新: 2026-06-03（P2-1 GF16 完成，全量 clippy 清理，状态审计）
+> 最后更新: 2026-06-04（P0-2e 并发流完成，P0 全部完成）
 > 基于 reed-solomon-erasure vs klauspost/reedsolomon 对比分析
 
 ---
@@ -15,15 +15,15 @@
 | P3 | 4 | 8 | 14 |
 | **合计** | **12** | **37** | **77** |
 
-### 实现进度（2026-06-03 审计）
+### 实现进度（2026-06-04 更新）
 
 | 状态 | 叶子任务数 | 占比 |
 |------|-----------|------|
-| ✅ 已完成 | 64 | 83% |
+| ✅ 已完成 | 67 | 87% |
 | 🔶 部分完成 | 1 | 1% |
-| ❌ 未实现 | 12 | 16% |
+| ❌ 未实现 | 9 | 12% |
 
-> 未完成分布: P0-2e 并发流 (3) | P2-2 ppc64le (8) | P3-4c Go 基准 (1)
+> 未完成分布: P2-2 ppc64le (8) | P3-4c Go 基准 (1)
 
 > 状态标记: ✅ 已完成 | 🔶 部分完成 | ❌ 未实现 | 🔧 有遗留问题
 
@@ -53,7 +53,7 @@
 
 ### P0-2: 流式 API
 > 文档: [task-P0-2-streaming-api.md](task-P0-2-streaming-api.md)
-> **状态: 基本完成** — encode_stream/verify_stream/reconstruct_stream 已实现（含 StreamOptions/StreamError），12 个测试通过；P0-2e 并发流（3 个子任务）待实现
+> **状态: ✅ 已完成** — encode_stream/verify_stream/reconstruct_stream 已实现，并发 I/O + 并行 codec，16 个测试通过
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|
@@ -70,9 +70,9 @@
 | | P0-2c-3 测试 | 1d | ✅ 3 tests (basic/single_missing/non_streaming) |
 | P0-2d: verify_stream | P0-2d-1 块级验证逻辑 | 1d | ✅ read_block_all + verify per block |
 | | P0-2d-2 测试 | 0.5d | ✅ 2 tests (valid/corrupted) |
-| P0-2e: 并发流 | P0-2e-1 rayon 并发读取 | 1d | ❌ |
-| | P0-2e-2 rayon 并发写入 | 0.5d | ❌ |
-| | P0-2e-3 测试 | 0.5d | ❌ |
+| P0-2e: 并发流 | P0-2e-1 rayon 并发读取 | 1d | ✅ read_block_par 使用 par_iter_mut |
+| | P0-2e-2 rayon 并发写入 | 0.5d | ✅ write_block_par + encode_sep_par/verify_par |
+| | P0-2e-3 测试 | 0.5d | ✅ 4 个并发流测试 |
 | P0-2f: 文档 | P0-2f-1 README 示例 | 0.5d | ✅ Streaming API example in README |
 | | P0-2f-2 doc comments | 0.5d | ✅ stream.rs module-level doc with example |
 

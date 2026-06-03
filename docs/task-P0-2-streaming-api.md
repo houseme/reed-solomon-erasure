@@ -1,6 +1,6 @@
 # P0-2: 流式 API (Read/Write) — 子任务详细文档
 
-> **状态: 基本完成 (2026-06-02)** — 11/14 子任务完成，P0-2e 并发流 (3) 待实现
+> **状态: ✅ 已完成 (2026-06-04)** — 14/14 子任务全部完成，并发 I/O + 并行 codec 已集成
 > 文档日期: 2026-05-31
 > 预估总工作量: 2-3 周
 > 前置依赖: 无
@@ -505,51 +505,40 @@ fn test_verify_stream_corrupted() { /* ... */ }
 
 ## P0-2e: 并发流读写
 
-### P0-2e-1: rayon 并发读取
+### P0-2e-1: rayon 并发读取 ✅
 
-**目标**: 当 `concurrent_streams = true` 时，并发从各 data readers 读取
+**实现**: `read_block_par` 使用 `rayon::par_iter_mut` 并发读取所有 shard。API 签名要求 `R: Read + Send`（`Cursor<Vec<u8>>`、`BufReader<File>` 等均满足）。错误通过 `Mutex<Option<StreamError>>` 收集第一个错误。
 
 ```rust
-use rayon::prelude::*;
-
-fn read_block_concurrent(
-    readers: &mut [impl std::io::Read],
+fn read_block_par<R: Read + Send>(
+    readers: &mut [R],
     buffers: &mut [Vec<u8>],
-    block_size: usize,
-) -> Result<(usize, bool), StreamError> {
-    // 注意: Read 不是 Send，需要特殊处理
-    // 方案: 使用 unsafe 或将 reader 包装在 Mutex 中
-    // 简化方案: 顺序读取，仅并发处理编码
-    // ...
-}
+    max_len: usize,
+) -> Result<(bool, usize), StreamError>
 ```
 
-**注意**: `impl Read` 通常不是 `Send`，并发读取需要特殊处理。简化方案是保持读取串行，仅并发编码和写入。
+### P0-2e-2: rayon 并发写入 ✅
 
-**预估**: 1 天
-
-### P0-2e-2: rayon 并发写入
+**实现**: `write_block_par` 使用 `rayon::par_iter_mut` 并发写入所有 shard。API 签名要求 `W: Write + Send`。
 
 ```rust
-fn write_parity_concurrent(
-    writers: &mut [impl std::io::Write],
+fn write_block_par<W: Write + Send>(
+    writers: &mut [W],
     buffers: &[Vec<u8>],
     len: usize,
-) -> Result<(), StreamError> {
-    // 类似读取，Write 也不是 Send
-    // 简化方案: 串行写入
-}
+    shard_offset: usize,
+) -> Result<(), StreamError>
 ```
 
-**最终方案**: 由于 `Read`/`Write` 不是 `Send`，并发流支持受限。建议:
-- 编码阶段: 使用 rayon 并发计算 (数据已在内存中)
-- I/O 阶段: 保持串行
+**编解码并发**: `encode_stream` 调用 `encode_sep_par`（rayon 并行编码），`verify_stream` 调用 `verify_par`。`reconstruct_stream` 的读取阶段也已并行化。
 
-**预估**: 0.5 天
+### P0-2e-3: 并发流测试 ✅
 
-### P0-2e-3: 并发流测试
-
-**预估**: 0.5 天
+4 个新测试:
+- `test_encode_stream_concurrent`: 4x2 编码 + 验证 roundtrip
+- `test_verify_stream_concurrent`: 并发验证（有效 + 损坏数据）
+- `test_reconstruct_stream_concurrent`: 并发重建（2 个缺失分片）
+- `test_concurrent_stream_large_blocks`: 10x4 配置，1 MiB 数据，256 KiB 块
 
 ---
 

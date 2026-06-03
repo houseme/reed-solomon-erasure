@@ -246,6 +246,123 @@ fn write_block<W: std::io::Write>(
 }
 
 // ---------------------------------------------------------------------------
+// Parallel I/O helpers (rayon)
+// ---------------------------------------------------------------------------
+
+/// Parallel version of `read_block` — reads all shards concurrently.
+fn read_block_par<R: std::io::Read + Send>(
+    readers: &mut [R],
+    buffers: &mut [Vec<u8>],
+    max_len: usize,
+) -> Result<(bool, usize), StreamError> {
+    use rayon::prelude::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    let any_data = AtomicBool::new(false);
+    let actual_len = AtomicUsize::new(0);
+    let first_error: std::sync::Mutex<Option<StreamError>> = std::sync::Mutex::new(None);
+
+    readers
+        .par_iter_mut()
+        .zip(buffers.par_iter_mut())
+        .enumerate()
+        .try_for_each(|(i, (reader, buf))| {
+            buf.resize(max_len, 0);
+            let mut total = 0;
+
+            while total < max_len {
+                match reader.read(&mut buf[total..]) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        total += n;
+                        any_data.store(true, Ordering::Relaxed);
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(e) => {
+                        if let Ok(mut guard) = first_error.lock()
+                            && guard.is_none()
+                        {
+                            *guard = Some(StreamError::read(i, e));
+                        }
+                        return Err(());
+                    }
+                }
+            }
+
+            actual_len.fetch_max(total, Ordering::Relaxed);
+            for byte in &mut buf[total..] {
+                *byte = 0;
+            }
+            Ok(())
+        })
+        .map_err(|()| first_error.into_inner().unwrap().unwrap())?;
+
+    Ok((
+        !any_data.load(Ordering::Relaxed),
+        actual_len.load(Ordering::Relaxed),
+    ))
+}
+
+/// Parallel version of `read_block_all` — reads all shards concurrently.
+fn read_block_all_par<R: std::io::Read + Send>(
+    readers: &mut [R],
+    buffers: &mut [Vec<u8>],
+    max_len: usize,
+) -> Result<(bool, usize), StreamError> {
+    read_block_par(readers, buffers, max_len)
+}
+
+/// Parallel version of `write_block` — writes all shards concurrently.
+fn write_block_par<W: std::io::Write + Send>(
+    writers: &mut [W],
+    buffers: &[Vec<u8>],
+    len: usize,
+    shard_offset: usize,
+) -> Result<(), StreamError> {
+    use rayon::prelude::*;
+
+    let first_error: std::sync::Mutex<Option<StreamError>> = std::sync::Mutex::new(None);
+
+    writers
+        .par_iter_mut()
+        .zip(buffers.par_iter())
+        .enumerate()
+        .try_for_each(|(i, (writer, buf))| {
+            let mut written = 0;
+            while written < len {
+                match writer.write(&buf[written..len]) {
+                    Ok(0) => {
+                        if let Ok(mut guard) = first_error.lock()
+                            && guard.is_none()
+                        {
+                            *guard = Some(StreamError::write(
+                                shard_offset + i,
+                                std::io::Error::new(
+                                    std::io::ErrorKind::WriteZero,
+                                    "write returned 0",
+                                ),
+                            ));
+                        }
+                        return Err(());
+                    }
+                    Ok(n) => written += n,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(e) => {
+                        if let Ok(mut guard) = first_error.lock()
+                            && guard.is_none()
+                        {
+                            *guard = Some(StreamError::write(shard_offset + i, e));
+                        }
+                        return Err(());
+                    }
+                }
+            }
+            Ok(())
+        })
+        .map_err(|()| first_error.into_inner().unwrap().unwrap())
+}
+
+// ---------------------------------------------------------------------------
 // ReedSolomon streaming methods
 // ---------------------------------------------------------------------------
 
@@ -261,8 +378,8 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     /// Returns [`StreamError`] on I/O failure or codec error.
     pub fn encode_stream(
         &self,
-        data: &mut [impl std::io::Read],
-        parity: &mut [impl std::io::Write],
+        data: &mut [impl std::io::Read + Send],
+        parity: &mut [impl std::io::Write + Send],
         options: &StreamOptions,
     ) -> Result<(), StreamError> {
         let block_size = options.block_size;
@@ -280,7 +397,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .collect();
 
         loop {
-            let (all_eof, actual_len) = read_block(data, &mut data_bufs, block_size)?;
+            let (all_eof, actual_len) = read_block_par(data, &mut data_bufs, block_size)?;
             if all_eof {
                 break;
             }
@@ -290,18 +407,18 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                 buf.resize(actual_len, 0);
             }
 
-            // Encode.
+            // Encode (parallel codec).
             let data_refs: Vec<&[u8]> = data_bufs.iter().map(|b| &b[..actual_len]).collect();
             let mut parity_refs: Vec<&mut [u8]> = parity_bufs
                 .iter_mut()
                 .map(|b| &mut b[..actual_len])
                 .collect();
 
-            self.encode_sep(&data_refs, &mut parity_refs)
+            self.encode_sep_par(&data_refs, &mut parity_refs)
                 .map_err(|e| StreamError::codec(0, e))?;
 
-            // Write parity.
-            write_block(parity, &parity_bufs, actual_len, data_count)?;
+            // Write parity (parallel I/O).
+            write_block_par(parity, &parity_bufs, actual_len, data_count)?;
         }
 
         Ok(())
@@ -314,7 +431,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     /// fails verification.
     pub fn verify_stream(
         &self,
-        shards: &mut [impl std::io::Read],
+        shards: &mut [impl std::io::Read + Send],
         options: &StreamOptions,
     ) -> Result<bool, StreamError> {
         let block_size = options.block_size;
@@ -325,14 +442,14 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let mut bufs: Vec<Vec<u8>> = (0..total).map(|_| Vec::with_capacity(block_size)).collect();
 
         loop {
-            let (all_eof, actual_len) = read_block_all(shards, &mut bufs, block_size)?;
+            let (all_eof, actual_len) = read_block_all_par(shards, &mut bufs, block_size)?;
             if all_eof {
                 break;
             }
 
             let refs: Vec<&[u8]> = bufs.iter().map(|b| &b[..actual_len]).collect();
 
-            let valid = self.verify(&refs).map_err(|e| StreamError::codec(0, e))?;
+            let valid = self.verify_par(&refs).map_err(|e| StreamError::codec(0, e))?;
             if !valid {
                 return Ok(false);
             }
@@ -392,28 +509,51 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .collect();
 
         loop {
-            // Pass 1: read from present shards into buffers.
-            let mut any_data = false;
-            for (i, shard) in shards.iter_mut().enumerate() {
-                if present[i] {
-                    bufs[i].resize(block_size, 0);
+            // Pass 1: read from present shards into buffers (parallel).
+            use rayon::prelude::*;
+            use std::sync::atomic::{AtomicBool, Ordering};
+
+            let any_data = AtomicBool::new(false);
+            let first_error: std::sync::Mutex<Option<StreamError>> = std::sync::Mutex::new(None);
+
+            #[allow(clippy::type_complexity)]
+            let mut indexed: Vec<(usize, &mut std::io::Cursor<Vec<u8>>, &mut Vec<u8>)> = shards
+                .iter_mut()
+                .zip(bufs.iter_mut())
+                .enumerate()
+                .filter(|(i, _)| present[*i])
+                .map(|(i, (s, b))| (i, s, b))
+                .collect();
+
+            indexed
+                .par_iter_mut()
+                .try_for_each(|(i, shard, buf)| {
+                    buf.resize(block_size, 0);
                     let mut total_read = 0;
                     while total_read < block_size {
-                        match shard.read(&mut bufs[i][total_read..]) {
+                        match shard.read(&mut buf[total_read..]) {
                             Ok(0) => break,
                             Ok(n) => {
                                 total_read += n;
-                                any_data = true;
+                                any_data.store(true, Ordering::Relaxed);
                             }
                             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                            Err(e) => return Err(StreamError::read(i, e)),
+                            Err(e) => {
+                                if let Ok(mut guard) = first_error.lock()
+                                    && guard.is_none()
+                                {
+                                    *guard = Some(StreamError::read(*i, e));
+                                }
+                                return Err(());
+                            }
                         }
                     }
-                    bufs[i].truncate(total_read);
-                }
-            }
+                    buf.truncate(total_read);
+                    Ok(())
+                })
+                .map_err(|()| first_error.into_inner().unwrap().unwrap())?;
 
-            if !any_data {
+            if !any_data.load(Ordering::Relaxed) {
                 break;
             }
 
@@ -757,5 +897,123 @@ mod tests {
         let e = StreamError::codec(0, crate::Error::TooFewShardsPresent);
         let s = format!("{e}");
         assert!(s.contains("codec"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Concurrent stream tests (P0-2e-3)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_encode_stream_concurrent() {
+        let rs = make_codec(4, 2);
+        let shard_size = 8 * 1024;
+
+        let data: Vec<Vec<u8>> = (0..4).map(|_| random_data(shard_size)).collect();
+        let mut readers: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+
+        rs.encode_stream(&mut readers, &mut writers, &StreamOptions::default())
+            .unwrap();
+
+        // Verify parity correctness.
+        let mut all: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        for w in &writers {
+            all.push(w.as_slice());
+        }
+        assert!(rs.verify(&all).unwrap());
+    }
+
+    #[test]
+    fn test_verify_stream_concurrent() {
+        let rs = make_codec(4, 2);
+        let shard_size = 8 * 1024;
+
+        let data: Vec<Vec<u8>> = (0..4).map(|_| random_data(shard_size)).collect();
+        let mut readers: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        rs.encode_stream(&mut readers, &mut writers, &StreamOptions::default())
+            .unwrap();
+
+        // Valid case.
+        let mut all: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        for w in &writers {
+            all.push(w.as_slice());
+        }
+        let mut all_readers: Vec<&[u8]> = all;
+        assert!(rs.verify_stream(&mut all_readers, &StreamOptions::default()).unwrap());
+
+        // Corrupted case.
+        let mut corrupted = writers[0].clone();
+        corrupted[0] ^= 0xFF;
+        let mut all_corrupt: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        all_corrupt.push(corrupted.as_slice());
+        all_corrupt.push(writers[1].as_slice());
+        assert!(!rs.verify_stream(&mut all_corrupt, &StreamOptions::default()).unwrap());
+    }
+
+    #[test]
+    fn test_reconstruct_stream_concurrent() {
+        let rs = make_codec(4, 2);
+        let shard_size = 8 * 1024;
+
+        let data: Vec<Vec<u8>> = (0..4).map(|_| random_data(shard_size)).collect();
+        let mut readers: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        let mut parity_writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        rs.encode_stream(&mut readers, &mut parity_writers, &StreamOptions::default())
+            .unwrap();
+
+        // Missing shards: data[1] and parity[0].
+        let mut shards: Vec<std::io::Cursor<Vec<u8>>> = vec![
+            std::io::Cursor::new(data[0].clone()),
+            std::io::Cursor::new(Vec::new()), // missing
+            std::io::Cursor::new(data[2].clone()),
+            std::io::Cursor::new(data[3].clone()),
+            std::io::Cursor::new(Vec::new()), // missing
+            std::io::Cursor::new(parity_writers[1].clone()),
+        ];
+
+        rs.reconstruct_stream(&mut shards, &StreamOptions::default())
+            .unwrap();
+
+        assert_eq!(shards[1].get_ref(), &data[1]);
+    }
+
+    #[test]
+    fn test_concurrent_stream_large_blocks() {
+        let rs = make_codec(10, 4);
+        let total_size = 1024 * 1024; // 1 MiB
+        let block_size = 256 * 1024;  // 256 KiB blocks
+
+        let data: Vec<Vec<u8>> = (0..10).map(|_| random_data(total_size)).collect();
+        let mut readers: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 4];
+
+        let opts = StreamOptions::new().with_block_size(block_size);
+        rs.encode_stream(&mut readers, &mut writers, &opts)
+            .unwrap();
+
+        // Verify all blocks.
+        let mut all: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        for w in &writers {
+            all.push(w.as_slice());
+        }
+        assert!(rs.verify(&all).unwrap());
+
+        // Reconstruct with 2 missing data shards.
+        let mut shards: Vec<std::io::Cursor<Vec<u8>>> = Vec::new();
+        for d in &data {
+            shards.push(std::io::Cursor::new(d.clone()));
+        }
+        shards[0] = std::io::Cursor::new(Vec::new());
+        shards[5] = std::io::Cursor::new(Vec::new());
+        for w in &writers {
+            shards.push(std::io::Cursor::new(w.clone()));
+        }
+
+        rs.reconstruct_stream(&mut shards, &StreamOptions::default())
+            .unwrap();
+
+        assert_eq!(shards[0].get_ref(), &data[0]);
+        assert_eq!(shards[5].get_ref(), &data[5]);
     }
 }
