@@ -19,9 +19,9 @@
 
 | 状态 | 叶子任务数 | 占比 |
 |------|-----------|------|
-| ✅ 已完成 | ~73 | 95% |
-| 🔶 部分完成 | ~1 | 1% |
-| ❌ 未实现 | ~3 | 4% |（P0-2e 并发流, P2-1 Leopard GF16, P2-2 ppc64le） |
+| ✅ 已完成 | ~76 | 99% |
+| 🔶 部分完成 | ~0 | 0% |
+| ❌ 未实现 | ~1 | 1% |（P2-2 ppc64le） |
 
 > 状态标记: ✅ 已完成 | 🔶 部分完成 | ❌ 未实现 | 🔧 有遗留问题
 
@@ -128,27 +128,27 @@
 
 ### P2-1: Leopard GF16
 > 文档: [task-P2-1-leopard-gf16.md](task-P2-1-leopard-gf16.md)
-> **状态: 未实现** — 仅 CodecFamily::LeopardGF16 enum 占位，所有路径返回 UnsupportedLeopardPrototype，无 leopard_gf16 模块
+> **状态: ✅ 已完成** — GF16 编解码引擎实现完毕，API dispatch 已集成，27 个测试全部通过（21 单元 + 6 集成），边界检查完备，文档已更新
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|
-| P2-1a: 表构建 | P2-1a-1 GF16 log/exp LUT | 1d | ❌ |
-| | P2-1a-2 GF16 fft_skew | 1d | ❌ |
-| | P2-1a-3 log_walsh | 0.5d | ❌ |
-| | P2-1a-4 表测试 | 0.5d | ❌ |
-| P2-1b: FFT/IFFT | P2-1b-1 fft_dit2_gf16 | 1d | ❌ |
-| | P2-1b-2 fft_dit4_gf16 | 2d | ❌ |
-| | P2-1b-3 ifft_dit4_gf16 | 1d | ❌ |
-| | P2-1b-4 FFT 测试 | 1d | ❌ |
-| P2-1c: 编码 | P2-1c-1 encode_with_tables_gf16 | 2d | ❌ |
-| | P2-1c-2 驱动参数 | 1d | ❌ |
-| | P2-1c-3 编码测试 | 1d | ❌ |
-| P2-1d: 解码 | P2-1d-1 Forney GF16 | 2d | ❌ |
-| | P2-1d-2 解码测试 | 1d | ❌ |
-| P2-1e: 集成 | P2-1e-1 API dispatch | 1d | ❌ |
-| | P2-1e-2 限制检查 | 0.5d | ❌ |
-| P2-1f: 测试文档 | P2-1f-1 完整测试矩阵 | 1d | ❌ |
-| | P2-1f-2 README 更新 | 0.5d | ❌ |
+| P2-1a: 表构建 | P2-1a-1 GF16 log/exp LUT | 1d | ✅ |
+| | P2-1a-2 GF16 fft_skew | 1d | ✅ |
+| | P2-1a-3 log_walsh | 0.5d | ✅ |
+| | P2-1a-4 表测试 | 0.5d | ✅ |
+| P2-1b: FFT/IFFT | P2-1b-1 fft_dit2_gf16 | 1d | ✅ |
+| | P2-1b-2 fft_dit4_gf16 | 2d | ✅ |
+| | P2-1b-3 ifft_dit4_gf16 | 1d | ✅ |
+| | P2-1b-4 FFT 测试 | 1d | ✅ |
+| P2-1c: 编码 | P2-1c-1 encode_with_tables_gf16 | 2d | ✅ |
+| | P2-1c-2 驱动参数 | 1d | ✅ |
+| | P2-1c-3 编码测试 | 1d | ✅ |
+| P2-1d: 解码 | P2-1d-1 Forney GF16 | 2d | ✅ |
+| | P2-1d-2 解码测试 | 1d | ✅ |
+| P2-1e: 集成 | P2-1e-1 API dispatch | 1d | ✅ |
+| | P2-1e-2 限制检查 | 0.5d | ✅ |
+| P2-1f: 测试文档 | P2-1f-1 完整测试矩阵 | 1d | ✅ |
+| | P2-1f-2 README 更新 | 0.5d | ✅ |
 
 ### P2-2: ppc64le SIMD
 > 文档: [task-P2-2-ppc64le.md](task-P2-2-ppc64le.md)

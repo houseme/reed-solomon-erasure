@@ -21,12 +21,12 @@ pub(super) fn gf16_mul(a: u16, b: u16, log_lut: &[u16; ORDER16], exp_lut: &[u16;
 }
 
 /// Modular addition in GF(2^16) log domain: `(a + b) % 65535`.
+///
+/// Returns 65535 when the sum is exactly 65535 (matching Go's addMod).
 #[inline]
 pub(super) fn add_mod16(a: u16, b: u16) -> u16 {
     let sum = a as u32 + b as u32;
-    let result = (sum + (sum >> BITWIDTH16)) as u16;
-    // When sum == 65535 exactly, the carry-free path yields 65535 instead of 0.
-    if result == MODULUS16 as u16 { 0 } else { result }
+    (sum + (sum >> BITWIDTH16)) as u16
 }
 
 /// Modular subtraction in GF(2^16) log domain: `(a - b) % 65535`.
@@ -106,14 +106,14 @@ pub(super) fn fwht16(data: &mut [u16; ORDER16]) {
     }
 }
 
-/// FWHT with mtrunc: inner loop limited to mtrunc.
+/// FWHT with mtrunc: outer loop limited to `m`, inner loop limited to mtrunc.
 ///
-/// Matches Go's `fwht(data, mtrunc)` — sequential radix-2 butterflies within each block.
-pub(super) fn fwht16_mtrunc(data: &mut [u16], mtrunc: usize) {
+/// Matches Go's `fwht(data, m, mtrunc)` — sequential radix-2 butterflies within each block.
+pub(super) fn fwht16_mtrunc(data: &mut [u16], m: usize, mtrunc: usize) {
     debug_assert_eq!(data.len(), ORDER16);
     let mut dist = 1usize;
     let mut dist4 = 4usize;
-    while dist4 <= ORDER16 {
+    while dist4 <= m {
         let mut r = 0usize;
         while r < mtrunc {
             let mut off = r;
@@ -204,12 +204,16 @@ pub(super) fn fwht2_alt16_test(a: u16, b: u16) -> (u16, u16) {
 }
 
 /// Forward butterfly step (FFT): `dst ^= mul(src, g^log_m); src ^= dst`.
-/// Matches GF8 `dit2_step(dst, src)`.
+/// Matches Go's `fftDIT2` behavior and `sliceXor` shortcut for modulus.
+///
+/// When `log_m == MODULUS16`, Go uses `sliceXor(work[a], work[c])` which modifies
+/// the second argument: `src ^= dst`. The general path gives the same final result
+/// via `dst ^= src*g^m; src ^= dst`, but the modulus shortcut must match exactly.
 #[inline]
 pub(super) fn dit2_step16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(dst.len(), src.len());
     if log_m == MODULUS16 as u16 {
-        slice_xor_u16(dst, src);
+        slice_xor_u16(src, dst);
     } else {
         mulgf16_xor(dst, src, log_m, tables);
         slice_xor_u16(src, dst);
@@ -217,23 +221,31 @@ pub(super) fn dit2_step16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: 
 }
 
 /// Inverse butterfly step (IFFT): `src ^= dst; dst ^= mul(src, g^log_m)`.
-/// Matches GF8 `dit2_step_inv(dst, src)`.
+/// Matches Go's `ifftDIT2` and `sliceXor` shortcut for modulus.
 ///
-/// Note: no MODULUS16 shortcut — the general path handles g^m=1 correctly
-/// via mulgf16_xor's own shortcut, but the operation order matters for the inverse.
+/// When `log_m == MODULUS16`, Go uses `sliceXor(work[a], work[b])` which modifies
+/// the second argument only: `src ^= dst`. The general path gives a different result
+/// because it also modifies `dst`, but Go's shortcut must be matched exactly.
 #[inline]
 pub(super) fn dit2_step_inv16(dst: &mut [u16], src: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(dst.len(), src.len());
-    slice_xor_u16(src, dst);
-    mulgf16_xor(dst, src, log_m, tables);
+    if log_m == MODULUS16 as u16 {
+        slice_xor_u16(src, dst);
+    } else {
+        slice_xor_u16(src, dst);
+        mulgf16_xor(dst, src, log_m, tables);
+    }
 }
 
 /// Forward radix-2 FFT butterfly: `x ^= mul(y, m); y ^= x`.
-/// Matches GF8 `fft_dit2_lut(x, y)`.
+/// Matches Go's `fftDIT2` and `sliceXor` shortcut for modulus.
+///
+/// When `log_m == MODULUS16`, Go uses `sliceXor(work[r], work[r+1])` which modifies
+/// the second argument: `y ^= x`.
 pub(super) fn fft_dit2_16(x: &mut [u16], y: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(x.len(), y.len());
     if log_m == MODULUS16 as u16 {
-        slice_xor_u16(x, y);
+        slice_xor_u16(y, x);
     } else {
         mulgf16_xor(x, y, log_m, tables);
         slice_xor_u16(y, x);
@@ -241,13 +253,18 @@ pub(super) fn fft_dit2_16(x: &mut [u16], y: &mut [u16], log_m: u16, tables: &Leo
 }
 
 /// Inverse radix-2 IFFT butterfly: `y ^= x; x ^= mul(y, m)`.
-/// Matches GF8 `ifft_dit2_lut(x, y)`.
+/// Matches Go's `ifftDIT2` and `sliceXor` shortcut for modulus.
 ///
-/// Note: no MODULUS16 shortcut — the general path handles g^m=1 correctly.
+/// When `log_m == MODULUS16`, Go uses `sliceXor(work[a], work[b])` which modifies
+/// the second argument only: `y ^= x`.
 pub(super) fn ifft_dit2_16(x: &mut [u16], y: &mut [u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(x.len(), y.len());
-    slice_xor_u16(y, x);
-    mulgf16_xor(x, y, log_m, tables);
+    if log_m == MODULUS16 as u16 {
+        slice_xor_u16(y, x);
+    } else {
+        slice_xor_u16(y, x);
+        mulgf16_xor(x, y, log_m, tables);
+    }
 }
 
 /// Forward radix-4 butterfly.
@@ -292,6 +309,46 @@ pub(super) fn ifft_dit4_16(
     dit2_step_inv16(c, d, log_m23, tables);
     dit2_step_inv16(b, d, log_m02, tables);
     dit2_step_inv16(a, c, log_m02, tables);
+}
+
+/// Convert user byte layout to Go's GF16 split layout for u16 processing.
+///
+/// Go's mul16LUTs interprets each 64-byte chunk as:
+///   element i = byte[i] | (byte[i+32] << 8)   for i in 0..32
+///
+/// Standard u16 LE interprets as:
+///   element i = byte[2*i] | (byte[2*i+1] << 8)
+///
+/// This function rearranges bytes so that `as u16 LE` gives Go's elements:
+///   dst[2*i] = src[i], dst[2*i+1] = src[i+32]   per 64-byte chunk
+pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
+    debug_assert_eq!(src.len(), dst.len());
+    debug_assert!(src.len() % 64 == 0);
+    for chunk in src.chunks(64) {
+        let base = chunk.as_ptr() as usize - src.as_ptr() as usize;
+        let dst_chunk = &mut dst[base..base + 64];
+        for i in 0..32 {
+            dst_chunk[2 * i] = chunk[i];
+            dst_chunk[2 * i + 1] = chunk[i + 32];
+        }
+    }
+}
+
+/// Convert Go's GF16 split layout back to user byte layout.
+///
+/// Reverse of user_bytes_to_work_bytes:
+///   dst[i] = src[2*i], dst[i+32] = src[2*i+1]   per 64-byte chunk
+pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
+    debug_assert_eq!(src.len(), dst.len());
+    debug_assert!(src.len() % 64 == 0);
+    for (chunk_idx, chunk) in src.chunks(64).enumerate() {
+        let base = chunk_idx * 64;
+        let dst_chunk = &mut dst[base..base + 64];
+        for i in 0..32 {
+            dst_chunk[i] = chunk[2 * i];
+            dst_chunk[i + 32] = chunk[2 * i + 1];
+        }
+    }
 }
 
 /// Helper to get two mutable references from a slice at indices i and j.

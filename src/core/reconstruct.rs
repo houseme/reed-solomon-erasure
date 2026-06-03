@@ -423,6 +423,9 @@ impl<F: Field> ReedSolomon<F> {
         if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
             return self.reconstruct_leopard_gf8(slices, false);
         }
+        if self.is_leopard_gf16_family() {
+            return self.reconstruct_leopard_gf16(slices, false);
+        }
         self.ensure_classic_family_execution()?;
         self.reconstruct_internal(slices, false)
     }
@@ -430,6 +433,9 @@ impl<F: Field> ReedSolomon<F> {
     pub fn reconstruct_data<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
         if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
             return self.reconstruct_leopard_gf8(slices, true);
+        }
+        if self.is_leopard_gf16_family() {
+            return self.reconstruct_leopard_gf16(slices, true);
         }
         self.ensure_classic_family_execution()?;
         self.reconstruct_internal(slices, true)
@@ -444,6 +450,10 @@ impl<F: Field> ReedSolomon<F> {
             // For leopard, reconstruct_some delegates to reconstruct (leopard always
             // recovers all shards, then the caller picks which ones they needed).
             self.reconstruct_leopard_gf8(shards, false)?;
+            return Ok(());
+        }
+        if self.is_leopard_gf16_family() {
+            self.reconstruct_leopard_gf16(shards, false)?;
             return Ok(());
         }
         self.ensure_classic_family_execution()?;
@@ -653,6 +663,79 @@ impl<F: Field> ReedSolomon<F> {
                 continue;
             }
             // SAFETY: F::Elem = u8 for leopard GF8.
+            let elem_slice: &[F::Elem] =
+                unsafe { &*(output_bufs[i].as_slice() as *const [u8] as *const [F::Elem]) };
+            match slices[i].get_or_initialize(shard_len) {
+                Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(elem_slice),
+                Err(Err(err)) => return Err(err),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Leopard GF16 reconstruction dispatch.
+    fn reconstruct_leopard_gf16<T: ReconstructShard<F>>(
+        &self,
+        slices: &mut [T],
+        _data_only: bool,
+    ) -> Result<(), Error> {
+        check_piece_count!(all => self, slices);
+
+        let total = self.total_shard_count;
+        let shard_len_opt: Option<usize> = slices.iter().find_map(|s| s.len());
+        let Some(shard_len) = shard_len_opt else {
+            return Err(Error::EmptyShard);
+        };
+
+        // SAFETY: F::Elem = u8 for leopard GF16 (validated by validate_leopard_gf16).
+        let mut present = vec![false; total];
+        let mut raw_data: Vec<Option<*const u8>> = vec![None; total];
+        for i in 0..total {
+            if let Some(data) = slices[i].get() {
+                present[i] = true;
+                raw_data[i] = Some(data as *const [F::Elem] as *const u8);
+            }
+        }
+
+        let mut output_bufs: Vec<Vec<u8>> = (0..total)
+            .map(|_| vec![0u8; shard_len])
+            .collect();
+
+        for i in 0..total {
+            if let Some(ptr) = raw_data[i] {
+                let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
+                output_bufs[i][..shard_len].copy_from_slice(src);
+            }
+        }
+
+        let mut outputs: Vec<&mut [u8]> = output_bufs
+            .iter_mut()
+            .map(|buf| buf.as_mut_slice())
+            .collect();
+
+        let mut input_data: Vec<Option<&[u8]>> = Vec::with_capacity(total);
+        for i in 0..total {
+            if let Some(ptr) = raw_data[i] {
+                let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
+                input_data.push(Some(src));
+            } else {
+                input_data.push(None);
+            }
+        }
+
+        super::leopard::leopard_gf16_reconstruct(
+            &present,
+            &mut outputs,
+            &input_data,
+            self.data_shard_count,
+            self.parity_shard_count,
+        )?;
+
+        for i in 0..total {
+            if present[i] {
+                continue;
+            }
             let elem_slice: &[F::Elem] =
                 unsafe { &*(output_bufs[i].as_slice() as *const [u8] as *const [F::Elem]) };
             match slices[i].get_or_initialize(shard_len) {

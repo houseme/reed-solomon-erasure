@@ -125,7 +125,7 @@ pub(crate) fn build_family_state<F: Field>(
             parity_shards,
             Matrix::new(setup_matrix.row_count(), setup_matrix.col_count()),
         )?)),
-        CodecFamily::LeopardGF16 => Err(Error::UnsupportedLeopardPrototype),
+        CodecFamily::LeopardGF16 => Ok(FamilyState::LeopardGF16),
     }
 }
 
@@ -137,7 +137,7 @@ pub(crate) fn validate_leopard_family<F: Field>(
     match codec_family {
         CodecFamily::Classic => Ok(()),
         CodecFamily::LeopardGF8 => validate_leopard_gf8::<F>(data_shards, parity_shards),
-        CodecFamily::LeopardGF16 => Err(Error::UnsupportedLeopardPrototype),
+        CodecFamily::LeopardGF16 => validate_leopard_gf16::<F>(data_shards, parity_shards),
     }
 }
 
@@ -149,6 +149,20 @@ fn validate_leopard_gf8<F: Field>(data_shards: usize, parity_shards: usize) -> R
     }
 
     if total_shards == 0 || total_shards > 256 {
+        return Err(Error::UnsupportedCodecFamily);
+    }
+
+    Ok(())
+}
+
+fn validate_leopard_gf16<F: Field>(data_shards: usize, parity_shards: usize) -> Result<(), Error> {
+    let total_shards = data_shards.saturating_add(parity_shards);
+
+    if F::ORDER != 256 {
+        return Err(Error::UnsupportedCodecFamily);
+    }
+
+    if total_shards == 0 || total_shards > 65536 {
         return Err(Error::UnsupportedCodecFamily);
     }
 
@@ -168,4 +182,34 @@ pub(crate) fn leopard_gf8_encode(
 ) -> Result<(), Error> {
     super::leopard_gf8::encode_with_tables(data_shards, parity_shards, data, parity)?;
     Ok(())
+}
+
+/// Dispatch encode to the Leopard GF16 FFT engine.
+pub(crate) fn leopard_gf16_encode(
+    data_shards: usize,
+    parity_shards: usize,
+    data: &[&[u8]],
+    parity: &mut [&mut [u8]],
+) -> Result<(), Error> {
+    super::leopard_gf16::encode::encode_with_tables16(data_shards, parity_shards, data, parity)?;
+    Ok(())
+}
+
+/// Dispatch reconstruct to the Leopard GF16 Forney decoder.
+pub(crate) fn leopard_gf16_reconstruct(
+    present: &[bool],
+    outputs: &mut [&mut [u8]],
+    input_data: &[Option<&[u8]>],
+    data_shards: usize,
+    parity_shards: usize,
+) -> Result<(), Error> {
+    let tables = super::leopard_gf16::init_leopard_gf16_tables();
+    super::leopard_gf16::decode::reconstruct_with_tables16(
+        present,
+        outputs,
+        input_data,
+        data_shards,
+        parity_shards,
+        &tables,
+    )
 }

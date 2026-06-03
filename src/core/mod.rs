@@ -96,19 +96,22 @@ impl<F: Field> PartialEq for ReedSolomon<F> {
 }
 
 impl<F: Field> ReedSolomon<F> {
-    /// Returns `Ok(())` for Classic and LeopardGF8 families, `Err` for LeopardGF16
-    /// (which is not yet implemented).
+    /// Returns `Ok(())` for Classic, LeopardGF8, and LeopardGF16 families.
     ///
     /// Methods that are genuinely Classic-only (e.g., `update`, `decode_idx`) should
-    /// check `is_leopard_gf8_family()` separately and return an appropriate error.
+    /// check `is_leopard_gf8_family()` / `is_leopard_gf16_family()` separately and
+    /// return an appropriate error.
     pub(crate) fn ensure_classic_family_execution(&self) -> Result<(), crate::Error> {
         match self.family_state {
-            FamilyState::Classic | FamilyState::LeopardGF8(_) => Ok(()),
-            FamilyState::LeopardGF16 => Err(crate::Error::UnsupportedLeopardPrototype),
+            FamilyState::Classic | FamilyState::LeopardGF8(_) | FamilyState::LeopardGF16 => Ok(()),
         }
     }
 
     pub(crate) fn is_leopard_gf8_family(&self) -> bool {
         matches!(self.family_state, FamilyState::LeopardGF8(_))
+    }
+
+    pub(crate) fn is_leopard_gf16_family(&self) -> bool {
+        matches!(self.family_state, FamilyState::LeopardGF16)
     }
 }

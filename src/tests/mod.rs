@@ -256,8 +256,8 @@ fn test_leopard_gf8_prototype_is_explicit_but_not_executed_yet() {
 }
 
 #[test]
-fn test_leopard_gf16_prototype_is_explicit_but_not_executed_yet() {
-    let err = ReedSolomon::with_options(
+fn test_leopard_gf16_codec_creation() {
+    let codec = ReedSolomon::with_options(
         32,
         16,
         CodecOptions {
@@ -265,9 +265,157 @@ fn test_leopard_gf16_prototype_is_explicit_but_not_executed_yet() {
             ..CodecOptions::default()
         },
     )
-    .unwrap_err();
+    .unwrap();
 
-    assert_eq!(Error::UnsupportedLeopardPrototype, err);
+    assert_eq!(codec.data_shard_count(), 32);
+    assert_eq!(codec.parity_shard_count(), 16);
+}
+
+#[test]
+fn test_leopard_gf16_encode_populates_parity() {
+    let codec = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 128;
+    let data: Vec<Vec<u8>> = (0..4)
+        .map(|i| (0..shard_size).map(|j| ((i * 37 + j) & 0xFF) as u8).collect())
+        .collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 2];
+
+    codec.encode_sep(&data, &mut parity).unwrap();
+
+    for p in &parity {
+        assert!(p.iter().any(|&b| b != 0), "parity shard should not be all zeros");
+    }
+}
+
+#[test]
+fn test_leopard_gf16_encode_verify_roundtrip() {
+    let codec = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 128;
+    let data: Vec<Vec<u8>> = (0..4)
+        .map(|i| (0..shard_size).map(|j| ((i * 53 + j + 7) & 0xFF) as u8).collect())
+        .collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 2];
+
+    codec.encode_sep(&data, &mut parity).unwrap();
+
+    let mut all_shards: Vec<Vec<u8>> = data;
+    all_shards.extend(parity);
+
+    assert!(codec.verify(&all_shards).unwrap());
+}
+
+#[test]
+fn test_leopard_gf16_reconstruct_one_missing() {
+    let codec = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 128;
+    let data: Vec<Vec<u8>> = (0..4)
+        .map(|i| (0..shard_size).map(|j| ((i * 41 + j + 3) & 0xFF) as u8).collect())
+        .collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 2];
+    codec.encode_sep(&data, &mut parity).unwrap();
+
+    let mut all_shards: Vec<Option<Vec<u8>>> = data.into_iter().map(Some).collect();
+    all_shards.extend(parity.into_iter().map(Some));
+
+    // Erase one data shard.
+    let original = all_shards[1].clone().unwrap();
+    all_shards[1] = None;
+
+    codec.reconstruct(&mut all_shards).unwrap();
+
+    assert_eq!(all_shards[1].as_ref().unwrap(), &original);
+}
+
+#[test]
+fn test_leopard_gf16_reconstruct_max_erasures() {
+    let codec = ReedSolomon::with_options(
+        4,
+        3,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 128;
+    let data: Vec<Vec<u8>> = (0..4)
+        .map(|i| (0..shard_size).map(|j| ((i * 67 + j + 11) & 0xFF) as u8).collect())
+        .collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 3];
+    codec.encode_sep(&data, &mut parity).unwrap();
+
+    let originals: Vec<Vec<u8>> = data.iter().cloned().collect();
+    let mut all_shards: Vec<Option<Vec<u8>>> = data.into_iter().map(Some).collect();
+    all_shards.extend(parity.into_iter().map(Some));
+
+    // Erase 3 shards (max for 3 parity).
+    all_shards[0] = None;
+    all_shards[2] = None;
+    all_shards[5] = None;
+
+    codec.reconstruct(&mut all_shards).unwrap();
+
+    assert_eq!(all_shards[0].as_ref().unwrap(), &originals[0]);
+    assert_eq!(all_shards[2].as_ref().unwrap(), &originals[2]);
+}
+
+#[test]
+fn test_leopard_gf16_reconstruct_data_only() {
+    let codec = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let shard_size = 128;
+    let data: Vec<Vec<u8>> = (0..4)
+        .map(|i| (0..shard_size).map(|j| ((i * 29 + j + 5) & 0xFF) as u8).collect())
+        .collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 2];
+    codec.encode_sep(&data, &mut parity).unwrap();
+
+    let original_data: Vec<Vec<u8>> = data.iter().cloned().collect();
+    let mut all_shards: Vec<Option<Vec<u8>>> = data.into_iter().map(Some).collect();
+    all_shards.extend(parity.into_iter().map(Some));
+
+    // Erase one data shard.
+    all_shards[1] = None;
+
+    codec.reconstruct_data(&mut all_shards).unwrap();
+
+    assert_eq!(all_shards[1].as_ref().unwrap(), &original_data[1]);
 }
 
 #[test]

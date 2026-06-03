@@ -99,7 +99,7 @@ fn init_fft_skew16(
 
         for i in (m + 1)..(bitwidth - 1) {
             let sum = add_mod16(log_lut[(temp[i] ^ 1) as usize], temp[m]);
-            temp[i] = mul_log16(log_lut[temp[i] as usize], sum, log_lut, exp_lut);
+            temp[i] = mul_log16(temp[i], sum, log_lut, exp_lut);
         }
     }
 

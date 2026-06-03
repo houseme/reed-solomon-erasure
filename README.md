@@ -210,8 +210,11 @@ The streaming API is available on `galois_8::ReedSolomon` (classic family only) 
   - fully functional: `encode`, `encode_sep`, `encode_opt`, `verify`, `reconstruct`, `reconstruct_data`, `reconstruct_some` (and their `_opt`/`_par` variants)
   - does **not** support `encode_single`, `encode_single_sep`, `update`, or `decode_idx` (these return `Error::UnsupportedCodecFamily`)
 - `CodecFamily::LeopardGF16`
-  - reserved for a future Leopard GF(2^16) family
-  - currently exposed only as a prototype skeleton and returns `Error::UnsupportedLeopardPrototype`
+  - FFT-based Leopard codec over GF(2^16)
+  - supports up to 65536 total shards (data + parity)
+  - requires shard lengths that are multiples of 64 bytes
+  - fully functional: `encode`, `encode_sep`, `encode_opt`, `verify`, `reconstruct`, `reconstruct_data`, `reconstruct_some` (and their `_opt`/`_par` variants)
+  - does **not** support `encode_single`, `encode_single_sep`, `update`, or `decode_idx` (these return `Error::UnsupportedCodecFamily`)
 
 This means classic users do not silently switch families. Any future Leopard use will stay opt-in.
 

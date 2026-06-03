@@ -70,6 +70,28 @@ impl<F: Field> ReedSolomon<F> {
         Ok(true)
     }
 
+    /// Verify LeopardGF16 parity shards by re-encoding and comparing.
+    fn verify_leopard_gf16<T: AsRef<[F::Elem]>>(&self, slices: &[T]) -> Result<bool, Error> {
+        let data = &slices[0..self.data_shard_count];
+        let to_check = &slices[self.data_shard_count..];
+        let slice_len = data[0].as_ref().len();
+
+        let mut parity_bufs: Vec<Vec<F::Elem>> = (0..self.parity_shard_count)
+            .map(|_| vec![F::zero(); slice_len])
+            .collect();
+        let mut parity_refs: Vec<&mut [F::Elem]> =
+            parity_bufs.iter_mut().map(|b| b.as_mut_slice()).collect();
+
+        self.encode_leopard_gf16_sep(data, &mut parity_refs)?;
+
+        for (expected, actual) in parity_refs.iter().zip(to_check.iter()) {
+            if *expected != actual.as_ref() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     pub fn verify<T: AsRef<[F::Elem]>>(&self, slices: &[T]) -> Result<bool, Error> {
         self.ensure_classic_family_execution()?;
         check_piece_count!(all => self, slices);
@@ -77,6 +99,9 @@ impl<F: Field> ReedSolomon<F> {
 
         if self.is_leopard_gf8_family() {
             return self.verify_leopard_gf8(slices);
+        }
+        if self.is_leopard_gf16_family() {
+            return self.verify_leopard_gf16(slices);
         }
 
         let slice_len = slices[0].as_ref().len();
@@ -115,6 +140,9 @@ impl<F: Field> ReedSolomon<F> {
         if self.is_leopard_gf8_family() {
             return self.verify_leopard_gf8(slices);
         }
+        if self.is_leopard_gf16_family() {
+            return self.verify_leopard_gf16(slices);
+        }
 
         let slice_len = slices[0].as_ref().len();
         workspace.prepare(self, slice_len);
@@ -133,6 +161,9 @@ impl<F: Field> ReedSolomon<F> {
 
         if self.is_leopard_gf8_family() {
             return self.verify_leopard_gf8(slices);
+        }
+        if self.is_leopard_gf16_family() {
+            return self.verify_leopard_gf16(slices);
         }
 
         let data = &slices[0..self.data_shard_count];
@@ -166,6 +197,9 @@ impl<F: Field> ReedSolomon<F> {
         if self.is_leopard_gf8_family() {
             return self.verify_leopard_gf8(slices);
         }
+        if self.is_leopard_gf16_family() {
+            return self.verify_leopard_gf16(slices);
+        }
 
         let data = &slices[0..self.data_shard_count];
         let to_check = &slices[self.data_shard_count..];
@@ -195,6 +229,9 @@ impl<F: Field> ReedSolomon<F> {
 
         if self.is_leopard_gf8_family() {
             return self.verify_leopard_gf8(slices);
+        }
+        if self.is_leopard_gf16_family() {
+            return self.verify_leopard_gf16(slices);
         }
 
         let slice_len = slices[0].as_ref().len();

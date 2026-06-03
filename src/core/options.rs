@@ -10,8 +10,7 @@
 ///   Supports up to 256 total shards (data + parity).
 ///
 /// - [`LeopardGF16`](CodecFamily::LeopardGF16): FFT-based Leopard codec over GF(2^16).
-///   **Not yet implemented** — constructing a codec with this family returns
-///   [`Error::UnsupportedLeopardPrototype`](crate::Error::UnsupportedLeopardPrototype).
+///   Supports up to 65536 total shards (data + parity).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CodecFamily {
     Classic,

@@ -97,12 +97,24 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
         flat_work.lane_mut(i).fill(0);
     }
 
-    // Reinterpret data shards as u16 slices (once, outside the loop).
-    let data_u16: Vec<&[u16]> = data
+    // Convert data from user byte layout to Go's GF16 split layout.
+    // Go interprets each 64-byte chunk as: element i = byte[i] | (byte[i+32] << 8).
+    // We rearrange bytes so that `as u16 LE` gives the same elements.
+    let converted_data: Vec<Vec<u8>> = data
         .iter()
         .map(|d| {
             let bytes = d.as_ref();
-            unsafe { core::slice::from_raw_parts(bytes.as_ptr().cast::<u16>(), shard_u16_len) }
+            let mut split = vec![0u8; bytes.len()];
+            super::ops::user_bytes_to_work_bytes(bytes, &mut split);
+            split
+        })
+        .collect();
+
+    // Reinterpret split-layout data as u16 slices.
+    let data_u16: Vec<&[u16]> = converted_data
+        .iter()
+        .map(|d| {
+            unsafe { core::slice::from_raw_parts(d.as_ptr().cast::<u16>(), shard_u16_len) }
         })
         .collect();
 
@@ -189,6 +201,15 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
     FLAT_WORK16_CACHE.with(|cache| {
         *cache.borrow_mut() = Some(flat_work);
     });
+
+    // Convert parity output from split layout back to user byte layout.
+    // The parity was written as u16 values in split layout; convert bytes to contiguous.
+    for output in parity.iter_mut() {
+        let out_bytes = output.as_mut();
+        let mut contiguous = vec![0u8; out_bytes.len()];
+        super::ops::work_bytes_to_user_bytes(out_bytes, &mut contiguous);
+        out_bytes.copy_from_slice(&contiguous);
+    }
 
     Ok(driver)
 }

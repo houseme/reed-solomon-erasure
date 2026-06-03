@@ -10,7 +10,7 @@ use super::ops::{
 };
 use super::work::FlatWork16;
 use super::{
-    FftDit16Plan, IfftDit16Plan, LeopardGf16Tables, MODULUS16, WORK_SIZE16,
+    FftDit16Plan, IfftDit16Plan, LeopardGf16Tables, MODULUS16, ORDER16, WORK_SIZE16,
     build_ifft_decode_dit16_plan, ceil_pow2, init_leopard_gf16_tables,
 };
 
@@ -77,13 +77,7 @@ fn compute_error_locs16(
         err_locs[driver.m + shard_idx] = 1;
     }
 
-    // Debug: print initial err_locs before FWHT
-    eprintln!("  err_locs INIT: {:?}", &err_locs[..8]);
-
-    fwht16_mtrunc(&mut err_locs, driver.work_size);
-
-    // Debug: print after FWHT
-    eprintln!("  after fwht16_mtrunc: {:?}", &err_locs[..8]);
+    fwht16_mtrunc(&mut err_locs, ORDER16, driver.work_size);
 
     for i in 0..super::ORDER16 {
         if err_locs[i] == 0 {
@@ -92,9 +86,6 @@ fn compute_error_locs16(
         let product = (err_locs[i] as u64 * tables.log_walsh[i] as u64) % MODULUS16 as u64;
         err_locs[i] = product as u16;
     }
-
-    // Debug: print after log_walsh multiply
-    eprintln!("  after log_walsh mul: {:?}", &err_locs[..8]);
 
     fwht16_variable(&mut err_locs[..super::ORDER16]);
 
@@ -153,16 +144,6 @@ pub(crate) fn reconstruct_with_tables16(
 
     let err_locs = compute_error_locs16(&missing_parity, &missing_data, &driver, tables);
 
-    // Debug: print err_locs for all shard positions
-    for i in 0..total_shards {
-        let (work_idx, err_idx) = if i >= data_shards {
-            (i - data_shards, i - data_shards)
-        } else {
-            (driver.m + i, driver.m + i)
-        };
-        eprintln!("  err_locs: shard {i} (present={}), work_idx={work_idx}, err_idx={err_idx}, val={:#06x}", present[i], err_locs[err_idx]);
-    }
-
     // Compute input_count: m + last_present_data_index + 1 (matches Go's inputCount).
     let mut input_count = driver.m;
     for i in 0..data_shards {
@@ -173,6 +154,18 @@ pub(crate) fn reconstruct_with_tables16(
 
     let ifft_plan = build_ifft_decode_dit16_plan(input_count, driver.n, &*tables.fft_skew);
     let fft_plan = super::build_fft_dit16_plan(driver.work_size, driver.n, &*tables.fft_skew);
+
+    // Convert all present input shards from user byte layout to Go's GF16 split layout.
+    let converted_inputs: Vec<Option<Vec<u8>>> = input_data
+        .iter()
+        .map(|opt| {
+            opt.map(|bytes| {
+                let mut split = vec![0u8; bytes.len()];
+                super::ops::user_bytes_to_work_bytes(bytes, &mut split);
+                split
+            })
+        })
+        .collect();
 
     let chunk_cap = core::cmp::min(shard_u16_len, driver.chunk_size);
     let mut work = FlatWork16::new(driver.n, chunk_cap);
@@ -192,7 +185,7 @@ pub(crate) fn reconstruct_with_tables16(
         for i in 0..data_shards {
             let work_idx = driver.m + i;
             if present[i] {
-                let data_bytes = input_data[i].as_ref().ok_or(Error::TooFewShardsPresent)?;
+                let data_bytes = converted_inputs[i].as_ref().ok_or(Error::TooFewShardsPresent)?;
                 let data_u16: &[u16] = unsafe {
                     core::slice::from_raw_parts(data_bytes.as_ptr().cast::<u16>(), shard_u16_len)
                 };
@@ -209,7 +202,7 @@ pub(crate) fn reconstruct_with_tables16(
         for i in 0..parity_shards {
             let shard_idx = data_shards + i;
             if present[shard_idx] {
-                let data_bytes = input_data[shard_idx].as_ref().ok_or(Error::TooFewShardsPresent)?;
+                let data_bytes = converted_inputs[shard_idx].as_ref().ok_or(Error::TooFewShardsPresent)?;
                 let data_u16: &[u16] = unsafe {
                     core::slice::from_raw_parts(data_bytes.as_ptr().cast::<u16>(), shard_u16_len)
                 };
@@ -230,46 +223,14 @@ pub(crate) fn reconstruct_with_tables16(
             work.lane_mut(i)[..size].fill(0);
         }
 
-        // Debug: print work values after Step 1
-        if offset == 0 {
-            for i in 0..driver.n {
-                let lane = work.lane(i);
-                eprintln!("  after step1 work[{i}] = {:04x?}", &lane[..4.min(lane.len())]);
-            }
-        }
-
         // Step 2: IFFT.
         ifft_dit_decode16_with_plan(&mut work, size, &ifft_plan, tables, driver.n, &mut scratch);
-
-        // Debug after IFFT
-        if offset == 0 {
-            for i in 0..driver.n {
-                let lane = work.lane(i);
-                eprintln!("  after ifft work[{i}][0] = {:#06x}", lane[0]);
-            }
-        }
 
         // Step 3: Formal derivative.
         compute_formal_derivative16(&mut work, driver.n, size);
 
-        // Debug after derivative
-        if offset == 0 {
-            for i in 0..driver.n {
-                let lane = work.lane(i);
-                eprintln!("  after deriv work[{i}][0] = {:#06x}", lane[0]);
-            }
-        }
-
         // Step 4: FFT.
         fft_dit_decode16_with_plan(&mut work, size, &fft_plan, tables, driver.n, &mut scratch);
-
-        // Debug after FFT
-        if offset == 0 {
-            for i in 0..driver.work_size {
-                let lane = work.lane(i);
-                eprintln!("  after fft work[{i}][0] = {:#06x}", lane[0]);
-            }
-        }
 
         // Step 5: Recover missing shards.
         for i in 0..total_shards {
@@ -295,6 +256,17 @@ pub(crate) fn reconstruct_with_tables16(
             );
         }
         offset = end;
+    }
+
+    // Convert recovered output shards from split layout back to user byte layout.
+    for i in 0..total_shards {
+        if present[i] {
+            continue;
+        }
+        let out_bytes = &mut *outputs[i];
+        let mut contiguous = vec![0u8; out_bytes.len()];
+        super::ops::work_bytes_to_user_bytes(out_bytes, &mut contiguous);
+        out_bytes.copy_from_slice(&contiguous);
     }
 
     Ok(())
@@ -408,11 +380,14 @@ fn compute_formal_derivative16(work: &mut FlatWork16, n: usize, _size: usize) {
     for i in 1..n {
         let width = ((i ^ (i - 1)) + 1) >> 1;
         for j in 0..width {
-            let dst_idx = i - width + j;
-            let src_idx = i + j;
-            if src_idx < n && dst_idx < n {
-                if let Some((s, d)) = get_pair_mut_flat16(work, src_idx, dst_idx) {
-                    slice_xor_u16(d, s);
+            let lo_idx = i - width + j;
+            let hi_idx = i + j;
+            if hi_idx < n && lo_idx < n {
+                // Go: slicesXor(work[i-width:i], work[i:i+width]) modifies v1=work[i-width:i]
+                // slicesXor(v1, v2) → for each j: sliceXor(v2[j], v1[j]) → v1[j] ^= v2[j]
+                // So: work[lo_idx] ^= work[hi_idx], i.e., lo ^= hi
+                if let Some((lo, hi)) = get_pair_mut_flat16(work, lo_idx, hi_idx) {
+                    slice_xor_u16(lo, hi);
                 }
             }
         }
