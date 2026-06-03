@@ -1,5 +1,6 @@
 # P3-2: 基于分片大小的自动并行度调优 — 子任务详细文档
 
+> **状态: ✅ 已完成** — cache_detect 模块（Linux sysfs + macOS sysctl），cache-aware chunk sizing
 > 文档日期: 2026-05-31
 > 预估总工作量: 3-5 天
 > 前置依赖: 无

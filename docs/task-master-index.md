@@ -1,6 +1,6 @@
 # 任务主索引
 
-> 最后更新: 2026-06-02（P0-2 流式 API 实现完成）
+> 最后更新: 2026-06-03（P2-1 GF16 完成，全量 clippy 清理，状态审计）
 > 基于 reed-solomon-erasure vs klauspost/reedsolomon 对比分析
 
 ---
@@ -15,13 +15,15 @@
 | P3 | 4 | 8 | 14 |
 | **合计** | **12** | **37** | **77** |
 
-### 实现进度（2026-06-02 更新）
+### 实现进度（2026-06-03 审计）
 
 | 状态 | 叶子任务数 | 占比 |
 |------|-----------|------|
-| ✅ 已完成 | ~76 | 99% |
-| 🔶 部分完成 | ~0 | 0% |
-| ❌ 未实现 | ~1 | 1% |（P2-2 ppc64le） |
+| ✅ 已完成 | 64 | 83% |
+| 🔶 部分完成 | 1 | 1% |
+| ❌ 未实现 | 12 | 16% |
+
+> 未完成分布: P0-2e 并发流 (3) | P2-2 ppc64le (8) | P3-4c Go 基准 (1)
 
 > 状态标记: ✅ 已完成 | 🔶 部分完成 | ❌ 未实现 | 🔧 有遗留问题
 
@@ -31,7 +33,7 @@
 
 ### P0-1: Leopard GF8 完整编解码
 > 文档: [task-P0-1-leopard-gf8.md](task-P0-1-leopard-gf8.md)
-> **状态: 基本完成** — 编码/重建/验证均已接入公共 API（含 _opt 变体），错误类型已清理，README 已更新
+> **状态: ✅ 已完成** — 编码/重建/验证均已接入公共 API（含 _opt 变体），错误类型已清理，README 已更新，11/11 子任务全部完成
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|
@@ -46,12 +48,12 @@
 | | P0-1c-2 verify 测试 | 0.5d | ✅ 现有 verify 测试覆盖 LeopardGF8 |
 | P0-1d: reconstruct_some | P0-1d-1 selective 重建逻辑 | 1d | ✅ 委托完整 reconstruct，_opt 变体已有 dispatch |
 | | P0-1d-2 测试 | 0.5d | ✅ |
-| P0-1e: 移除 prototype | P0-1e-1 错误类型清理 | 0.5d | ✅ UnsupportedLeopardPrototype 仅用于 LeopardGF16 |
+| P0-1e: 移除 prototype | P0-1e-1 错误类型清理 | 0.5d | ✅ UnsupportedLeopardPrototype 仅用于 leopard_gf8_state() 区分 GF16 |
 | | P0-1e-2 文档更新 | 0.5d | ✅ README 已更新，CodecFamily/CodecOptions/MatrixMode 已有 doc-comments |
 
 ### P0-2: 流式 API
 > 文档: [task-P0-2-streaming-api.md](task-P0-2-streaming-api.md)
-> **状态: 基本完成** — encode_stream/verify_stream/reconstruct_stream 已实现（含 StreamOptions/StreamError），12 个测试通过，并发流和 README 示例待做
+> **状态: 基本完成** — encode_stream/verify_stream/reconstruct_stream 已实现（含 StreamOptions/StreamError），12 个测试通过；P0-2e 并发流（3 个子任务）待实现
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|
@@ -152,7 +154,7 @@
 
 ### P2-2: ppc64le SIMD
 > 文档: [task-P2-2-ppc64le.md](task-P2-2-ppc64le.md)
-> **状态: 未实现** — 零 ppc64le/VSX 代码，backend.rs 仅支持 x86_64 和 aarch64，PowerPC 回退到标量
+> **状态: ❌ 未实现** — 零 ppc64le/VSX 代码，backend.rs 仅支持 x86_64 和 aarch64，PowerPC 回退到标量，8 个子任务待实现
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|
@@ -224,7 +226,7 @@
 
 ### P3-4: 跨平台基准对比
 > 文档: [task-P3-4-benchmarks.md](task-P3-4-benchmarks.md)
-> **状态: 已完成** — 3 个 Criterion bench 目标 + 2 个 smoke test + 共享基础设施（22 配置）+ 方法论文档；缺少跨平台对比 bench 和 Go 对齐
+> **状态: 基本完成** — 3 个 Criterion bench 目标 + 2 个 smoke test + 共享基础设施（22 配置）+ 方法论文档；P3-4c-1 Go 基准代码待实现，P3-4d-1 数据收集部分完成
 
 | 任务 | 叶子任务 | 预估 | 状态 |
 |------|----------|------|------|

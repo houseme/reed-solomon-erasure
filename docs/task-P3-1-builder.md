@@ -1,5 +1,6 @@
 # P3-1: CodecOptions Builder 模式与 max_threads — 子任务详细文档
 
+> **状态: ✅ 已完成** — CodecOptionsBuilder 完整实现（6 个链式方法 + build()），max_parallel_jobs 已集成
 > 文档日期: 2026-05-31
 > 预估总工作量: 2-3 天
 > 前置依赖: 无
