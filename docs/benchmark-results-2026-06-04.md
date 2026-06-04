@@ -110,8 +110,7 @@ Backend override: `RSE_BACKEND_OVERRIDE=avx2` / `RSE_BACKEND_OVERRIDE=ssse3`
 |--------------|--------|---------------------|
 | NEON XOR unroll branch removal | `mul_slice_xor` hot path | -0.68% ~ -1.24% latency (64KB) |
 | lut_xor table rebuild elimination | Leopard FFT butterflies | **-10% ~ -14% latency, +11% ~ +17% throughput** (1MB) |
-| AVX2 loop unrolling (2x) | x86_64 mul_slice/mul_slice_xor | **+4% ~ +6% throughput** (1MB+), -13% at 64KB XOR |
-| SSSE3 loop unrolling (2x) | x86_64 mul_slice/mul_slice_xor | **+2% ~ +6% throughput** (1MB+), -4.5% at 64KB |
+| AVX2/SSSE3 loop unrolling (2x) | x86_64 mul_slice | **Reverted** — shuffle port contention prevents benefit, see analysis |
 | Reconstruct copy elision | Leopard reconstruct | Not benchmarked (memory savings) |
 
 ---

@@ -6,25 +6,25 @@ Comprehensive review of the Reed-Solomon erasure coding library (~22,400 lines).
 
 ## 1. SIMD Backend Performance
 
-### 1.1 AVX2 Loop Unrolling (2x) — IMPLEMENTED
+### 1.1 AVX2 Loop Unrolling (2x) — REVERTED
 
 **File**: `src/galois_8/x86/avx2.rs`
 
 **Problem**: Main loop processes 32 bytes/iteration with a single `__m256i` shuffle in flight. Shuffle latency (1 cycle on Zen 3+, 3 cycles on Skylake) means the loop is latency-bound.
 
-**Fix**: 2x unroll to 64 bytes/iteration. Two independent load→mask→shuffle→XOR chains in flight, hiding latency.
+**Attempted Fix**: 2x unroll to 64 bytes/iteration. Two independent load→mask→shuffle→XOR chains in flight, hiding latency.
 
-**Impact**: ~10-20% throughput improvement for `mul_slice`/`mul_slice_xor` on AVX2 systems with shard sizes >= 64 bytes.
+**Result**: **Reverted.** On Zen 4, `vpshufb` only executes on 2 ports (Port 0/1). Both chains serialize through the same shuffle ports — zero latency hiding. Benchmarks showed inconsistent results (-19% to +15% for 64KB XOR). See `docs/avx2-ssse3-unroll-analysis-2026-06-04.md`.
 
-### 1.2 SSSE3 Loop Unrolling (2x) — IMPLEMENTED
+### 1.2 SSSE3 Loop Unrolling (2x) — REVERTED
 
 **File**: `src/galois_8/x86/ssse3.rs`
 
 **Problem**: Main loop processes 16 bytes/iteration. Same latency-bound issue as AVX2.
 
-**Fix**: 2x unroll to 32 bytes/iteration.
+**Attempted Fix**: 2x unroll to 32 bytes/iteration.
 
-**Impact**: ~10-15% throughput improvement on SSSE3-only systems.
+**Result**: **Reverted.** Same shuffle port contention issue as AVX2. See analysis doc.
 
 ### 1.3 AVX-512 — No Change Needed
 
@@ -189,20 +189,8 @@ NEON improvements from removing the runtime unroll-factor branch in `mul_slice_x
 
 Significant improvement from eliminating per-butterfly table rebuild in `fft_dit2`/`ifft_dit2`.
 
-### 8.3 x86_64 AVX2/SSSE3 Loop Unrolling (Intel Xeon Platinum 8370C)
+### 8.3 x86_64 AVX2/SSSE3 Loop Unrolling (AMD EPYC 9V45, Zen 4) — REVERTED
 
-**AVX2 (32→64 bytes/iteration):**
+2x loop unrolling was attempted but **reverted** due to shuffle port contention. On Zen 4, `vpshufb` only executes on 2 ports, so both chains in the unrolled loop serialize completely. Benchmarks showed inconsistent results across runs (-19% to +15% for 64KB XOR), confirming the unrolling has no reliable benefit. An interleaving attempt caused +28% regression from register spilling.
 
-| Operation | 64KB | 1MB | 4MB |
-|-----------|------|-----|-----|
-| mul_slice time change | +1.0% (p=0.00) | **-3.7%** (p=0.00) | **-3.9%** (p=0.00) |
-| mul_slice_xor time change | +14.9% (p=0.00) | **-4.0%** (p=0.00) | **-5.3%** (p=0.00) |
-
-**SSSE3 (16→32 bytes/iteration):**
-
-| Operation | 64KB | 1MB | 4MB |
-|-----------|------|-----|-----|
-| mul_slice time change | +4.7% (p=0.00) | +1.5% (p=0.00) | **-5.9%** (p=0.00) |
-| mul_slice_xor time change | -0.7% (p=0.01) | **-2.2%** (p=0.00) | -0.1% (ns) |
-
-Large shards (1MB+) benefit from unrolling (+4-6% throughput). Small shards (64KB) show regressions due to pipeline pressure from the extra load+XOR chain in the unrolled loop.
+See `docs/avx2-ssse3-unroll-analysis-2026-06-04.md` for full analysis with assembly evidence.
