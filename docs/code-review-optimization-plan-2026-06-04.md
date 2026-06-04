@@ -189,6 +189,20 @@ NEON improvements from removing the runtime unroll-factor branch in `mul_slice_x
 
 Significant improvement from eliminating per-butterfly table rebuild in `fft_dit2`/`ifft_dit2`.
 
-### 8.3 Note on x86_64
+### 8.3 x86_64 AVX2/SSSE3 Loop Unrolling (Intel Xeon Platinum 8370C)
 
-SSSE3/AVX2 loop unrolling (2x) benchmarks require an x86_64 machine. Expected improvement: 10-20% throughput for `mul_slice`/`mul_slice_xor` on AVX2 systems.
+**AVX2 (32→64 bytes/iteration):**
+
+| Operation | 64KB | 1MB | 4MB |
+|-----------|------|-----|-----|
+| mul_slice time change | +1.0% (p=0.00) | **-3.7%** (p=0.00) | **-3.9%** (p=0.00) |
+| mul_slice_xor time change | +14.9% (p=0.00) | **-4.0%** (p=0.00) | **-5.3%** (p=0.00) |
+
+**SSSE3 (16→32 bytes/iteration):**
+
+| Operation | 64KB | 1MB | 4MB |
+|-----------|------|-----|-----|
+| mul_slice time change | +4.7% (p=0.00) | +1.5% (p=0.00) | **-5.9%** (p=0.00) |
+| mul_slice_xor time change | -0.7% (p=0.01) | **-2.2%** (p=0.00) | -0.1% (ns) |
+
+Large shards (1MB+) benefit from unrolling (+4-6% throughput). Small shards (64KB) show regressions due to pipeline pressure from the extra load+XOR chain in the unrolled loop.
