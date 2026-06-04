@@ -35,6 +35,14 @@ pub(crate) fn rust_avx512_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     if input.is_empty() {
         return;
     }
+    if c == 0 {
+        out.fill(0);
+        return;
+    }
+    if c == 1 {
+        out.copy_from_slice(input);
+        return;
+    }
     unsafe { rust_avx512_mul_impl::<false>(c, input, out) }
 }
 
@@ -47,6 +55,15 @@ pub(crate) fn rust_avx512_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
 pub(crate) fn rust_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     assert_eq!(input.len(), out.len());
     if input.is_empty() {
+        return;
+    }
+    if c == 0 {
+        return;
+    }
+    if c == 1 {
+        for (i, o) in input.iter().zip(out.iter_mut()) {
+            *o ^= *i;
+        }
         return;
     }
     unsafe { rust_avx512_mul_impl::<true>(c, input, out) }

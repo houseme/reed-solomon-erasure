@@ -374,7 +374,7 @@ impl<F: Field> ReedSolomon<F> {
         T: AsRef<[U]> + AsMut<[U]>,
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
     {
-        if self.is_leopard_gf8_family() {
+        if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
             return Err(Error::UnsupportedCodecFamily);
         }
         let slices = shards.as_mut();
@@ -396,7 +396,7 @@ impl<F: Field> ReedSolomon<F> {
         single_data: &[F::Elem],
         parity: &mut [U],
     ) -> Result<(), Error> {
-        if self.is_leopard_gf8_family() {
+        if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
             return Err(Error::UnsupportedCodecFamily);
         }
         check_slice_index!(data => self, i_data);
@@ -436,7 +436,7 @@ impl<F: Field> ReedSolomon<F> {
         check_piece_count!(parity => self, parity);
         check_slices!(multi => data, multi => parity);
 
-        if leopard::leopard_gf8_state(&self.family_state).is_ok() {
+        if self.is_leopard_gf8_family() {
             return self.encode_leopard_gf8_sep(data, parity);
         }
         if self.is_leopard_gf16_family() {
@@ -470,30 +470,7 @@ impl<F: Field> ReedSolomon<F> {
         data: &[T],
         parity: &mut [U],
     ) -> Result<(), Error> {
-        let data_u8: Vec<&[u8]> = data
-            .iter()
-            .map(|s| {
-                let slice: &[F::Elem] = s.as_ref();
-                // SAFETY: Leopard GF8 is only instantiated when F::Elem = u8.
-                // The validate_leopard_gf8 check ensures F::ORDER == 256,
-                // and galois_8::Field has Elem = u8.
-                unsafe { &*(slice as *const [F::Elem] as *const [u8]) }
-            })
-            .collect();
-        let mut parity_u8: Vec<&mut [u8]> = parity
-            .iter_mut()
-            .map(|s| {
-                let slice: &mut [F::Elem] = s.as_mut();
-                // SAFETY: Same as above — F::Elem = u8 for leopard.
-                unsafe { &mut *(slice as *mut [F::Elem] as *mut [u8]) }
-            })
-            .collect();
-        leopard::leopard_gf8_encode(
-            self.data_shard_count,
-            self.parity_shard_count,
-            &data_u8,
-            &mut parity_u8,
-        )
+        self.encode_leopard_sep_inner(data, parity, leopard::leopard_gf8_encode)
     }
 
     pub(crate) fn encode_leopard_gf16_sep<
@@ -504,13 +481,23 @@ impl<F: Field> ReedSolomon<F> {
         data: &[T],
         parity: &mut [U],
     ) -> Result<(), Error> {
+        self.encode_leopard_sep_inner(data, parity, leopard::leopard_gf16_encode)
+    }
+
+    fn encode_leopard_sep_inner<
+        T: AsRef<[F::Elem]>,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
+    >(
+        &self,
+        data: &[T],
+        parity: &mut [U],
+        encode_fn: fn(usize, usize, &[&[u8]], &mut [&mut [u8]]) -> Result<(), Error>,
+    ) -> Result<(), Error> {
         let data_u8: Vec<&[u8]> = data
             .iter()
             .map(|s| {
                 let slice: &[F::Elem] = s.as_ref();
-                // SAFETY: Leopard GF16 is only instantiated when F::Elem = u8.
-                // The validate_leopard_gf16 check ensures F::ORDER == 256,
-                // and galois_8::Field has Elem = u8.
+                // SAFETY: Leopard is only instantiated when F::Elem = u8.
                 unsafe { &*(slice as *const [F::Elem] as *const [u8]) }
             })
             .collect();
@@ -522,7 +509,7 @@ impl<F: Field> ReedSolomon<F> {
                 unsafe { &mut *(slice as *mut [F::Elem] as *mut [u8]) }
             })
             .collect();
-        leopard::leopard_gf16_encode(
+        encode_fn(
             self.data_shard_count,
             self.parity_shard_count,
             &data_u8,
@@ -544,7 +531,7 @@ impl<F: Field> ReedSolomon<F> {
         T: AsRef<[F::Elem]>,
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
     {
-        if self.is_leopard_gf8_family() {
+        if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
             return Err(Error::UnsupportedCodecFamily);
         }
         self.ensure_classic_family_execution()?;
@@ -620,7 +607,7 @@ impl<F: Field> ReedSolomon<F> {
         check_piece_count!(parity => self, parity);
         check_slices!(multi => data, multi => parity);
 
-        if leopard::leopard_gf8_state(&self.family_state).is_ok() {
+        if self.is_leopard_gf8_family() {
             return self.encode_leopard_gf8_sep(data, parity);
         }
         if self.is_leopard_gf16_family() {
@@ -656,7 +643,7 @@ impl<F: Field> ReedSolomon<F> {
         F::Elem: Send + Sync,
         U: AsRef<[F::Elem]> + AsMut<[F::Elem]> + Send,
     {
-        if self.is_leopard_gf8_family() {
+        if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
             return Err(Error::UnsupportedCodecFamily);
         }
         check_slice_index!(data => self, i_data);

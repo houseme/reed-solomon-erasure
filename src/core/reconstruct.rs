@@ -422,7 +422,7 @@ impl<F: Field> ReedSolomon<F> {
     ///
     /// Missing shards should be zero-length; present shards must have valid data.
     pub fn reconstruct<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
-        if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
+        if self.is_leopard_gf8_family() {
             return self.reconstruct_leopard_gf8(slices, false);
         }
         if self.is_leopard_gf16_family() {
@@ -434,7 +434,7 @@ impl<F: Field> ReedSolomon<F> {
 
     /// Reconstruct only missing data shards (parity shards are not recovered).
     pub fn reconstruct_data<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
-        if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
+        if self.is_leopard_gf8_family() {
             return self.reconstruct_leopard_gf8(slices, true);
         }
         if self.is_leopard_gf16_family() {
@@ -450,7 +450,7 @@ impl<F: Field> ReedSolomon<F> {
         shards: &mut [T],
         required: &[bool],
     ) -> Result<(), Error> {
-        if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
+        if self.is_leopard_gf8_family() {
             // For leopard, reconstruct_some delegates to reconstruct (leopard always
             // recovers all shards, then the caller picks which ones they needed).
             self.reconstruct_leopard_gf8(shards, false)?;
@@ -592,19 +592,17 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
-    /// Leopard GF8 reconstruction dispatch.
+    /// Shared implementation for Leopard GF8/GF16 reconstruction.
     ///
     /// Builds the `present`, `outputs`, and `input_data` arrays required by
-    /// the Forney-based FFT decoder, calls it, then writes recovered data
-    /// back into the original shard objects.
+    /// the Forney-based FFT decoder, calls the provided `reconstruct_fn`,
+    /// then writes recovered data back into the original shard objects.
     #[allow(clippy::needless_range_loop)]
-    fn reconstruct_leopard_gf8<T: ReconstructShard<F>>(
+    fn reconstruct_leopard_impl<T: ReconstructShard<F>>(
         &self,
         slices: &mut [T],
-        _data_only: bool,
+        reconstruct_fn: fn(&[bool], &mut [&mut [u8]], &[Option<&[u8]>], usize, usize) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        use super::leopard_gf8;
-
         check_piece_count!(all => self, slices);
 
         let total = self.total_shard_count;
@@ -613,8 +611,7 @@ impl<F: Field> ReedSolomon<F> {
             return Err(Error::EmptyShard);
         };
 
-        // Determine which shards are present and collect raw data pointers.
-        // SAFETY: F::Elem = u8 for leopard GF8.
+        // SAFETY: F::Elem = u8 for all leopard codec families.
         let mut present = vec![false; total];
         let mut raw_data: Vec<Option<*const u8>> = vec![None; total];
         for i in 0..total {
@@ -624,10 +621,8 @@ impl<F: Field> ReedSolomon<F> {
             }
         }
 
-        // Allocate output buffers for every shard.
         let mut output_bufs: Vec<Vec<u8>> = (0..total).map(|_| vec![0u8; shard_len]).collect();
 
-        // Copy present shard data into output buffers.
         for i in 0..total {
             if let Some(ptr) = raw_data[i] {
                 let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
@@ -640,7 +635,6 @@ impl<F: Field> ReedSolomon<F> {
             .map(|buf| buf.as_mut_slice())
             .collect();
 
-        // Build input_data from raw pointers (immutable borrow only).
         let mut input_data: Vec<Option<&[u8]>> = Vec::with_capacity(total);
         for i in 0..total {
             if let Some(ptr) = raw_data[i] {
@@ -651,8 +645,7 @@ impl<F: Field> ReedSolomon<F> {
             }
         }
 
-        // Call the Forney-based FFT decoder.
-        leopard_gf8::reconstruct_with_tables(
+        reconstruct_fn(
             &present,
             &mut outputs,
             &input_data,
@@ -660,12 +653,10 @@ impl<F: Field> ReedSolomon<F> {
             self.parity_shard_count,
         )?;
 
-        // Write recovered data from output buffers into the original shard objects.
         for i in 0..total {
             if present[i] {
                 continue;
             }
-            // SAFETY: F::Elem = u8 for leopard GF8.
             let elem_slice: &[F::Elem] =
                 unsafe { &*(output_bufs[i].as_slice() as *const [u8] as *const [F::Elem]) };
             match slices[i].get_or_initialize(shard_len) {
@@ -677,76 +668,20 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
-    /// Leopard GF16 reconstruction dispatch.
-    #[allow(clippy::needless_range_loop)]
+    fn reconstruct_leopard_gf8<T: ReconstructShard<F>>(
+        &self,
+        slices: &mut [T],
+        _data_only: bool,
+    ) -> Result<(), Error> {
+        self.reconstruct_leopard_impl(slices, super::leopard_gf8::reconstruct_with_tables)
+    }
+
     fn reconstruct_leopard_gf16<T: ReconstructShard<F>>(
         &self,
         slices: &mut [T],
         _data_only: bool,
     ) -> Result<(), Error> {
-        check_piece_count!(all => self, slices);
-
-        let total = self.total_shard_count;
-        let shard_len_opt: Option<usize> = slices.iter().find_map(|s| s.len());
-        let Some(shard_len) = shard_len_opt else {
-            return Err(Error::EmptyShard);
-        };
-
-        // SAFETY: F::Elem = u8 for leopard GF16 (validated by validate_leopard_gf16).
-        let mut present = vec![false; total];
-        let mut raw_data: Vec<Option<*const u8>> = vec![None; total];
-        for i in 0..total {
-            if let Some(data) = slices[i].get() {
-                present[i] = true;
-                raw_data[i] = Some(data as *const [F::Elem] as *const u8);
-            }
-        }
-
-        let mut output_bufs: Vec<Vec<u8>> = (0..total).map(|_| vec![0u8; shard_len]).collect();
-
-        for i in 0..total {
-            if let Some(ptr) = raw_data[i] {
-                let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
-                output_bufs[i][..shard_len].copy_from_slice(src);
-            }
-        }
-
-        let mut outputs: Vec<&mut [u8]> = output_bufs
-            .iter_mut()
-            .map(|buf| buf.as_mut_slice())
-            .collect();
-
-        let mut input_data: Vec<Option<&[u8]>> = Vec::with_capacity(total);
-        for i in 0..total {
-            if let Some(ptr) = raw_data[i] {
-                let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
-                input_data.push(Some(src));
-            } else {
-                input_data.push(None);
-            }
-        }
-
-        super::leopard::leopard_gf16_reconstruct(
-            &present,
-            &mut outputs,
-            &input_data,
-            self.data_shard_count,
-            self.parity_shard_count,
-        )?;
-
-        for i in 0..total {
-            if present[i] {
-                continue;
-            }
-            let elem_slice: &[F::Elem] =
-                unsafe { &*(output_bufs[i].as_slice() as *const [u8] as *const [F::Elem]) };
-            match slices[i].get_or_initialize(shard_len) {
-                Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(elem_slice),
-                Err(Err(err)) => return Err(err),
-            }
-        }
-
-        Ok(())
+        self.reconstruct_leopard_impl(slices, super::leopard::leopard_gf16_reconstruct)
     }
 
     pub(crate) fn get_data_decode_matrix(

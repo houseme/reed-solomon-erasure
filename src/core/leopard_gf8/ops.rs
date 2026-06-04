@@ -1,8 +1,4 @@
-extern crate alloc;
-
-use alloc::vec::Vec;
-
-use super::{BITWIDTH8, LeopardGf8Tables, MODULUS8, ORDER8, init_leopard_gf8_tables};
+use super::{BITWIDTH8, LeopardGf8Tables, MODULUS8, ORDER8};
 
 pub(super) fn mul_log8(a: u8, log_b: u8, log_lut: &[u8; ORDER8], exp_lut: &[u8; ORDER8]) -> u8 {
     if a == 0 {
@@ -278,12 +274,6 @@ unsafe fn slice_xor_neon(input: &[u8], out: &mut [u8]) {
     }
 }
 
-pub(super) fn slices_xor(input: &[Vec<u8>], out: &mut [Vec<u8>]) {
-    debug_assert_eq!(input.len(), out.len());
-    for (src, dst) in input.iter().zip(out.iter_mut()) {
-        slice_xor(src, dst);
-    }
-}
 
 /// SIMD-accelerated LUT-XOR: `dst[i] ^= lut[src[i]]` using nibble-lookup.
 ///
@@ -457,14 +447,6 @@ unsafe fn lut_xor_ssse3_prebuilt(
     }
 }
 
-pub(super) fn mul_slice_xor_reference(c: u8, input: &[u8], out: &mut [u8]) {
-    let tables = init_leopard_gf8_tables();
-    let lut = &tables.mul_luts[c as usize];
-    debug_assert_eq!(input.len(), out.len());
-    for (value, slot) in input.iter().zip(out.iter_mut()) {
-        *slot ^= lut.value[*value as usize];
-    }
-}
 
 pub(super) fn mulgf8(out: &mut [u8], input: &[u8], log_m: u8, tables: &LeopardGf8Tables) {
     let lut = &tables.mul_luts[log_m as usize];
@@ -478,31 +460,6 @@ pub(super) fn fft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardGf
     fft_dit2_lut(x, y, log_m, &tables.mul_luts[log_m as usize].value);
 }
 
-/// Forward butterfly step (FFT): dst ^= mul(src, g^log_m); src ^= dst.
-/// Both dst and src are modified.
-/// When log_m == MODULUS8 (255), just does src ^= dst (no multiply).
-#[inline(always)]
-fn dit2_step(dst: &mut [u8], src: &mut [u8], log_m: u8, lut: &[u8; 256]) {
-    if log_m == MODULUS8 as u8 {
-        slice_xor(dst, src);
-    } else {
-        lut_xor(dst, src, lut);
-        slice_xor(dst, src);
-    }
-}
-
-/// Inverse butterfly step (IFFT): src ^= dst; dst ^= mul(src, g^log_m).
-/// Both dst and src are modified.
-/// When log_m == MODULUS8 (255), just does src ^= dst (no multiply).
-#[inline(always)]
-fn dit2_step_inv(dst: &mut [u8], src: &mut [u8], log_m: u8, lut: &[u8; 256]) {
-    if log_m == MODULUS8 as u8 {
-        slice_xor(dst, src);
-    } else {
-        slice_xor(dst, src);
-        lut_xor(dst, src, lut);
-    }
-}
 
 /// Forward butterfly with pre-split nibble tables for SIMD acceleration.
 #[inline(always)]
@@ -568,34 +525,6 @@ pub(super) fn ifft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 25
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-#[inline(always)]
-pub(super) fn fft_dit4_full_lut(
-    a: &mut [u8],
-    b: &mut [u8],
-    c: &mut [u8],
-    d: &mut [u8],
-    log_m01: u8,
-    log_m23: u8,
-    log_m02: u8,
-    lut01: &[u8; 256],
-    lut23: &[u8; 256],
-    lut02: &[u8; 256],
-) {
-    debug_assert_eq!(a.len(), b.len());
-    debug_assert_eq!(a.len(), c.len());
-    debug_assert_eq!(a.len(), d.len());
-
-    // Go ARM64 fftDIT28(x, y): x ^= mul(y, g^log_m); y ^= x
-    // dit2_step(x, y) matches: x ^= mul(y); y ^= x
-    // First layer: pairs (a,c) and (b,d) with m02
-    dit2_step(a, c, log_m02, lut02);
-    dit2_step(b, d, log_m02, lut02);
-    // Second layer: pair (a,b) with m01, pair (c,d) with m23
-    dit2_step(a, b, log_m01, lut01);
-    dit2_step(c, d, log_m23, lut23);
-}
-
 /// Zero-copy forward radix-4 butterfly using pre-allocated scratch buffer
 /// and pre-split nibble tables.
 #[allow(clippy::too_many_arguments)]
@@ -632,37 +561,6 @@ pub(super) fn fft_dit4_full_lut_scratch(
     // Second layer: pair (a,b) with m01, pair (c,d) with m23
     dit2_step_prebuilt(a, b, log_m01, lut01, lut01_low, lut01_high);
     dit2_step_prebuilt(c, d, log_m23, lut23, lut23_low, lut23_high);
-}
-
-#[allow(clippy::too_many_arguments)]
-#[inline(always)]
-pub(super) fn ifft_dit4_full_lut(
-    a: &mut [u8],
-    b: &mut [u8],
-    c: &mut [u8],
-    d: &mut [u8],
-    log_m01: u8,
-    log_m23: u8,
-    log_m02: u8,
-    lut01: &[u8; 256],
-    lut23: &[u8; 256],
-    lut02: &[u8; 256],
-) {
-    debug_assert_eq!(a.len(), b.len());
-    debug_assert_eq!(a.len(), c.len());
-    debug_assert_eq!(a.len(), d.len());
-
-    // Go ARM64 ifftDIT28(x, y): y ^= x; x ^= mul(y, g^log_m)
-    // dit2_step_inv(x, y) matches: y ^= x; x ^= mul(y)
-    // Step 1: (a,b) with m01.
-    dit2_step_inv(a, b, log_m01, lut01);
-
-    // Step 2: (c,d) with m23, then (b,d) with m02.
-    dit2_step_inv(c, d, log_m23, lut23);
-    dit2_step_inv(b, d, log_m02, lut02);
-
-    // Step 3: (a,c) with m02.
-    dit2_step_inv(a, c, log_m02, lut02);
 }
 
 /// Zero-copy inverse radix-4 butterfly using pre-allocated scratch buffer

@@ -157,5 +157,4 @@ fn mul_slice_xor_scalar_for_test(c: u8, input: &[u8], out: &mut [u8]) {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 mod tests;
