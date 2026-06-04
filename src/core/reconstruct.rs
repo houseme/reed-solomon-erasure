@@ -597,7 +597,7 @@ impl<F: Field> ReedSolomon<F> {
     /// Builds the `present`, `outputs`, and `input_data` arrays required by
     /// the Forney-based FFT decoder, calls the provided `reconstruct_fn`,
     /// then writes recovered data back into the original shard objects.
-    #[allow(clippy::needless_range_loop)]
+    #[allow(clippy::needless_range_loop, clippy::type_complexity)]
     fn reconstruct_leopard_impl<T: ReconstructShard<F>>(
         &self,
         slices: &mut [T],

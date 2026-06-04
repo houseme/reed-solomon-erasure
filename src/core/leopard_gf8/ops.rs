@@ -658,3 +658,10 @@ pub(super) fn get_pair_mut<T>(slice: &mut [T], i: usize, j: usize) -> Option<(&m
         Some((first, second))
     }
 }
+
+/// Butterfly transform direction, shared between encode and decode paths.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum TransformDir {
+    Forward,
+    Inverse,
+}

@@ -424,11 +424,7 @@ fn get_pair_mut_flat(work: &mut FlatWork, i: usize, j: usize) -> Option<(&mut [u
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum TransformDir {
-    Forward,
-    Inverse,
-}
+use super::ops::TransformDir;
 
 /// DIT-4 butterfly for the decode path using `FlatWork`.
 #[allow(clippy::too_many_arguments)]

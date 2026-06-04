@@ -285,11 +285,7 @@ pub(super) fn encode_with_tables<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>(
     Ok(driver)
 }
 
-#[derive(Clone, Copy)]
-enum TransformDir {
-    Forward,
-    Inverse,
-}
+use super::ops::TransformDir;
 
 #[allow(clippy::too_many_arguments)]
 fn dit4_at<W: AsMut<[u8]>>(

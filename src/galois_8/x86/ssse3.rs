@@ -70,11 +70,52 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
     let (simd_input, tail_input) = input.split_at(bytes_done);
     let (simd_out, tail_out) = out.split_at_mut(bytes_done);
 
-    for (input_chunk, out_chunk) in simd_input
-        .chunks_exact(16)
-        .zip(simd_out.chunks_exact_mut(16))
+    // 2x unrolled main loop: process 32 bytes per iteration to hide shuffle latency.
+    let unrolled = bytes_done & !31usize;
+    let (unrolled_in, remainder_in) = simd_input.split_at(unrolled);
+    let (unrolled_out, remainder_out) = simd_out.split_at_mut(unrolled);
+
+    for (input_chunk, out_chunk) in unrolled_in
+        .chunks_exact(32)
+        .zip(unrolled_out.chunks_exact_mut(32))
     {
-        // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes for load/store.
+        let in0 = unsafe { _mm_loadu_si128(input_chunk.as_ptr().cast()) };
+        let in1 = unsafe { _mm_loadu_si128(input_chunk[16..].as_ptr().cast()) };
+
+        let low0 = _mm_and_si128(in0, nibble_mask);
+        let high0 = _mm_and_si128(_mm_srli_epi64::<4>(in0), nibble_mask);
+        let prod0 = _mm_xor_si128(
+            _mm_shuffle_epi8(low_tbl, low0),
+            _mm_shuffle_epi8(high_tbl, high0),
+        );
+
+        let low1 = _mm_and_si128(in1, nibble_mask);
+        let high1 = _mm_and_si128(_mm_srli_epi64::<4>(in1), nibble_mask);
+        let prod1 = _mm_xor_si128(
+            _mm_shuffle_epi8(low_tbl, low1),
+            _mm_shuffle_epi8(high_tbl, high1),
+        );
+
+        if XOR {
+            let out0 = unsafe { _mm_loadu_si128(out_chunk.as_ptr().cast()) };
+            let out1 = unsafe { _mm_loadu_si128(out_chunk[16..].as_ptr().cast()) };
+            unsafe {
+                _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), _mm_xor_si128(out0, prod0));
+                _mm_storeu_si128(out_chunk[16..].as_mut_ptr().cast(), _mm_xor_si128(out1, prod1));
+            }
+        } else {
+            unsafe {
+                _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), prod0);
+                _mm_storeu_si128(out_chunk[16..].as_mut_ptr().cast(), prod1);
+            }
+        }
+    }
+
+    // Handle remaining 16-byte chunk (if bytes_done is not a multiple of 32).
+    for (input_chunk, out_chunk) in remainder_in
+        .chunks_exact(16)
+        .zip(remainder_out.chunks_exact_mut(16))
+    {
         let input_vec = unsafe { _mm_loadu_si128(input_chunk.as_ptr().cast()) };
         let low = _mm_and_si128(input_vec, nibble_mask);
         let high = _mm_and_si128(_mm_srli_epi64::<4>(input_vec), nibble_mask);
@@ -83,7 +124,6 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
             _mm_shuffle_epi8(high_tbl, high),
         );
         if XOR {
-            // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes for load/store.
             let out_vec = unsafe { _mm_loadu_si128(out_chunk.as_ptr().cast()) };
             unsafe {
                 _mm_storeu_si128(
@@ -92,7 +132,6 @@ unsafe fn rust_ssse3_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u
                 )
             };
         } else {
-            // SAFETY: `chunks_exact(16)` guarantees 16 valid bytes for the store.
             unsafe { _mm_storeu_si128(out_chunk.as_mut_ptr().cast(), product) };
         }
     }

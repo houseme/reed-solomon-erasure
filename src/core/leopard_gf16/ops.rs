@@ -100,6 +100,7 @@ pub(super) fn mulgf16_xor(out: &mut [u16], input: &[u16], log_m: u16, tables: &L
 /// XOR two u16 slices: `dst[i] ^= src[i]`.
 /// Matches GF8 `slice_xor(dst, src)` convention: first arg is modified.
 #[inline]
+#[allow(clippy::needless_return)]
 pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
     debug_assert_eq!(dst.len(), src.len());
     // SAFETY: u16 XOR is identical to u8 XOR at the byte level (endian-independent).
@@ -485,6 +486,7 @@ pub(super) fn ifft_dit4_16(
 ///
 /// This function rearranges bytes so that `as u16 LE` gives Go's elements:
 ///   dst[2*i] = src[i], dst[2*i+1] = src[i+32]   per 64-byte chunk
+#[allow(clippy::needless_return)]
 pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
     debug_assert!(src.len().is_multiple_of(64));
@@ -558,6 +560,7 @@ unsafe fn user_bytes_to_work_bytes_neon(src: &[u8], dst: &mut [u8]) {
 ///
 /// Reverse of user_bytes_to_work_bytes:
 ///   dst[i] = src[2*i], dst[i+32] = src[2*i+1]   per 64-byte chunk
+#[allow(clippy::needless_return)]
 pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
     debug_assert!(src.len().is_multiple_of(64));
