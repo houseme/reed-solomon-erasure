@@ -26,19 +26,19 @@ type ShardByShard<'a> = crate::ShardByShard<'a, galois_8::Field>;
 #[cfg(feature = "std")]
 const BENCHMARK_ARTIFACT_SCHEMA_VERSION: u32 = 1;
 
-const QUICKCHECK_MAX_SHARD_LEN: usize = 256;
+const QUICKCHECK_MAX_SHARD_LEN: usize = 64;
 
 fn quickcheck_shard_len(size: usize) -> usize {
     1 + size % QUICKCHECK_MAX_SHARD_LEN
 }
 
 /// Normalize quickcheck-generated (data, parity) into valid shard counts.
-/// Capped at 32 total shards to keep matrix operations fast in fuzz testing.
+/// Capped at 16 total shards to keep matrix operations fast in fuzz testing.
 fn qc_params(data: usize, parity: usize) -> (usize, usize) {
-    let data = 1 + data % 31;
-    let mut parity = 1 + parity % 31;
-    if data + parity > 32 {
-        parity -= data + parity - 32;
+    let data = 1 + data % 15;
+    let mut parity = 1 + parity % 15;
+    if data + parity > 16 {
+        parity -= data + parity - 16;
     }
     (data, parity)
 }

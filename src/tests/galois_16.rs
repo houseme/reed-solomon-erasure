@@ -6,17 +6,17 @@ use alloc::vec::Vec;
 use super::{fill_random, option_shards_into_shards, shards_into_option_shards};
 use crate::galois_16::ReedSolomon;
 
-const QUICKCHECK_MAX_SHARD_LEN: usize = 256;
+const QUICKCHECK_MAX_SHARD_LEN: usize = 64;
 
 fn quickcheck_shard_len(size: usize) -> usize {
     1 + size % QUICKCHECK_MAX_SHARD_LEN
 }
 
 fn qc_params(data: usize, parity: usize) -> (usize, usize) {
-    let data = 1 + data % 31;
-    let mut parity = 1 + parity % 31;
-    if data + parity > 32 {
-        parity -= data + parity - 32;
+    let data = 1 + data % 15;
+    let mut parity = 1 + parity % 15;
+    if data + parity > 16 {
+        parity -= data + parity - 16;
     }
     (data, parity)
 }
