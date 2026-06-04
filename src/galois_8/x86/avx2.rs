@@ -92,51 +92,9 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
     let (simd_input, tail_input) = input.split_at(bytes_done);
     let (simd_out, tail_out) = out.split_at_mut(bytes_done);
 
-    // 2x unrolled main loop: process 64 bytes per iteration to hide shuffle latency.
-    let unrolled = bytes_done & !63usize;
-    let (unrolled_in, remainder_in) = simd_input.split_at(unrolled);
-    let (unrolled_out, remainder_out) = simd_out.split_at_mut(unrolled);
-
-    for (input_chunk, out_chunk) in unrolled_in
-        .chunks_exact(64)
-        .zip(unrolled_out.chunks_exact_mut(64))
-    {
-        let in0 = unsafe { _mm256_loadu_si256(input_chunk.as_ptr().cast()) };
-        let in1 = unsafe { _mm256_loadu_si256(input_chunk[32..].as_ptr().cast()) };
-
-        let low0 = _mm256_and_si256(in0, nibble_mask);
-        let high0 = _mm256_and_si256(_mm256_srli_epi64::<4>(in0), nibble_mask);
-        let prod0 = _mm256_xor_si256(
-            _mm256_shuffle_epi8(low_tbl, low0),
-            _mm256_shuffle_epi8(high_tbl, high0),
-        );
-
-        let low1 = _mm256_and_si256(in1, nibble_mask);
-        let high1 = _mm256_and_si256(_mm256_srli_epi64::<4>(in1), nibble_mask);
-        let prod1 = _mm256_xor_si256(
-            _mm256_shuffle_epi8(low_tbl, low1),
-            _mm256_shuffle_epi8(high_tbl, high1),
-        );
-
-        if XOR {
-            let out0 = unsafe { _mm256_loadu_si256(out_chunk.as_ptr().cast()) };
-            let out1 = unsafe { _mm256_loadu_si256(out_chunk[32..].as_ptr().cast()) };
-            unsafe {
-                _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), _mm256_xor_si256(out0, prod0));
-                _mm256_storeu_si256(out_chunk[32..].as_mut_ptr().cast(), _mm256_xor_si256(out1, prod1));
-            }
-        } else {
-            unsafe {
-                _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), prod0);
-                _mm256_storeu_si256(out_chunk[32..].as_mut_ptr().cast(), prod1);
-            }
-        }
-    }
-
-    // Handle remaining 32-byte chunk (if bytes_done is not a multiple of 64).
-    for (input_chunk, out_chunk) in remainder_in
+    for (input_chunk, out_chunk) in simd_input
         .chunks_exact(32)
-        .zip(remainder_out.chunks_exact_mut(32))
+        .zip(simd_out.chunks_exact_mut(32))
     {
         let input_vec = unsafe { _mm256_loadu_si256(input_chunk.as_ptr().cast()) };
         let low = _mm256_and_si256(input_vec, nibble_mask);
