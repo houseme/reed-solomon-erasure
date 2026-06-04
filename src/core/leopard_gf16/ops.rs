@@ -601,14 +601,14 @@ unsafe fn work_bytes_to_user_bytes_avx2(src: &[u8], dst: &mut [u8]) {
 
     // Mask to extract even-indexed bytes: [0,2,4,6,8,10,12,14], rest zeroed (0x80).
     #[rustfmt::skip]
-    let even_mask = _mm_loadu_si128([
+    let even_mask = unsafe { _mm_loadu_si128([
         0u8, 2, 4, 6, 8, 10, 12, 14, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
-    ].as_ptr().cast());
+    ].as_ptr().cast()) };
     // Mask to extract odd-indexed bytes: [1,3,5,7,9,11,13,15], rest zeroed (0x80).
     #[rustfmt::skip]
-    let odd_mask = _mm_loadu_si128([
+    let odd_mask = unsafe { _mm_loadu_si128([
         1u8, 3, 5, 7, 9, 11, 13, 15, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
-    ].as_ptr().cast());
+    ].as_ptr().cast()) };
 
     for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
         unsafe {
