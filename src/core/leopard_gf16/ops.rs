@@ -47,30 +47,53 @@ pub(super) fn sub_mod16(a: u16, b: u16) -> u16 {
 }
 
 /// Multiply each element of `input` by `g^log_m` in GF(2^16), writing to `out`.
+///
+/// 4x unrolled to create independent dependency chains, hiding LUT latency.
 #[inline]
 pub(super) fn mulgf16(out: &mut [u16], input: &[u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(input.len(), out.len());
     if log_m == MODULUS16 as u16 {
-        // g^MODULUS16 = 1, so output = input.
         out.copy_from_slice(input);
-    } else {
-        for (dst, &src) in out.iter_mut().zip(input.iter()) {
-            *dst = mul_log16(src, log_m, &tables.log_lut, &tables.exp_lut);
-        }
+        return;
+    }
+    let log_lut = &tables.log_lut;
+    let exp_lut = &tables.exp_lut;
+    let (chunks_in, tail_in) = input.as_chunks::<4>();
+    let (chunks_out, tail_out) = out.as_chunks_mut::<4>();
+    for (dst, src) in chunks_out.iter_mut().zip(chunks_in.iter()) {
+        dst[0] = mul_log16(src[0], log_m, log_lut, exp_lut);
+        dst[1] = mul_log16(src[1], log_m, log_lut, exp_lut);
+        dst[2] = mul_log16(src[2], log_m, log_lut, exp_lut);
+        dst[3] = mul_log16(src[3], log_m, log_lut, exp_lut);
+    }
+    for (dst, &src) in tail_out.iter_mut().zip(tail_in.iter()) {
+        *dst = mul_log16(src, log_m, log_lut, exp_lut);
     }
 }
 
 /// Multiply each element of `input` by `g^log_m` and XOR into `out` (first arg).
 /// Matches GF8 `lut_xor(dst, src, lut)` convention: first arg is modified.
+///
+/// 4x unrolled to create independent dependency chains, hiding LUT latency.
 #[inline]
 pub(super) fn mulgf16_xor(out: &mut [u16], input: &[u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(input.len(), out.len());
     if log_m == MODULUS16 as u16 {
         slice_xor_u16(out, input);
-    } else {
-        for (dst, &src) in out.iter_mut().zip(input.iter()) {
-            *dst ^= mul_log16(src, log_m, &tables.log_lut, &tables.exp_lut);
-        }
+        return;
+    }
+    let log_lut = &tables.log_lut;
+    let exp_lut = &tables.exp_lut;
+    let (chunks_in, tail_in) = input.as_chunks::<4>();
+    let (chunks_out, tail_out) = out.as_chunks_mut::<4>();
+    for (dst, src) in chunks_out.iter_mut().zip(chunks_in.iter()) {
+        dst[0] ^= mul_log16(src[0], log_m, log_lut, exp_lut);
+        dst[1] ^= mul_log16(src[1], log_m, log_lut, exp_lut);
+        dst[2] ^= mul_log16(src[2], log_m, log_lut, exp_lut);
+        dst[3] ^= mul_log16(src[3], log_m, log_lut, exp_lut);
+    }
+    for (dst, &src) in tail_out.iter_mut().zip(tail_in.iter()) {
+        *dst ^= mul_log16(src, log_m, log_lut, exp_lut);
     }
 }
 
@@ -79,8 +102,124 @@ pub(super) fn mulgf16_xor(out: &mut [u16], input: &[u16], log_m: u16, tables: &L
 #[inline]
 pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
     debug_assert_eq!(dst.len(), src.len());
-    for (d, &s) in dst.iter_mut().zip(src.iter()) {
-        *d ^= s;
+    // SAFETY: u16 XOR is identical to u8 XOR at the byte level (endian-independent).
+    // Reinterpret as u8 slices to leverage SIMD byte-XOR implementations.
+    let byte_len = dst.len() * 2;
+    let dst_bytes = unsafe { core::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), byte_len) };
+    let src_bytes = unsafe { core::slice::from_raw_parts(src.as_ptr().cast::<u8>(), byte_len) };
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe {
+                slice_xor_u16_avx2(dst_bytes, src_bytes);
+            }
+            return;
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe {
+            slice_xor_u16_neon(dst_bytes, src_bytes);
+        }
+        return;
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
+    slice_xor_u16_u64(dst_bytes, src_bytes);
+}
+
+/// AVX2 SIMD XOR for u16 slices (reinterpreted as bytes): 32 bytes per iteration.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn slice_xor_u16_avx2(dst: &mut [u8], src: &[u8]) {
+    use core::arch::x86_64::{_mm256_loadu_si256, _mm256_storeu_si256, _mm256_xor_si256};
+
+    let (dst32, dst_tail) = dst.as_chunks_mut::<32>();
+    let (src32, src_tail) = src.as_chunks::<32>();
+
+    for (d, s) in dst32.iter_mut().zip(src32.iter()) {
+        unsafe {
+            let sv = _mm256_loadu_si256(s.as_ptr().cast());
+            let dv = _mm256_loadu_si256(d.as_ptr().cast());
+            _mm256_storeu_si256(d.as_mut_ptr().cast(), _mm256_xor_si256(dv, sv));
+        }
+    }
+
+    for (d, s) in dst_tail.iter_mut().zip(src_tail.iter()) {
+        *d ^= *s;
+    }
+}
+
+/// NEON SIMD XOR for u16 slices (reinterpreted as bytes): 64 bytes per iteration.
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn slice_xor_u16_neon(dst: &mut [u8], src: &[u8]) {
+    use core::arch::aarch64::{
+        uint8x16x4_t, veorq_u8, vld1q_u8, vld1q_u8_x4, vst1q_u8, vst1q_u8_x4,
+    };
+
+    let (dst64, dst_tail) = dst.as_chunks_mut::<64>();
+    let (src64, src_tail) = src.as_chunks::<64>();
+
+    for (d, s) in dst64.iter_mut().zip(src64.iter()) {
+        unsafe {
+            let sv = vld1q_u8_x4(s.as_ptr());
+            let dv = vld1q_u8_x4(d.as_ptr());
+            vst1q_u8_x4(
+                d.as_mut_ptr(),
+                uint8x16x4_t(
+                    veorq_u8(dv.0, sv.0),
+                    veorq_u8(dv.1, sv.1),
+                    veorq_u8(dv.2, sv.2),
+                    veorq_u8(dv.3, sv.3),
+                ),
+            );
+        }
+    }
+
+    let (dst16, dst_scalar) = dst_tail.as_chunks_mut::<16>();
+    let (src16, src_scalar) = src_tail.as_chunks::<16>();
+    for (d, s) in dst16.iter_mut().zip(src16.iter()) {
+        unsafe {
+            let sv = vld1q_u8(s.as_ptr());
+            let dv = vld1q_u8(d.as_ptr());
+            vst1q_u8(d.as_mut_ptr(), veorq_u8(dv, sv));
+        }
+    }
+
+    for (d, s) in dst_scalar.iter_mut().zip(src_scalar.iter()) {
+        *d ^= *s;
+    }
+}
+
+/// u64-block XOR fallback for u16 slices (reinterpreted as bytes): 64 bytes per iteration.
+fn slice_xor_u16_u64(dst: &mut [u8], src: &[u8]) {
+    let (dst64, dst_tail64) = dst.as_chunks_mut::<64>();
+    let (src64, src_tail64) = src.as_chunks::<64>();
+
+    for (d, s) in dst64.iter_mut().zip(src64.iter()) {
+        for i in 0..8 {
+            let off = i * 8;
+            let sv = unsafe { core::ptr::read_unaligned(s[off..].as_ptr().cast::<u64>()) };
+            let dv = unsafe { core::ptr::read_unaligned(d[off..].as_ptr().cast::<u64>()) };
+            unsafe {
+                core::ptr::write_unaligned(d[off..].as_mut_ptr().cast::<u64>(), dv ^ sv);
+            }
+        }
+    }
+
+    let (dst8, dst_tail) = dst_tail64.as_chunks_mut::<8>();
+    let (src8, src_tail) = src_tail64.as_chunks::<8>();
+    for (d, s) in dst8.iter_mut().zip(src8.iter()) {
+        let sv = u64::from_ne_bytes(*s);
+        let dv = u64::from_ne_bytes(*d);
+        *d = (dv ^ sv).to_ne_bytes();
+    }
+
+    for (d, s) in dst_tail.iter_mut().zip(src_tail.iter()) {
+        *d ^= *s;
     }
 }
 
@@ -349,12 +488,68 @@ pub(super) fn ifft_dit4_16(
 pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
     debug_assert!(src.len().is_multiple_of(64));
-    for chunk in src.chunks(64) {
-        let base = chunk.as_ptr() as usize - src.as_ptr() as usize;
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { user_bytes_to_work_bytes_avx2(src, dst); return; }
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { user_bytes_to_work_bytes_neon(src, dst); return; }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    user_bytes_to_work_bytes_scalar(src, dst);
+}
+
+fn user_bytes_to_work_bytes_scalar(src: &[u8], dst: &mut [u8]) {
+    for (chunk_idx, chunk) in src.chunks(64).enumerate() {
+        let base = chunk_idx * 64;
         let dst_chunk = &mut dst[base..base + 64];
         for i in 0..32 {
             dst_chunk[2 * i] = chunk[i];
             dst_chunk[2 * i + 1] = chunk[i + 32];
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn user_bytes_to_work_bytes_avx2(src: &[u8], dst: &mut [u8]) {
+    use core::arch::x86_64::{
+        _mm256_loadu_si256, _mm256_storeu_si256, _mm256_unpackhi_epi8, _mm256_unpacklo_epi8,
+    };
+
+    for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
+        unsafe {
+            let lo = _mm256_loadu_si256(s.as_ptr().cast());
+            let hi = _mm256_loadu_si256(s[32..].as_ptr().cast());
+            _mm256_storeu_si256(d.as_mut_ptr().cast(), _mm256_unpacklo_epi8(lo, hi));
+            _mm256_storeu_si256(d[32..].as_mut_ptr().cast(), _mm256_unpackhi_epi8(lo, hi));
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn user_bytes_to_work_bytes_neon(src: &[u8], dst: &mut [u8]) {
+    use core::arch::aarch64::{vld1q_u8, vst1q_u8, vzip1q_u8, vzip2q_u8};
+
+    for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
+        // Interleave: dst[2*i] = src[i], dst[2*i+1] = src[i+32] for i in 0..32.
+        // Split the two 32-byte halves into 16-byte pieces and use vzip.
+        unsafe {
+            // First 16 pairs: interleave s[0..16] with s[32..48]
+            let lo = vld1q_u8(s.as_ptr());
+            let hi = vld1q_u8(s[32..].as_ptr());
+            vst1q_u8(d.as_mut_ptr(), vzip1q_u8(lo, hi));
+            vst1q_u8(d[16..].as_mut_ptr(), vzip2q_u8(lo, hi));
+            // Next 16 pairs: interleave s[16..32] with s[48..64]
+            let lo2 = vld1q_u8(s[16..].as_ptr());
+            let hi2 = vld1q_u8(s[48..].as_ptr());
+            vst1q_u8(d[32..].as_mut_ptr(), vzip1q_u8(lo2, hi2));
+            vst1q_u8(d[48..].as_mut_ptr(), vzip2q_u8(lo2, hi2));
         }
     }
 }
@@ -366,12 +561,89 @@ pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
 pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
     debug_assert!(src.len().is_multiple_of(64));
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { work_bytes_to_user_bytes_avx2(src, dst); return; }
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { work_bytes_to_user_bytes_neon(src, dst); return; }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    work_bytes_to_user_bytes_scalar(src, dst);
+}
+
+fn work_bytes_to_user_bytes_scalar(src: &[u8], dst: &mut [u8]) {
     for (chunk_idx, chunk) in src.chunks(64).enumerate() {
         let base = chunk_idx * 64;
         let dst_chunk = &mut dst[base..base + 64];
         for i in 0..32 {
             dst_chunk[i] = chunk[2 * i];
             dst_chunk[i + 32] = chunk[2 * i + 1];
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn work_bytes_to_user_bytes_avx2(src: &[u8], dst: &mut [u8]) {
+    use core::arch::x86_64::{_mm_shuffle_epi8, _mm_loadu_si128, _mm_storeu_si128};
+
+    // Mask to extract even-indexed bytes: [0,2,4,6,8,10,12,14], rest zeroed (0x80).
+    #[rustfmt::skip]
+    let even_mask = _mm_loadu_si128([
+        0u8, 2, 4, 6, 8, 10, 12, 14, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+    ].as_ptr().cast());
+    // Mask to extract odd-indexed bytes: [1,3,5,7,9,11,13,15], rest zeroed (0x80).
+    #[rustfmt::skip]
+    let odd_mask = _mm_loadu_si128([
+        1u8, 3, 5, 7, 9, 11, 13, 15, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+    ].as_ptr().cast());
+
+    for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
+        unsafe {
+            let p0 = _mm_loadu_si128(s.as_ptr().cast());
+            let p1 = _mm_loadu_si128(s[16..].as_ptr().cast());
+            let p2 = _mm_loadu_si128(s[32..].as_ptr().cast());
+            let p3 = _mm_loadu_si128(s[48..].as_ptr().cast());
+            // Even bytes (a_i) → dst[0..8], dst[8..16], dst[16..24], dst[24..32]
+            _mm_storeu_si128(d.as_mut_ptr().cast(), _mm_shuffle_epi8(p0, even_mask));
+            _mm_storeu_si128(d[8..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, even_mask));
+            _mm_storeu_si128(d[16..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, even_mask));
+            _mm_storeu_si128(d[24..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, even_mask));
+            // Odd bytes (b_i) → dst[32..40], dst[40..48], dst[48..56], dst[56..64]
+            _mm_storeu_si128(d[32..].as_mut_ptr().cast(), _mm_shuffle_epi8(p0, odd_mask));
+            _mm_storeu_si128(d[40..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, odd_mask));
+            _mm_storeu_si128(d[48..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, odd_mask));
+            _mm_storeu_si128(d[56..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, odd_mask));
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn work_bytes_to_user_bytes_neon(src: &[u8], dst: &mut [u8]) {
+    use core::arch::aarch64::{vld1q_u8, vst1q_u8, vuzp1q_u8, vuzp2q_u8};
+
+    for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
+        // De-interleave: dst[i] = src[2*i], dst[i+32] = src[2*i+1] per 64-byte chunk.
+        // vuzp1q extracts even bytes (a_i), vuzp2q extracts odd bytes (b_i).
+        // p0 = s[0..16], p1 = s[16..32] → even/odd from first 32 interleaved bytes.
+        // p2 = s[32..48], p3 = s[48..64] → even/odd from second 32 interleaved bytes.
+        unsafe {
+            let p0 = vld1q_u8(s.as_ptr());
+            let p1 = vld1q_u8(s[16..].as_ptr());
+            // Even bytes from first 32 → d[0..16], odd bytes → d[32..48]
+            vst1q_u8(d.as_mut_ptr(), vuzp1q_u8(p0, p1));
+            vst1q_u8(d[32..].as_mut_ptr(), vuzp2q_u8(p0, p1));
+            let p2 = vld1q_u8(s[32..].as_ptr());
+            let p3 = vld1q_u8(s[48..].as_ptr());
+            // Even bytes from second 32 → d[16..32], odd bytes → d[48..64]
+            vst1q_u8(d[16..].as_mut_ptr(), vuzp1q_u8(p2, p3));
+            vst1q_u8(d[48..].as_mut_ptr(), vuzp2q_u8(p2, p3));
         }
     }
 }
