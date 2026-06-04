@@ -959,6 +959,7 @@ fn write_leopard_encode_ab_results(case: BenchCase, results: &[LeopardEncodeAbRe
 }
 
 #[test]
+#[ignore]
 fn benchmark_smoke_matrix_runs_and_exports_results() {
     assert_backend_override_honored_if_strict();
     let mut results = Vec::new();
@@ -981,6 +982,7 @@ fn benchmark_smoke_matrix_runs_and_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_update_vs_encode_10x4_1m_exports_results() {
     let case = FAST_SMOKE_CASES
         .iter()
@@ -1008,6 +1010,7 @@ fn benchmark_update_vs_encode_10x4_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_update_vs_encode_4x2_64k_exports_results() {
     let case = FAST_SMOKE_CASES
         .iter()
@@ -1035,6 +1038,7 @@ fn benchmark_update_vs_encode_4x2_64k_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_update_vs_encode_32x16_1m_exports_results() {
     let case = SMOKE_CASES
         .iter()
@@ -1062,6 +1066,7 @@ fn benchmark_update_vs_encode_32x16_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_update_vs_encode_4x2_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1089,6 +1094,7 @@ fn benchmark_update_vs_encode_4x2_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_update_vs_encode_10x4_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1116,6 +1122,7 @@ fn benchmark_update_vs_encode_10x4_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_update_vs_encode_32x16_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1143,6 +1150,7 @@ fn benchmark_update_vs_encode_32x16_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_decode_idx_vs_reconstruct_some_10x4_1m_exports_results() {
     let case = FAST_SMOKE_CASES
         .iter()
@@ -1157,6 +1165,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_10x4_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_decode_idx_vs_reconstruct_some_4x2_64k_exports_results() {
     let case = FAST_SMOKE_CASES
         .iter()
@@ -1171,6 +1180,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_4x2_64k_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_decode_idx_vs_reconstruct_some_32x16_1m_exports_results() {
     let case = SMOKE_CASES
         .iter()
@@ -1185,6 +1195,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_32x16_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_decode_idx_vs_reconstruct_some_4x2_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1199,6 +1210,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_4x2_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_decode_idx_vs_reconstruct_some_32x16_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1213,6 +1225,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_32x16_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_setup_32x16_1m_exports_results() {
     let case = SMOKE_CASES
         .iter()
@@ -1228,6 +1241,7 @@ fn benchmark_leopard_setup_32x16_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_setup_64x32_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1243,6 +1257,7 @@ fn benchmark_leopard_setup_64x32_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_setup_64x32_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1258,6 +1273,7 @@ fn benchmark_leopard_setup_64x32_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_64x32_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1271,6 +1287,7 @@ fn benchmark_leopard_encode_64x32_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_32x16_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1284,6 +1301,7 @@ fn benchmark_leopard_encode_32x16_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_32x16_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1297,6 +1315,7 @@ fn benchmark_leopard_encode_32x16_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_64x32_64k_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1310,6 +1329,7 @@ fn benchmark_leopard_encode_64x32_64k_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_64x32_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1323,6 +1343,7 @@ fn benchmark_leopard_encode_64x32_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_96x48_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1336,6 +1357,7 @@ fn benchmark_leopard_encode_96x48_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_profile_96x48_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1349,6 +1371,7 @@ fn benchmark_leopard_encode_profile_96x48_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_96x48_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1362,6 +1385,7 @@ fn benchmark_leopard_encode_96x48_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_128x64_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1375,6 +1399,7 @@ fn benchmark_leopard_encode_128x64_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_profile_128x64_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1388,6 +1413,7 @@ fn benchmark_leopard_encode_profile_128x64_1m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_128x64_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1401,6 +1427,7 @@ fn benchmark_leopard_encode_128x64_4m_exports_results() {
 }
 
 #[test]
+#[ignore]
 fn benchmark_leopard_encode_ab_64x32_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()

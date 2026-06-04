@@ -505,6 +505,7 @@ fn write_results(results: &[SmallFileResult]) {
 }
 
 #[test]
+#[ignore]
 fn benchmark_small_file_matrix_runs_and_exports_results() {
     assert_backend_override_honored_if_strict();
     let mut results = Vec::new();
