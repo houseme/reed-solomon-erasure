@@ -103,6 +103,7 @@ fn measure_encode(
 }
 
 #[test]
+#[ignore]
 fn comprehensive_leopard_encode_benchmark() {
     let cpu = get_cpu_name();
     let mut json_lines = Vec::new();
