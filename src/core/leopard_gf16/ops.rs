@@ -517,18 +517,22 @@ fn user_bytes_to_work_bytes_scalar(src: &[u8], dst: &mut [u8]) {
 }
 
 #[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "avx2")]
+#[target_feature(enable = "ssse3")]
 unsafe fn user_bytes_to_work_bytes_avx2(src: &[u8], dst: &mut [u8]) {
     use core::arch::x86_64::{
-        _mm256_loadu_si256, _mm256_storeu_si256, _mm256_unpackhi_epi8, _mm256_unpacklo_epi8,
+        _mm_loadu_si128, _mm_storeu_si128, _mm_unpackhi_epi8, _mm_unpacklo_epi8,
     };
 
     for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
         unsafe {
-            let lo = _mm256_loadu_si256(s.as_ptr().cast());
-            let hi = _mm256_loadu_si256(s[32..].as_ptr().cast());
-            _mm256_storeu_si256(d.as_mut_ptr().cast(), _mm256_unpacklo_epi8(lo, hi));
-            _mm256_storeu_si256(d[32..].as_mut_ptr().cast(), _mm256_unpackhi_epi8(lo, hi));
+            let lo = _mm_loadu_si128(s.as_ptr().cast());
+            let hi = _mm_loadu_si128(s[32..].as_ptr().cast());
+            _mm_storeu_si128(d.as_mut_ptr().cast(), _mm_unpacklo_epi8(lo, hi));
+            _mm_storeu_si128(d[16..].as_mut_ptr().cast(), _mm_unpackhi_epi8(lo, hi));
+            let lo2 = _mm_loadu_si128(s[16..].as_ptr().cast());
+            let hi2 = _mm_loadu_si128(s[48..].as_ptr().cast());
+            _mm_storeu_si128(d[32..].as_mut_ptr().cast(), _mm_unpacklo_epi8(lo2, hi2));
+            _mm_storeu_si128(d[48..].as_mut_ptr().cast(), _mm_unpackhi_epi8(lo2, hi2));
         }
     }
 }
