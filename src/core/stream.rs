@@ -1,8 +1,8 @@
 //! Streaming encode/verify/reconstruct for large data.
 //!
-//! Provides [`encode_stream`](ReedSolomon::encode_stream),
-//! [`verify_stream`](ReedSolomon::verify_stream), and
-//! [`reconstruct_stream`](ReedSolomon::reconstruct_stream) methods that
+//! Provides [`encode_stream`](crate::galois_8::ReedSolomon::encode_stream),
+//! [`verify_stream`](crate::galois_8::ReedSolomon::verify_stream), and
+//! [`reconstruct_stream`](crate::galois_8::ReedSolomon::reconstruct_stream) methods that
 //! process data in configurable blocks, avoiding the need to load entire
 //! files into memory.
 //!
@@ -295,7 +295,10 @@ fn read_block_par<R: std::io::Read + Send>(
             }
             Ok(())
         })
-        .map_err(|()| first_error.into_inner().unwrap().unwrap())?;
+        .map_err(|()| first_error
+                        .into_inner()
+                        .expect("parallel reader panicked")
+                        .expect("error not set"))?;
 
     Ok((
         !any_data.load(Ordering::Relaxed),
@@ -359,7 +362,10 @@ fn write_block_par<W: std::io::Write + Send>(
             }
             Ok(())
         })
-        .map_err(|()| first_error.into_inner().unwrap().unwrap())
+        .map_err(|()| first_error
+                        .into_inner()
+                        .expect("parallel reader panicked")
+                        .expect("error not set"))
 }
 
 // ---------------------------------------------------------------------------
@@ -553,7 +559,10 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                     buf.truncate(total_read);
                     Ok(())
                 })
-                .map_err(|()| first_error.into_inner().unwrap().unwrap())?;
+                .map_err(|()| first_error
+                        .into_inner()
+                        .expect("parallel reader panicked")
+                        .expect("error not set"))?;
 
             if !any_data.load(Ordering::Relaxed) {
                 break;
@@ -592,7 +601,9 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             // (reconstruct fills in all missing shards — data and parity)
             for (i, shard) in shards.iter_mut().enumerate() {
                 if !present[i] {
-                    let recovered = reconstruct_bufs[i].as_ref().unwrap();
+                    let recovered = reconstruct_bufs[i]
+                        .as_ref()
+                        .expect("missing shard buffer");
                     shard.get_mut().extend_from_slice(&recovered[..actual_len]);
                 }
             }
@@ -1022,5 +1033,67 @@ mod tests {
 
         assert_eq!(shards[0].get_ref(), &data[0]);
         assert_eq!(shards[5].get_ref(), &data[5]);
+    }
+
+    #[test]
+    fn test_encode_stream_zero_length() {
+        let rs = ReedSolomon::new(3, 2).unwrap();
+        let mut readers: Vec<&[u8]> = vec![b""; 3];
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        // Zero-length data should succeed (encode produces empty parity).
+        rs.encode_stream(&mut readers, &mut writers, &StreamOptions::default())
+            .unwrap();
+        assert!(writers.iter().all(|w| w.is_empty()));
+    }
+
+    #[test]
+    fn test_encode_stream_single_byte_block() {
+        let rs = ReedSolomon::new(2, 1).unwrap();
+        let d0 = vec![0xABu8; 4];
+        let d1 = vec![0xCDu8; 4];
+        let mut readers: Vec<&[u8]> = vec![d0.as_slice(), d1.as_slice()];
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 1];
+        let opts = StreamOptions::new().with_block_size(1);
+        rs.encode_stream(&mut readers, &mut writers, &opts).unwrap();
+
+        // Verify with the smallest possible block size.
+        let mut all: Vec<&[u8]> = vec![d0.as_slice(), d1.as_slice()];
+        for w in &writers {
+            all.push(w.as_slice());
+        }
+        assert!(rs.verify(&all).unwrap());
+    }
+
+    #[test]
+    fn test_reconstruct_stream_minimum_present() {
+        let rs = ReedSolomon::new(3, 2).unwrap();
+        let shard_len = 16usize;
+        let data: Vec<Vec<u8>> = (0..3)
+            .map(|i| vec![i as u8 + 1; shard_len])
+            .collect();
+
+        // Encode to get parity.
+        let refs: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+        let mut parity = vec![vec![0u8; shard_len]; 2];
+        let mut par_refs: Vec<&mut [u8]> = parity.iter_mut().map(|p| &mut p[..]).collect();
+        rs.encode_sep(&refs, &mut par_refs).unwrap();
+
+        // Keep minimum viable: 3 of 5 shards (data_shard_count).
+        // Present: shard 0 (data), shard 3 (parity), shard 4 (parity).
+        // Missing: shard 1 (data), shard 2 (data).
+        let mut shards: Vec<std::io::Cursor<Vec<u8>>> = vec![
+            std::io::Cursor::new(data[0].clone()),
+            std::io::Cursor::new(Vec::new()),
+            std::io::Cursor::new(Vec::new()),
+            std::io::Cursor::new(parity[0].clone()),
+            std::io::Cursor::new(parity[1].clone()),
+        ];
+
+        rs.reconstruct_stream(&mut shards, &StreamOptions::default())
+            .unwrap();
+
+        // Verify reconstructed data shards match originals.
+        assert_eq!(shards[1].get_ref(), &data[1], "shard 1 mismatch");
+        assert_eq!(shards[2].get_ref(), &data[2], "shard 2 mismatch");
     }
 }

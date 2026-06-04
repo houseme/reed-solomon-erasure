@@ -299,7 +299,15 @@ fn lut_xor(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
     for i in 0..16 {
         high[i] = lut[i * 16];
     }
-    lut_xor_impl(dst, src, &lut[..16].try_into().unwrap(), &high, lut)
+    lut_xor_impl(
+        dst,
+        src,
+        &lut[..16]
+            .try_into()
+            .expect("slice is exactly 16 bytes"),
+        &high,
+        lut,
+    )
 }
 
 /// SIMD-accelerated LUT-XOR with pre-split nibble tables.
