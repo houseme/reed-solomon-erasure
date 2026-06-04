@@ -597,6 +597,10 @@ impl<F: Field> ReedSolomon<F> {
     /// Builds the `present`, `outputs`, and `input_data` arrays required by
     /// the Forney-based FFT decoder, calls the provided `reconstruct_fn`,
     /// then writes recovered data back into the original shard objects.
+    ///
+    /// Only copies present shard data into output buffers for missing shards
+    /// (the Leopard decoder skips present positions). This avoids the overhead
+    /// of copying all present shard data into temporary buffers.
     #[allow(clippy::needless_range_loop, clippy::type_complexity)]
     fn reconstruct_leopard_impl<T: ReconstructShard<F>>(
         &self,
@@ -621,14 +625,10 @@ impl<F: Field> ReedSolomon<F> {
             }
         }
 
+        // Allocate output buffers. Present shards get zeroed buffers (the decoder
+        // skips them via `if present[i] { continue; }`). Missing shards also get
+        // zeroed buffers which the decoder writes recovered data into.
         let mut output_bufs: Vec<Vec<u8>> = (0..total).map(|_| vec![0u8; shard_len]).collect();
-
-        for i in 0..total {
-            if let Some(ptr) = raw_data[i] {
-                let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
-                output_bufs[i][..shard_len].copy_from_slice(src);
-            }
-        }
 
         let mut outputs: Vec<&mut [u8]> = output_bufs
             .iter_mut()

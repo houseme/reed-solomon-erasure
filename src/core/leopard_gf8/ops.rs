@@ -275,31 +275,6 @@ unsafe fn slice_xor_neon(input: &[u8], out: &mut [u8]) {
 }
 
 
-/// SIMD-accelerated LUT-XOR: `dst[i] ^= lut[src[i]]` using nibble-lookup.
-///
-/// Uses AVX2 on x86_64 (32 bytes/iteration) for slices >= 32 bytes,
-/// SSSE3 (16 bytes/iteration) for slices >= 16 bytes, scalar fallback otherwise.
-/// The lower SSSE3 threshold helps small-shard workloads where Decomposed
-/// DIT-4 strategy produces many short slices.
-#[inline]
-fn lut_xor(dst: &mut [u8], src: &[u8], lut: &[u8; 256]) {
-    // Build high nibble table inline (same as Mul8Lut.high).
-    // The compiler should optimize this into a few shuffles.
-    let mut high = [0u8; 16];
-    for i in 0..16 {
-        high[i] = lut[i * 16];
-    }
-    lut_xor_impl(
-        dst,
-        src,
-        &lut[..16]
-            .try_into()
-            .expect("slice is exactly 16 bytes"),
-        &high,
-        lut,
-    )
-}
-
 /// SIMD-accelerated LUT-XOR with pre-split nibble tables.
 ///
 /// Same as `lut_xor` but accepts pre-computed nibble halves to avoid
@@ -457,7 +432,8 @@ pub(super) fn mulgf8(out: &mut [u8], input: &[u8], log_m: u8, tables: &LeopardGf
 }
 
 pub(super) fn fft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardGf8Tables) {
-    fft_dit2_lut(x, y, log_m, &tables.mul_luts[log_m as usize].value);
+    let lut = &tables.mul_luts[log_m as usize];
+    dit2_step_prebuilt(x, y, log_m, &lut.value, &lut.low, &lut.high);
 }
 
 
@@ -497,32 +473,9 @@ fn dit2_step_inv_prebuilt(
     }
 }
 
-pub(super) fn fft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256]) {
-    debug_assert_eq!(x.len(), y.len());
-    // Go fftDIT28: x ^= mul(y, g^log_m); y ^= x
-    // When log_m == modulus8 (255): just y ^= x (no multiply)
-    if log_m == MODULUS8 as u8 {
-        slice_xor(x, y);
-    } else {
-        lut_xor(x, y, lut);
-        slice_xor(x, y);
-    }
-}
-
 pub(super) fn ifft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardGf8Tables) {
-    ifft_dit2_lut(x, y, log_m, &tables.mul_luts[log_m as usize].value);
-}
-
-pub(super) fn ifft_dit2_lut(x: &mut [u8], y: &mut [u8], log_m: u8, lut: &[u8; 256]) {
-    debug_assert_eq!(x.len(), y.len());
-    // Go ifftDIT28: y ^= x; x ^= mul(y, g^log_m)
-    // When log_m == modulus8 (255): just y ^= x (no multiply)
-    if log_m == MODULUS8 as u8 {
-        slice_xor(x, y);
-    } else {
-        slice_xor(x, y);
-        lut_xor(x, y, lut);
-    }
+    let lut = &tables.mul_luts[log_m as usize];
+    dit2_step_inv_prebuilt(x, y, log_m, &lut.value, &lut.low, &lut.high);
 }
 
 /// Zero-copy forward radix-4 butterfly using pre-allocated scratch buffer
