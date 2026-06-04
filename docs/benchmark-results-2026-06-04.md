@@ -67,13 +67,34 @@ Setup is unaffected — it doesn't use FFT butterflies.
 
 ---
 
-## 3. x86_64 AVX2/SSSE3 Loop Unrolling (2x)
+## 3. x86_64 AVX2/SSSE3 Loop Unrolling (2x) — REVERTED
 
-Platform: Intel Xeon Platinum 8370C (x86_64), Azure VM
-Methodology: Compared `bench-no-unroll` branch (reverted unrolling) vs `main` (with unrolling)
+Platform: AMD EPYC 9V45 (Zen 4), Azure VM
 Backend override: `RSE_BACKEND_OVERRIDE=avx2` / `RSE_BACKEND_OVERRIDE=ssse3`
 
-### 3.1 AVX2 (32→64 bytes/iteration)
+**Result: Reverted.** 2x loop unrolling was attempted but showed inconsistent results due to shuffle port contention on Zen 4. `vpshufb` only executes on 2 ports (Port 0/1), so two independent chains serialize completely. See `docs/avx2-ssse3-unroll-analysis-2026-06-04.md` for full analysis with assembly evidence.
+
+### 3.1 Final Verification: Reverted (no unrolling) vs Baseline
+
+After reverting to single-chain loops, verification benchmarks confirmed no regression:
+
+#### AVX2 (32 bytes/iteration, reverted)
+
+| Operation | 64KB | 1MB | 4MB |
+|-----------|------|-----|-----|
+| mul_slice | 666 ns | 18.1 µs | 73.7 µs |
+| mul_slice_xor | 724 ns | 18.6 µs | 66.6 µs |
+
+#### SSSE3 (16 bytes/iteration, reverted)
+
+| Operation | 64KB | 1MB | 4MB |
+|-----------|------|-----|-----|
+| mul_slice | 662 ns | 17.6 µs | 68.4 µs |
+| mul_slice_xor | 774 ns | 18.2 µs | 69.2 µs |
+
+### 3.2 Historical: Unrolled vs Non-unrolled Comparison (for reference)
+
+#### AVX2 unrolled (32→64 bytes/iteration)
 
 | Operation | Size | Time Change | Throughput Change |
 |-----------|------|-------------|-------------------|
@@ -84,7 +105,7 @@ Backend override: `RSE_BACKEND_OVERRIDE=avx2` / `RSE_BACKEND_OVERRIDE=ssse3`
 | mul_slice_xor | 1MB | **-4.0%** (p=0.00) | **+4.2%** |
 | mul_slice_xor | 4MB | **-5.3%** (p=0.00) | **+5.6%** |
 
-### 3.2 SSSE3 (16→32 bytes/iteration)
+#### SSSE3 unrolled (16→32 bytes/iteration)
 
 | Operation | Size | Time Change | Throughput Change |
 |-----------|------|-------------|-------------------|
@@ -95,12 +116,11 @@ Backend override: `RSE_BACKEND_OVERRIDE=avx2` / `RSE_BACKEND_OVERRIDE=ssse3`
 | mul_slice_xor | 1MB | **-2.2%** (p=0.00) | **+2.2%** |
 | mul_slice_xor | 4MB | -0.1% (p=0.65, ns) | ~0% |
 
-### 3.3 Analysis
+#### Analysis
 
-- **Large shards (1MB+) benefit significantly**: +4-6% throughput for AVX2, +2-6% for SSSE3.
-- **Small shards (64KB) regress for AVX2 mul_slice_xor**: +15% latency. The extra XOR load combined with 2x unrolling creates pipeline stalls on this microarchitecture. The 64KB size is borderline for unrolling benefits.
-- **SSSE3 64KB mul_slice**: +4.7% regression. Similar pipeline pressure issue at small sizes.
-- **Recommendation**: Consider making unrolling conditional on shard size (e.g., only unroll when `bytes_done >= 128`), or accept the small-shard regression as the 1MB+ gains dominate real workloads.
+- **Large shards (1MB+) showed benefit**: +4-6% throughput for AVX2, +2-6% for SSSE3.
+- **Small shards (64KB) regressed for AVX2 mul_slice_xor**: +15% latency from pipeline pressure.
+- **Root cause**: Shuffle port contention (Port 0/1 only) prevents latency hiding even with 2x unrolling. See analysis doc for assembly evidence.
 
 ---
 
@@ -112,6 +132,15 @@ Backend override: `RSE_BACKEND_OVERRIDE=avx2` / `RSE_BACKEND_OVERRIDE=ssse3`
 | lut_xor table rebuild elimination | Leopard FFT butterflies | **-10% ~ -14% latency, +11% ~ +17% throughput** (1MB) |
 | AVX2/SSSE3 loop unrolling (2x) | x86_64 mul_slice | **Reverted** — shuffle port contention prevents benefit, see analysis |
 | Reconstruct copy elision | Leopard reconstruct | Not benchmarked (memory savings) |
+
+### Final Verification (Post-Revert)
+
+| Backend | Operation | 64KB | 1MB | 4MB |
+|---------|-----------|------|-----|-----|
+| AVX2 | mul_slice | 666 ns | 18.1 µs | 73.7 µs |
+| AVX2 | mul_slice_xor | 724 ns | 18.6 µs | 66.6 µs |
+| SSSE3 | mul_slice | 662 ns | 17.6 µs | 68.4 µs |
+| SSSE3 | mul_slice_xor | 774 ns | 18.2 µs | 69.2 µs |
 
 ---
 
