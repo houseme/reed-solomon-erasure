@@ -92,6 +92,9 @@ impl<F: Field> ReedSolomon<F> {
         Ok(true)
     }
 
+    /// Verify that parity shards are consistent with data shards.
+    ///
+    /// Returns `true` if valid, `false` if corrupted.
     pub fn verify<T: AsRef<[F::Elem]>>(&self, slices: &[T]) -> Result<bool, Error> {
         self.ensure_classic_family_execution()?;
         check_piece_count!(all => self, slices);
@@ -125,6 +128,7 @@ impl<F: Field> ReedSolomon<F> {
         Ok(self.check_some_slices_with_buffer_raw(&parity_rows, data, to_check, &mut buffer_views))
     }
 
+    /// Verify using a pre-allocated [`VerifyWorkspace`] to avoid repeated allocation.
     pub fn verify_with_workspace<T>(
         &self,
         slices: &[T],
@@ -149,6 +153,7 @@ impl<F: Field> ReedSolomon<F> {
         self.verify_with_buffer(slices, workspace.as_mut_shards())
     }
 
+    /// Verify using a caller-provided scratch buffer.
     pub fn verify_with_buffer<T, U>(&self, slices: &[T], buffer: &mut [U]) -> Result<bool, Error>
     where
         T: AsRef<[F::Elem]>,
@@ -178,6 +183,7 @@ impl<F: Field> ReedSolomon<F> {
         Ok(self.check_some_slices_with_buffer(&parity_rows, data, to_check, buffer))
     }
 
+    /// Parallel version of [`verify_with_buffer`](Self::verify_with_buffer).
     #[cfg(feature = "std")]
     pub fn verify_with_buffer_par<T, U>(
         &self,
@@ -217,6 +223,7 @@ impl<F: Field> ReedSolomon<F> {
             .all(|(expected, actual)| expected.as_ref() == actual.as_ref()))
     }
 
+    /// Parallel version of [`verify`](Self::verify).
     #[cfg(feature = "std")]
     pub fn verify_par<T>(&self, slices: &[T]) -> Result<bool, Error>
     where

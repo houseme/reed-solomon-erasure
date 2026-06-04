@@ -418,6 +418,9 @@ impl<F: Field> ReedSolomon<F> {
         )
     }
 
+    /// Reconstruct all missing shards (data and parity).
+    ///
+    /// Missing shards should be zero-length; present shards must have valid data.
     pub fn reconstruct<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
         if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
             return self.reconstruct_leopard_gf8(slices, false);
@@ -429,6 +432,7 @@ impl<F: Field> ReedSolomon<F> {
         self.reconstruct_internal(slices, false)
     }
 
+    /// Reconstruct only missing data shards (parity shards are not recovered).
     pub fn reconstruct_data<T: ReconstructShard<F>>(&self, slices: &mut [T]) -> Result<(), Error> {
         if super::leopard::leopard_gf8_state(&self.family_state).is_ok() {
             return self.reconstruct_leopard_gf8(slices, true);
@@ -440,6 +444,7 @@ impl<F: Field> ReedSolomon<F> {
         self.reconstruct_internal(slices, true)
     }
 
+    /// Reconstruct only shards marked `true` in the `required` mask.
     pub fn reconstruct_some<T: ReconstructShard<F>>(
         &self,
         shards: &mut [T],

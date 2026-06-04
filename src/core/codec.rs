@@ -206,10 +206,15 @@ impl<F: Field> ReedSolomon<F> {
         }
     }
 
+    /// Create a new codec with default options.
+    ///
+    /// Returns [`Error::TooFewDataShards`] or [`Error::TooFewParityShards`] if
+    /// either count is zero, or [`Error::TooManyShards`] if the total exceeds the field order.
     pub fn new(data_shards: usize, parity_shards: usize) -> Result<ReedSolomon<F>, Error> {
         Self::with_options(data_shards, parity_shards, CodecOptions::default())
     }
 
+    /// Create a new codec with explicit [`CodecOptions`].
     pub fn with_options(
         data_shards: usize,
         parity_shards: usize,
@@ -274,50 +279,63 @@ impl<F: Field> ReedSolomon<F> {
         })
     }
 
+    /// Returns the number of data shards.
     pub fn data_shard_count(&self) -> usize {
         self.data_shard_count
     }
 
+    /// Returns the number of parity shards.
     pub fn parity_shard_count(&self) -> usize {
         self.parity_shard_count
     }
 
+    /// Returns the total number of shards (data + parity).
     pub fn total_shard_count(&self) -> usize {
         self.total_shard_count
     }
 
+    /// Returns the codec family (Classic, LeopardGF8, or LeopardGF16).
     pub fn codec_family(&self) -> CodecFamily {
         self.codec_family
     }
 
+    /// Returns the Leopard GF8 setup matrix shape `(rows, cols)`, or `None` if not using LeopardGF8.
     pub fn leopard_setup_matrix_shape(&self) -> Option<(usize, usize)> {
         let codec = super::leopard::leopard_gf8_state(&self.family_state).ok()?;
         Some(codec.setup_shape())
     }
 
+    /// Returns the inversion cache capacity.
     pub fn inversion_cache_capacity(&self) -> usize {
         self.options.inversion_cache_capacity
     }
 
+    /// Returns the recommended inversion cache capacity for the given shard counts.
     pub fn recommended_inversion_cache_capacity(data_shards: usize, parity_shards: usize) -> usize {
         Self::derive_inversion_cache_capacity(data_shards, parity_shards)
     }
 
+    /// Returns a snapshot of reconstruction cache hit/miss statistics.
     #[cfg(feature = "std")]
     pub fn reconstruction_cache_stats(&self) -> ReconstructionCacheStats {
         self.reconstruction_cache_metrics.snapshot()
     }
 
+    /// Returns a snapshot of runtime profiling metrics.
     #[cfg(feature = "std")]
     pub fn runtime_profile_stats(&self) -> RuntimeProfileStats {
         self.runtime_profile_metrics.snapshot()
     }
 
+    /// Resets all runtime profiling counters to zero.
     #[cfg(feature = "std")]
     pub fn reset_runtime_profile_stats(&self) {
         self.runtime_profile_metrics.reset();
     }
 
+    /// Split a contiguous data buffer into `data_shard_count` equal-length shards.
+    ///
+    /// The last shard is zero-padded if `data.len()` is not evenly divisible.
     pub fn split(&self, data: &[F::Elem]) -> Result<Vec<Vec<F::Elem>>, Error> {
         let data_shards = self.data_shard_count;
         let shard_len = if data.is_empty() {
@@ -340,6 +358,9 @@ impl<F: Field> ReedSolomon<F> {
         Ok(shards)
     }
 
+    /// Join data shards back into a single contiguous buffer.
+    ///
+    /// Truncates to `out_len` bytes. Requires exactly `data_shard_count` shards.
     pub fn join<T: AsRef<[F::Elem]>>(
         &self,
         shards: &[T],
@@ -370,6 +391,7 @@ impl<F: Field> ReedSolomon<F> {
         Ok(result)
     }
 
+    /// Create a codec with a user-provided encoding matrix.
     pub fn with_custom_matrix(
         data_shards: usize,
         parity_shards: usize,

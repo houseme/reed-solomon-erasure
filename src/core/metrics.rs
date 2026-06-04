@@ -154,6 +154,7 @@ impl ReconstructionCacheMetrics {
 
 #[cfg(feature = "std")]
 impl ReconstructionCacheStats {
+    /// Returns the cache hit rate (hits / requests).
     #[inline]
     pub fn hit_rate(&self) -> f64 {
         if self.requests == 0 {
@@ -163,6 +164,7 @@ impl ReconstructionCacheStats {
         }
     }
 
+    /// Returns the cache reuse ratio (hits / inserts).
     #[inline]
     pub fn reuse_ratio(&self) -> f64 {
         if self.inserts == 0 {
@@ -172,6 +174,7 @@ impl ReconstructionCacheStats {
         }
     }
 
+    /// Returns the miss cost per request (misses / requests).
     #[inline]
     pub fn miss_cost_per_request(&self) -> f64 {
         if self.requests == 0 {
@@ -181,6 +184,7 @@ impl ReconstructionCacheStats {
         }
     }
 
+    /// Returns a combined analysis of all cache metrics.
     #[inline]
     pub fn analysis(&self) -> ReconstructionCacheAnalysis {
         ReconstructionCacheAnalysis {

@@ -121,22 +121,27 @@ pub fn exp(a: u8, n: usize) -> u8 {
     }
 }
 
+/// Multiply each byte in `input` by `c` in GF(2^8), writing results to `out`.
 pub fn mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     (backend::active_backend().mul_slice)(c, input, out);
 }
 
+/// XOR-multiply: `out[i] ^= gf_mul(c, input[i])` for each byte.
 pub fn mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     (backend::active_backend().mul_slice_xor)(c, input, out);
 }
 
+/// Returns the name of the currently active GF(2^8) backend.
 pub fn active_backend_name() -> &'static str {
     backend::active_backend().name
 }
 
+/// Returns the kind (Scalar, SimdC, RustSimd) of the active backend.
 pub fn active_backend_kind() -> BackendKind {
     backend::active_backend().kind
 }
 
+/// Returns the identifier of the active backend.
 pub fn active_backend_id() -> BackendId {
     backend::active_backend().id
 }

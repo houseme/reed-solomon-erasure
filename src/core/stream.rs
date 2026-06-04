@@ -52,6 +52,7 @@ impl Default for StreamOptions {
 }
 
 impl StreamOptions {
+    /// Create a new `StreamOptions` with default settings.
     pub fn new() -> Self {
         Self::default()
     }

@@ -60,6 +60,7 @@ impl Default for ParallelPolicy {
 
 #[cfg(feature = "std")]
 impl ParallelPolicy {
+    /// Decide whether to use parallel execution and how to chunk the work.
     pub fn decide(
         &self,
         shard_size: usize,
@@ -144,6 +145,7 @@ impl ParallelPolicy {
         self
     }
 
+    /// Apply environment variable overrides (`RS_PARALLEL_POLICY_*`) to this policy.
     pub fn with_env_overrides(self) -> Self {
         let mut policy = self;
         if let Some(value) = parse_env_usize(RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES_ENV)
@@ -205,6 +207,7 @@ fn parse_env_usize(name: &str) -> Option<usize> {
 }
 
 impl<F: Field> ReedSolomon<F> {
+    /// Compute the parallel execution decision for the current codec and shard size.
     #[cfg(feature = "std")]
     pub fn parallel_policy(&self, shard_len: usize, output_shards: usize) -> ParallelDecision {
         let decision = self.parallel_policy_with(
@@ -248,11 +251,13 @@ impl<F: Field> ReedSolomon<F> {
         )
     }
 
+    /// Returns the parallel policy version number.
     #[cfg(feature = "std")]
     pub fn parallel_policy_version(&self) -> u32 {
         PARALLEL_POLICY_VERSION
     }
 
+    /// Returns the effective parallel policy (including cache-aware adjustments).
     #[cfg(feature = "std")]
     pub fn effective_parallel_policy(&self) -> ParallelPolicy {
         self.policy_cache.data

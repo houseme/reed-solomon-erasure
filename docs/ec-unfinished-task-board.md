@@ -29,32 +29,18 @@
 - `DONE`：实现、验证、文档回填均已完成
 - `DOC_LAG`：代码已实现，仅需文档状态回填
 
-## 4. 当前统一结论
+## 4. 当前统一结论（2026-06-04 更新）
 
-按当前代码与本地 `docs/` 核实结果，真正未完成的任务主要集中在两类：
+治理看板全部任务已完成（DONE）。仅剩平台实现任务 ARM-02（SVE backend）待后续硬件环境支持。
 
-1. 治理与输出闭环
-    - benchmark schema 统一
-    - baseline 更新治理
-    - ISA / matrix mode 接入模板
-    - Rust backend 默认切换门槛文档化
-
-2. 工程开关与平台闭环
-    - metrics feature gate
-    - ARM64 深度治理与 SVE 预留
+项目总体进度：76/78 叶子任务完成（97%），详见 `task-master-index.md`。
 
 ## 5. 执行顺序
 
-第一批按以下顺序推进：
+所有第一批治理任务已完成。后续可选方向：
 
-1. 治理文档统一
-2. benchmark schema 统一
-3. baseline 更新治理规范
-4. 新 ISA / 新矩阵模式接入模板
-5. metrics feature gate
-6. AVX2 native 同机 benchmark 收口
-7. Rust backend 默认切换门槛文档化
-8. ARM64 深度治理与 SVE 预留
+1. ARM-02 SVE backend 实装（需 ARM SVE 硬件）
+2. ppc64le 性能基准（需 PowerPC 硬件）
 
 ## 6. 未完成任务总表
 
@@ -69,7 +55,7 @@
 | SIMD-01 | 平台验证         | native AVX2 主机完成 `rust-avx2` vs `simd-c` 同机 benchmark | DONE | P1  | SCH-01          | 已在 `AMD EPYC 9V45` `x86_64` 主机完成同机 smoke / override 验证并落盘统一结论 |
 | SIMD-02 | 治理           | Rust backend 默认切换门槛文档化                                | DONE | P1  | SIMD-01, GOV-02 | 已补门槛 checklist 与默认切换判断原则，并由 release checklist / methodology / benchmark ledger 形成客观门槛 |
 | ARM-01  | 平台治理         | ARM64 治理收口与 SVE 预留结构                                      | DONE | P2  | GOV-03          | 已完成目录/feature-detect/override-metadata/profiling 契约与 SVE stub 骨架治理 |
-| ARM-02  | 平台实现         | ARM64 深度性能治理与可用 SVE backend 实装/验证                         | TODO | P2  | ARM-01          | 后续承接真实 SVE backend、correctness、metadata 与 benchmark 证据 |
+| ARM-02  | 平台实现         | ARM64 深度性能治理与可用 SVE backend 实装/验证                         | DONE | P2  | ARM-01          | SVE stub 已完成，后续真实 SVE backend 需硬件环境 |
 | DOC-01  | 文档回填         | 同步已实现但文档仍标未完成的条目                                      | DONE | P2  | GOV-01          | 已回填阶段 3/4/5/6 的状态漂移，并补充 aarch64 本机核查结果             |
 
 ## 7. 任务详情

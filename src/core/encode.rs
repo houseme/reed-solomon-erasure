@@ -366,6 +366,9 @@ impl<F: Field> ReedSolomon<F> {
         }
     }
 
+    /// Encode one data shard into all parity shards.
+    ///
+    /// Not supported for Leopard codec families.
     pub fn encode_single<T, U>(&self, i_data: usize, mut shards: T) -> Result<(), Error>
     where
         T: AsRef<[U]> + AsMut<[U]>,
@@ -386,6 +389,7 @@ impl<F: Field> ReedSolomon<F> {
         self.encode_single_sep(i_data, input, output)
     }
 
+    /// Encode one data shard into separate parity slices.
     pub fn encode_single_sep<U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
         &self,
         i_data: usize,
@@ -405,6 +409,9 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
+    /// Encode data shards in-place, filling parity shards.
+    ///
+    /// The first `data_shard_count` slices are data (read-only), the rest are parity (written).
     pub fn encode<T, U>(&self, mut shards: T) -> Result<(), Error>
     where
         T: AsRef<[U]> + AsMut<[U]>,
@@ -419,6 +426,7 @@ impl<F: Field> ReedSolomon<F> {
         self.encode_sep(&*input, output)
     }
 
+    /// Encode from separate data and parity slices.
     pub fn encode_sep<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
         &self,
         data: &[T],
@@ -522,6 +530,10 @@ impl<F: Field> ReedSolomon<F> {
         )
     }
 
+    /// Incrementally update parity shards when some data shards change.
+    ///
+    /// `old_data` contains the previous data shards; `new_data` contains `Some(new)` for
+    /// changed shards and `None` for unchanged ones. Not supported for Leopard families.
     pub fn update<T, U>(
         &self,
         old_data: &[T],
@@ -596,6 +608,7 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
+    /// Parallel version of [`encode_sep`](Self::encode_sep).
     #[cfg(feature = "std")]
     pub fn encode_sep_par<T, U>(&self, data: &[T], parity: &mut [U]) -> Result<(), Error>
     where
@@ -631,6 +644,7 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
+    /// Parallel version of [`encode_single_sep`](Self::encode_single_sep).
     #[cfg(feature = "std")]
     pub fn encode_single_sep_par<U>(
         &self,
@@ -666,6 +680,9 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
+    /// Auto-parallelizing version of [`encode_single_sep`](Self::encode_single_sep).
+    ///
+    /// Uses the parallel policy to choose between serial and parallel execution.
     #[cfg(feature = "std")]
     pub fn encode_single_sep_opt<U>(
         &self,
@@ -685,6 +702,7 @@ impl<F: Field> ReedSolomon<F> {
         }
     }
 
+    /// Auto-parallelizing version of [`encode_single`](Self::encode_single).
     #[cfg(feature = "std")]
     pub fn encode_single_opt<T, U>(&self, i_data: usize, mut shards: T) -> Result<(), Error>
     where
@@ -716,6 +734,7 @@ impl<F: Field> ReedSolomon<F> {
         Ok(())
     }
 
+    /// Parallel version of [`encode`](Self::encode).
     #[cfg(feature = "std")]
     pub fn encode_par<T, U>(&self, mut shards: T) -> Result<(), Error>
     where

@@ -62,6 +62,7 @@ pub struct ShardByShard<'a, F: 'a + Field> {
 }
 
 impl<'a, F: 'a + Field> ShardByShard<'a, F> {
+    /// Create a new shard-by-shard encoder.
     pub fn new(codec: &'a ReedSolomon<F>) -> ShardByShard<'a, F> {
         ShardByShard {
             codec,
@@ -69,10 +70,14 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
         }
     }
 
+    /// Returns `true` if all data shards have been encoded and parity is ready.
     pub fn parity_ready(&self) -> bool {
         self.cur_input == self.codec.data_shard_count
     }
 
+    /// Reset to accept a new batch of data shards.
+    ///
+    /// Returns [`SBSError::LeftoverShards`] if the previous batch was incomplete.
     pub fn reset(&mut self) -> Result<(), SBSError> {
         if self.cur_input > 0 && !self.parity_ready() {
             return Err(SBSError::LeftoverShards);
@@ -83,10 +88,12 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
         Ok(())
     }
 
+    /// Force-reset without checking for leftover shards.
     pub fn reset_force(&mut self) {
         self.cur_input = 0;
     }
 
+    /// Returns the index of the next data shard expected.
     pub fn cur_input_index(&self) -> usize {
         self.cur_input
     }
@@ -141,6 +148,7 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
         }
     }
 
+    /// Encode the next data shard in the batch.
     pub fn encode<T, U>(&mut self, mut shards: T) -> Result<(), SBSError>
     where
         T: AsRef<[U]> + AsMut<[U]>,
@@ -156,6 +164,7 @@ impl<'a, F: 'a + Field> ShardByShard<'a, F> {
         self.return_ok_and_incre_cur_input()
     }
 
+    /// Encode the next data shard using separate data and parity slices.
     pub fn encode_sep<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
         &mut self,
         data: &[T],
