@@ -11,7 +11,7 @@ repository = "https://github.com/darrenldl/reed-solomon-erasure"
 [workspace.dependencies]
 cc = "1.2"
 criterion = { version = "0.8.2", features = ["html_reports"] }
-hashlink = { version = "0.11", default-features = false }
+hashlink = { version = "0.12", default-features = false }
 libc = "0.2"
 libfuzzer-sys = "0.4"
 libm = "0.2.16"
