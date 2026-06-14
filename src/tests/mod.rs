@@ -1701,10 +1701,26 @@ fn test_parallel_policy_creates_multiple_chunks_for_small_output_reconstruct_cas
     let decision = r.parallel_policy_with(1024 * 1024, 2, 8);
 
     assert!(decision.use_parallel);
-    assert!(decision.jobs >= 2, "expected multiple jobs, got {}", decision.jobs);
-    assert!(decision.jobs <= 8, "jobs should not exceed available_parallelism, got {}", decision.jobs);
-    assert!(decision.chunk_len >= 16384, "chunk_len too small: {}", decision.chunk_len);
-    assert!(decision.chunk_len <= 1024 * 1024, "chunk_len too large: {}", decision.chunk_len);
+    assert!(
+        decision.jobs >= 2,
+        "expected multiple jobs, got {}",
+        decision.jobs
+    );
+    assert!(
+        decision.jobs <= 8,
+        "jobs should not exceed available_parallelism, got {}",
+        decision.jobs
+    );
+    assert!(
+        decision.chunk_len >= 16384,
+        "chunk_len too small: {}",
+        decision.chunk_len
+    );
+    assert!(
+        decision.chunk_len <= 1024 * 1024,
+        "chunk_len too large: {}",
+        decision.chunk_len
+    );
 }
 
 #[cfg(feature = "std")]

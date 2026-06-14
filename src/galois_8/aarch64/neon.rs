@@ -148,8 +148,8 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "neon")]
 unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
     use core::arch::aarch64::{
-        uint8x16_t, uint8x16x4_t, vandq_u8, vdupq_n_u8, veorq_u8, vld1q_u8,
-        vld1q_u8_x4, vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x4,
+        uint8x16_t, uint8x16x4_t, vandq_u8, vdupq_n_u8, veorq_u8, vld1q_u8, vld1q_u8_x4,
+        vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x4,
     };
 
     let low_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_LOW[c as usize].as_ptr()) };
@@ -198,14 +198,10 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         let high2 = vshrq_n_u8::<4>(input2);
         let high3 = vshrq_n_u8::<4>(input3);
 
-        let product0: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
-        let product1: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
-        let product2: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
-        let product3: uint8x16_t =
-            veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
+        let product0: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low0), vqtbl1q_u8(high_tbl, high0));
+        let product1: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
+        let product2: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
+        let product3: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
         let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out_chunk.as_ptr()) };
         unsafe {
             vst1q_u8_x4(

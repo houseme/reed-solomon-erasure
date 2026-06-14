@@ -605,7 +605,13 @@ impl<F: Field> ReedSolomon<F> {
     fn reconstruct_leopard_impl<T: ReconstructShard<F>>(
         &self,
         slices: &mut [T],
-        reconstruct_fn: fn(&[bool], &mut [&mut [u8]], &[Option<&[u8]>], usize, usize) -> Result<(), Error>,
+        reconstruct_fn: fn(
+            &[bool],
+            &mut [&mut [u8]],
+            &[Option<&[u8]>],
+            usize,
+            usize,
+        ) -> Result<(), Error>,
     ) -> Result<(), Error> {
         check_piece_count!(all => self, slices);
 

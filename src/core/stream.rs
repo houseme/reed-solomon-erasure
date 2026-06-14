@@ -296,10 +296,12 @@ fn read_block_par<R: std::io::Read + Send>(
             }
             Ok(())
         })
-        .map_err(|()| first_error
-                        .into_inner()
-                        .expect("parallel reader panicked")
-                        .expect("error not set"))?;
+        .map_err(|()| {
+            first_error
+                .into_inner()
+                .expect("parallel reader panicked")
+                .expect("error not set")
+        })?;
 
     Ok((
         !any_data.load(Ordering::Relaxed),
@@ -363,10 +365,12 @@ fn write_block_par<W: std::io::Write + Send>(
             }
             Ok(())
         })
-        .map_err(|()| first_error
-                        .into_inner()
-                        .expect("parallel reader panicked")
-                        .expect("error not set"))
+        .map_err(|()| {
+            first_error
+                .into_inner()
+                .expect("parallel reader panicked")
+                .expect("error not set")
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -560,10 +564,12 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                     buf.truncate(total_read);
                     Ok(())
                 })
-                .map_err(|()| first_error
+                .map_err(|()| {
+                    first_error
                         .into_inner()
                         .expect("parallel reader panicked")
-                        .expect("error not set"))?;
+                        .expect("error not set")
+                })?;
 
             if !any_data.load(Ordering::Relaxed) {
                 break;
@@ -602,9 +608,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             // (reconstruct fills in all missing shards — data and parity)
             for (i, shard) in shards.iter_mut().enumerate() {
                 if !present[i] {
-                    let recovered = reconstruct_bufs[i]
-                        .as_ref()
-                        .expect("missing shard buffer");
+                    let recovered = reconstruct_bufs[i].as_ref().expect("missing shard buffer");
                     shard.get_mut().extend_from_slice(&recovered[..actual_len]);
                 }
             }
@@ -1069,9 +1073,7 @@ mod tests {
     fn test_reconstruct_stream_minimum_present() {
         let rs = ReedSolomon::new(3, 2).unwrap();
         let shard_len = 16usize;
-        let data: Vec<Vec<u8>> = (0..3)
-            .map(|i| vec![i as u8 + 1; shard_len])
-            .collect();
+        let data: Vec<Vec<u8>> = (0..3).map(|i| vec![i as u8 + 1; shard_len]).collect();
 
         // Encode to get parity.
         let refs: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();

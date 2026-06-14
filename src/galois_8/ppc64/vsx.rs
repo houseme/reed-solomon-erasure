@@ -72,10 +72,22 @@ unsafe fn rust_vsx_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         let i3: __vector_unsigned_char =
             core::ptr::read_unaligned(in_chunk.as_ptr().add(48).cast());
 
-        let r0 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i0, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i0, vec_splats(4u8))));
-        let r1 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i1, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i1, vec_splats(4u8))));
-        let r2 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i2, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i2, vec_splats(4u8))));
-        let r3 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i3, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i3, vec_splats(4u8))));
+        let r0 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i0, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i0, vec_splats(4u8))),
+        );
+        let r1 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i1, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i1, vec_splats(4u8))),
+        );
+        let r2 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i2, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i2, vec_splats(4u8))),
+        );
+        let r3 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i3, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i3, vec_splats(4u8))),
+        );
 
         core::ptr::write_unaligned(out_chunk.as_mut_ptr().cast(), r0);
         core::ptr::write_unaligned(out_chunk.as_mut_ptr().add(16).cast(), r1);
@@ -89,7 +101,10 @@ unsafe fn rust_vsx_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         .zip(remainder_out.chunks_exact_mut(16))
     {
         let v: __vector_unsigned_char = core::ptr::read_unaligned(in_chunk.as_ptr().cast());
-        let result = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(v, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(v, vec_splats(4u8))));
+        let result = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(v, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(v, vec_splats(4u8))),
+        );
         core::ptr::write_unaligned(out_chunk.as_mut_ptr().cast(), result);
     }
 
@@ -129,10 +144,22 @@ unsafe fn rust_vsx_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         let i3: __vector_unsigned_char =
             core::ptr::read_unaligned(in_chunk.as_ptr().add(48).cast());
 
-        let p0 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i0, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i0, vec_splats(4u8))));
-        let p1 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i1, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i1, vec_splats(4u8))));
-        let p2 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i2, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i2, vec_splats(4u8))));
-        let p3 = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(i3, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(i3, vec_splats(4u8))));
+        let p0 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i0, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i0, vec_splats(4u8))),
+        );
+        let p1 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i1, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i1, vec_splats(4u8))),
+        );
+        let p2 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i2, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i2, vec_splats(4u8))),
+        );
+        let p3 = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(i3, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(i3, vec_splats(4u8))),
+        );
 
         let o0: __vector_unsigned_char = core::ptr::read_unaligned(out_chunk.as_ptr().cast());
         let o1: __vector_unsigned_char =
@@ -154,7 +181,10 @@ unsafe fn rust_vsx_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         .zip(remainder_out.chunks_exact_mut(16))
     {
         let v: __vector_unsigned_char = core::ptr::read_unaligned(in_chunk.as_ptr().cast());
-        let product = vec_xor(vec_perm(low_tbl, low_tbl, vec_and(v, nibble_mask)), vec_perm(high_tbl, high_tbl, vec_sr(v, vec_splats(4u8))));
+        let product = vec_xor(
+            vec_perm(low_tbl, low_tbl, vec_and(v, nibble_mask)),
+            vec_perm(high_tbl, high_tbl, vec_sr(v, vec_splats(4u8))),
+        );
         let existing: __vector_unsigned_char = core::ptr::read_unaligned(out_chunk.as_ptr().cast());
         core::ptr::write_unaligned(out_chunk.as_mut_ptr().cast(), vec_xor(existing, product));
     }

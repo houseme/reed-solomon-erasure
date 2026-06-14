@@ -274,7 +274,6 @@ unsafe fn slice_xor_neon(input: &[u8], out: &mut [u8]) {
     }
 }
 
-
 /// SIMD-accelerated LUT-XOR with pre-split nibble tables.
 ///
 /// Same as `lut_xor` but accepts pre-computed nibble halves to avoid
@@ -422,7 +421,6 @@ unsafe fn lut_xor_ssse3_prebuilt(
     }
 }
 
-
 pub(super) fn mulgf8(out: &mut [u8], input: &[u8], log_m: u8, tables: &LeopardGf8Tables) {
     let lut = &tables.mul_luts[log_m as usize];
     debug_assert_eq!(input.len(), out.len());
@@ -435,7 +433,6 @@ pub(super) fn fft_dit2(x: &mut [u8], y: &mut [u8], log_m: u8, tables: &LeopardGf
     let lut = &tables.mul_luts[log_m as usize];
     dit2_step_prebuilt(x, y, log_m, &lut.value, &lut.low, &lut.high);
 }
-
 
 /// Forward butterfly with pre-split nibble tables for SIMD acceleration.
 #[inline(always)]

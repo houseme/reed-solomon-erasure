@@ -106,7 +106,8 @@ pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
     // SAFETY: u16 XOR is identical to u8 XOR at the byte level (endian-independent).
     // Reinterpret as u8 slices to leverage SIMD byte-XOR implementations.
     let byte_len = dst.len() * 2;
-    let dst_bytes = unsafe { core::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), byte_len) };
+    let dst_bytes =
+        unsafe { core::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), byte_len) };
     let src_bytes = unsafe { core::slice::from_raw_parts(src.as_ptr().cast::<u8>(), byte_len) };
 
     #[cfg(target_arch = "x86_64")]
@@ -494,12 +495,18 @@ pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
-            unsafe { user_bytes_to_work_bytes_avx2(src, dst); return; }
+            unsafe {
+                user_bytes_to_work_bytes_avx2(src, dst);
+                return;
+            }
         }
     }
     #[cfg(target_arch = "aarch64")]
     {
-        unsafe { user_bytes_to_work_bytes_neon(src, dst); return; }
+        unsafe {
+            user_bytes_to_work_bytes_neon(src, dst);
+            return;
+        }
     }
     #[cfg(not(target_arch = "aarch64"))]
     user_bytes_to_work_bytes_scalar(src, dst);
@@ -572,12 +579,18 @@ pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
-            unsafe { work_bytes_to_user_bytes_avx2(src, dst); return; }
+            unsafe {
+                work_bytes_to_user_bytes_avx2(src, dst);
+                return;
+            }
         }
     }
     #[cfg(target_arch = "aarch64")]
     {
-        unsafe { work_bytes_to_user_bytes_neon(src, dst); return; }
+        unsafe {
+            work_bytes_to_user_bytes_neon(src, dst);
+            return;
+        }
     }
     #[cfg(not(target_arch = "aarch64"))]
     work_bytes_to_user_bytes_scalar(src, dst);
@@ -597,7 +610,7 @@ fn work_bytes_to_user_bytes_scalar(src: &[u8], dst: &mut [u8]) {
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 unsafe fn work_bytes_to_user_bytes_avx2(src: &[u8], dst: &mut [u8]) {
-    use core::arch::x86_64::{_mm_shuffle_epi8, _mm_loadu_si128, _mm_storeu_si128};
+    use core::arch::x86_64::{_mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128};
 
     // Mask to extract even-indexed bytes: [0,2,4,6,8,10,12,14], rest zeroed (0x80).
     #[rustfmt::skip]

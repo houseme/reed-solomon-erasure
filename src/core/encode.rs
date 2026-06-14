@@ -485,10 +485,7 @@ impl<F: Field> ReedSolomon<F> {
     }
 
     #[allow(clippy::type_complexity)]
-    fn encode_leopard_sep_inner<
-        T: AsRef<[F::Elem]>,
-        U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
-    >(
+    fn encode_leopard_sep_inner<T: AsRef<[F::Elem]>, U: AsRef<[F::Elem]> + AsMut<[F::Elem]>>(
         &self,
         data: &[T],
         parity: &mut [U],

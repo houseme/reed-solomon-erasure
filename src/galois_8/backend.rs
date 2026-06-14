@@ -144,7 +144,11 @@ static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
         feature = "simd-gfni",
         feature = "simd-vsx"
     ),
-    any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64"),
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "powerpc64"
+    ),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
@@ -224,10 +228,7 @@ struct Aarch64FeatureSet {
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
     ),
-    all(
-        feature = "simd-vsx",
-        target_arch = "powerpc64"
-    )
+    all(feature = "simd-vsx", target_arch = "powerpc64")
 ))]
 fn runtime_select_backend() -> GaloisBackend {
     #[cfg(feature = "std")]
@@ -308,11 +309,7 @@ fn auto_select_backend() -> GaloisBackend {
         not(any(target_os = "android", target_os = "ios")),
         not(feature = "std")
     ),
-    all(
-        feature = "simd-vsx",
-        target_arch = "powerpc64",
-        not(feature = "std")
-    )
+    all(feature = "simd-vsx", target_arch = "powerpc64", not(feature = "std"))
 ))]
 fn auto_select_backend() -> GaloisBackend {
     SCALAR_BACKEND
@@ -711,10 +708,7 @@ fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBa
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
     ),
-    all(
-        feature = "simd-vsx",
-        target_arch = "powerpc64"
-    )
+    all(feature = "simd-vsx", target_arch = "powerpc64")
 )))]
 fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBackend> {
     match backend_override {
@@ -761,10 +755,7 @@ pub(super) fn runtime_override_backend_id_for_test() -> Option<BackendId> {
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
     ),
-    all(
-        feature = "simd-vsx",
-        target_arch = "powerpc64"
-    )
+    all(feature = "simd-vsx", target_arch = "powerpc64")
 ))]
 pub(super) fn active_backend() -> &'static GaloisBackend {
     ACTIVE_BACKEND.call_once(runtime_select_backend)
@@ -788,10 +779,7 @@ pub(super) fn active_backend() -> &'static GaloisBackend {
         not(target_env = "msvc"),
         not(any(target_os = "android", target_os = "ios"))
     ),
-    all(
-        feature = "simd-vsx",
-        target_arch = "powerpc64"
-    )
+    all(feature = "simd-vsx", target_arch = "powerpc64")
 )))]
 pub(super) fn active_backend() -> &'static GaloisBackend {
     ACTIVE_BACKEND.call_once(|| SCALAR_BACKEND)
