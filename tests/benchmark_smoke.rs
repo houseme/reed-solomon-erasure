@@ -34,6 +34,7 @@ struct UpdateCompareResult {
     speedup_vs_encode: f64,
 }
 
+#[cfg(feature = "std")]
 struct DecodeIdxCompareResult {
     operation: &'static str,
     throughput_mb_s: f64,
@@ -55,12 +56,14 @@ struct LeopardEncodeResult {
     ns_per_iter: f64,
 }
 
+#[cfg(feature = "std")]
 struct LeopardEncodeAbResult {
     variant: &'static str,
     throughput_mb_s: f64,
     ns_per_iter: f64,
 }
 
+#[cfg(feature = "std")]
 struct LeopardEncodeProfileResult {
     throughput_mb_s: f64,
     ns_per_iter: f64,
@@ -411,6 +414,7 @@ fn write_update_compare_results(case: BenchCase, results: &[UpdateCompareResult]
 }
 
 #[allow(clippy::needless_range_loop)]
+#[cfg(feature = "std")]
 fn run_decode_idx_compare(case: BenchCase, iterations: usize) -> DecodeIdxCompareResult {
     let seed = derived_seed(Operation::ReconstructData, case) ^ 0xD1u64;
     let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
@@ -486,6 +490,7 @@ fn run_decode_idx_compare(case: BenchCase, iterations: usize) -> DecodeIdxCompar
     }
 }
 
+#[cfg(feature = "std")]
 fn write_decode_idx_compare_results(case: BenchCase, result: &DecodeIdxCompareResult) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
     fs::create_dir_all(&dir).unwrap();
@@ -629,7 +634,10 @@ fn run_leopard_encode(case: BenchCase, iterations: usize) -> LeopardEncodeResult
     for _ in 0..iterations {
         let mut shards =
             make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+        #[cfg(feature = "std")]
         codec.encode_opt(&mut shards).unwrap();
+        #[cfg(not(feature = "std"))]
+        codec.encode(&mut shards).unwrap();
     }
     let elapsed = start.elapsed();
     let ns_per_iter = elapsed.as_nanos() as f64 / iterations as f64;
@@ -642,6 +650,7 @@ fn run_leopard_encode(case: BenchCase, iterations: usize) -> LeopardEncodeResult
     }
 }
 
+#[cfg(feature = "std")]
 fn run_leopard_encode_profile(case: BenchCase, iterations: usize) -> LeopardEncodeProfileResult {
     let seed = derived_seed(Operation::LeopardEncode, case);
     let bytes = (case.shard_size * case.data_shards) as f64;
@@ -741,6 +750,7 @@ fn write_leopard_encode_results(case: BenchCase, result: &LeopardEncodeResult) {
     assert!(csv_path.exists());
 }
 
+#[cfg(feature = "std")]
 fn write_leopard_encode_profile_result(case: BenchCase, result: &LeopardEncodeProfileResult) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
     fs::create_dir_all(&dir).unwrap();
@@ -840,6 +850,7 @@ fn write_leopard_encode_profile_result(case: BenchCase, result: &LeopardEncodePr
     assert!(csv_path.exists());
 }
 
+#[cfg(feature = "std")]
 fn with_leopard_envs<R>(
     reuse_zero: bool,
     forward_tables: bool,
@@ -872,6 +883,7 @@ fn with_leopard_envs<R>(
     result
 }
 
+#[cfg(feature = "std")]
 fn run_leopard_encode_ab_variant(
     case: BenchCase,
     iterations: usize,
@@ -912,6 +924,7 @@ fn run_leopard_encode_ab_variant(
     }
 }
 
+#[cfg(feature = "std")]
 fn write_leopard_encode_ab_results(case: BenchCase, results: &[LeopardEncodeAbResult]) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
     fs::create_dir_all(&dir).unwrap();
@@ -1151,6 +1164,7 @@ fn benchmark_update_vs_encode_32x16_4m_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_decode_idx_vs_reconstruct_some_10x4_1m_exports_results() {
     let case = FAST_SMOKE_CASES
         .iter()
@@ -1166,6 +1180,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_10x4_1m_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_decode_idx_vs_reconstruct_some_4x2_64k_exports_results() {
     let case = FAST_SMOKE_CASES
         .iter()
@@ -1181,6 +1196,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_4x2_64k_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_decode_idx_vs_reconstruct_some_32x16_1m_exports_results() {
     let case = SMOKE_CASES
         .iter()
@@ -1196,6 +1212,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_32x16_1m_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_decode_idx_vs_reconstruct_some_4x2_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1211,6 +1228,7 @@ fn benchmark_decode_idx_vs_reconstruct_some_4x2_4m_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_decode_idx_vs_reconstruct_some_32x16_4m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1358,6 +1376,7 @@ fn benchmark_leopard_encode_96x48_1m_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_leopard_encode_profile_96x48_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1400,6 +1419,7 @@ fn benchmark_leopard_encode_128x64_1m_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_leopard_encode_profile_128x64_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1428,6 +1448,7 @@ fn benchmark_leopard_encode_128x64_4m_exports_results() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "std")]
 fn benchmark_leopard_encode_ab_64x32_1m_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()

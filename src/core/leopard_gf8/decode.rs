@@ -1,8 +1,6 @@
 extern crate alloc;
-
-use alloc::vec::Vec;
-
 use crate::errors::Error;
+use alloc::vec::Vec;
 
 use super::ops::{
     fft_dit2, fft_dit4_full_lut_scratch, fwht_variable, fwht8_mtrunc, ifft_dit2,

@@ -252,7 +252,7 @@ fn test_leopard_gf8_prototype_is_explicit_but_not_executed_yet() {
     assert_eq!(Some((48, 32)), codec.leopard_setup_matrix_shape());
 
     let mut shards = make_random_shards!(1024, 48);
-    codec.encode_opt(&mut shards).unwrap();
+    codec.encode(&mut shards).unwrap();
     assert!(codec.verify(&shards).unwrap());
 }
 
@@ -473,7 +473,7 @@ fn test_leopard_gf8_encode_opt_populates_parity() {
 
     let mut shards = make_random_shards!(4096, 48);
     let before = shards[32..].to_vec();
-    codec.encode_opt(&mut shards).unwrap();
+    codec.encode(&mut shards).unwrap();
 
     assert_ne!(before, shards[32..].to_vec());
     assert_eq!(Some((48, 32)), codec.leopard_setup_matrix_shape());
@@ -494,7 +494,7 @@ fn test_leopard_gf8_encode_rejects_non_64_byte_shard_size() {
     let mut shards = make_random_shards!(1025, 48);
     assert_eq!(
         Error::IncorrectShardSize,
-        codec.encode_opt(&mut shards).unwrap_err()
+        codec.encode(&mut shards).unwrap_err()
     );
 }
 
@@ -3146,6 +3146,65 @@ fn test_verify_with_workspace_resizes_for_new_shard_len() {
     assert!(r.verify_with_workspace(&large, &mut workspace).unwrap());
     assert_eq!(workspace.shard_len(), Some(16 * 1024));
     assert_eq!(workspace.parity_shards(), 4);
+}
+
+#[test]
+fn test_leopard_verify_with_workspace_matches_verify_with_buffer() {
+    let r = ReedSolomon::with_options(
+        32,
+        16,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+    let mut shards = make_random_shards!(64 * 1024, 48);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected_buffer = make_random_shards!(64 * 1024, 16);
+    let expected = r.verify_with_buffer(&shards, &mut expected_buffer).unwrap();
+
+    let mut workspace = crate::VerifyWorkspace::new(&r, 64 * 1024);
+    let actual = r.verify_with_workspace(&shards, &mut workspace).unwrap();
+
+    assert_eq!(expected, actual);
+    assert_eq!(expected_buffer, workspace.as_mut_shards());
+
+    shards[47][31] ^= 0xff;
+    let expected = r.verify_with_buffer(&shards, &mut expected_buffer).unwrap();
+    let actual = r.verify_with_workspace(&shards, &mut workspace).unwrap();
+    assert_eq!(expected, actual);
+    assert_eq!(expected_buffer, workspace.as_mut_shards());
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_leopard_verify_with_workspace_opt_matches_verify_with_buffer_opt() {
+    let r = ReedSolomon::with_options(
+        32,
+        16,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF8,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+    let mut shards = make_random_shards!(256 * 1024, 48);
+    r.encode(&mut shards).unwrap();
+
+    let mut expected_buffer = make_random_shards!(256 * 1024, 16);
+    let expected = r
+        .verify_with_buffer_opt(&shards, &mut expected_buffer)
+        .unwrap();
+
+    let mut workspace = crate::VerifyWorkspace::new(&r, 256 * 1024);
+    let actual = r
+        .verify_with_workspace_opt(&shards, &mut workspace)
+        .unwrap();
+
+    assert_eq!(expected, actual);
+    assert_eq!(expected_buffer, workspace.as_mut_shards());
 }
 
 #[cfg(feature = "std")]
@@ -5873,15 +5932,20 @@ fn test_leopard_gf8_reconstruct_debug_4x4() {
         shards[4 + i] = parity[i].clone();
     }
 
+    #[cfg(feature = "std")]
     for i in 0..4 {
         eprintln!("data[{}] first 8: {:?}", i, &shards[i][..8]);
     }
+    #[cfg(feature = "std")]
     for i in 0..4 {
         eprintln!("parity[{}] first 8: {:?}", i, &shards[4 + i][..8]);
     }
     // Check if parity[0] == data[0]
-    if shards[4][..8] == shards[0][..8] {
-        eprintln!("WARNING: parity[0] == data[0] — encode is identity!");
+    #[cfg(feature = "std")]
+    {
+        if shards[4][..8] == shards[0][..8] {
+            eprintln!("WARNING: parity[0] == data[0] — encode is identity!");
+        }
     }
 
     let encoded: Vec<Vec<u8>> = shards.clone();
@@ -5893,10 +5957,12 @@ fn test_leopard_gf8_reconstruct_debug_4x4() {
 
     codec.reconstruct(&mut reconstructable).unwrap();
 
+    #[cfg(feature = "std")]
     eprintln!(
         "recovered[2] first 8: {:?}",
         &reconstructable[2].as_ref().unwrap()[..8]
     );
+    #[cfg(feature = "std")]
     eprintln!("expected[2]  first 8: {:?}", &encoded[2][..8]);
 
     for i in 0..8 {

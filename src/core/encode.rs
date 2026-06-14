@@ -1,5 +1,10 @@
+extern crate alloc;
+
 #[cfg(feature = "std")]
 use rayon::prelude::*;
+
+use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::Field;
 use crate::errors::Error;

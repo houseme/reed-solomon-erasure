@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use alloc::vec;
+use alloc::vec::Vec;
 
 use smallvec::SmallVec;
 
@@ -48,30 +49,38 @@ impl<F: Field> ReedSolomon<F> {
         true
     }
 
-    /// Verify Leopard parity shards by re-encoding and comparing.
-    fn verify_leopard<T: AsRef<[F::Elem]>>(&self, slices: &[T]) -> Result<bool, Error> {
+    fn verify_leopard_with_buffer<T, U>(
+        &self,
+        slices: &[T],
+        parity: &mut [U],
+    ) -> Result<bool, Error>
+    where
+        T: AsRef<[F::Elem]>,
+        U: AsRef<[F::Elem]> + AsMut<[F::Elem]>,
+    {
         let data = &slices[0..self.data_shard_count];
         let to_check = &slices[self.data_shard_count..];
-        let slice_len = data[0].as_ref().len();
-
-        let mut parity_bufs: Vec<Vec<F::Elem>> = (0..self.parity_shard_count)
-            .map(|_| vec![F::zero(); slice_len])
-            .collect();
-        let mut parity_refs: Vec<&mut [F::Elem]> =
-            parity_bufs.iter_mut().map(|b| b.as_mut_slice()).collect();
-
         if self.is_leopard_gf8_family() {
-            self.encode_leopard_gf8_sep(data, &mut parity_refs)?;
+            self.encode_leopard_gf8_sep(data, parity)?;
         } else {
-            self.encode_leopard_gf16_sep(data, &mut parity_refs)?;
+            self.encode_leopard_gf16_sep(data, parity)?;
         }
 
-        for (expected, actual) in parity_refs.iter().zip(to_check.iter()) {
-            if *expected != actual.as_ref() {
+        for (expected, actual) in parity.iter().zip(to_check.iter()) {
+            if expected.as_ref() != actual.as_ref() {
                 return Ok(false);
             }
         }
         Ok(true)
+    }
+
+    /// Verify Leopard parity shards by re-encoding and comparing.
+    fn verify_leopard<T: AsRef<[F::Elem]>>(&self, slices: &[T]) -> Result<bool, Error> {
+        let slice_len = slices[0].as_ref().len();
+        let mut parity_bufs: Vec<Vec<F::Elem>> = (0..self.parity_shard_count)
+            .map(|_| vec![F::zero(); slice_len])
+            .collect();
+        self.verify_leopard_with_buffer(slices, &mut parity_bufs)
     }
 
     /// Verify that parity shards are consistent with data shards.
@@ -120,11 +129,12 @@ impl<F: Field> ReedSolomon<F> {
         check_piece_count!(all => self, slices);
         check_slices!(multi => slices);
 
+        let slice_len = slices[0].as_ref().len();
         if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
-            return self.verify_leopard(slices);
+            workspace.prepare(self, slice_len);
+            return self.verify_leopard_with_buffer(slices, workspace.as_mut_shards());
         }
 
-        let slice_len = slices[0].as_ref().len();
         workspace.prepare(self, slice_len);
         self.verify_with_buffer(slices, workspace.as_mut_shards())
     }
@@ -141,7 +151,7 @@ impl<F: Field> ReedSolomon<F> {
         check_slices!(multi => slices, multi => buffer);
 
         if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
-            return self.verify_leopard(slices);
+            return self.verify_leopard_with_buffer(slices, buffer);
         }
 
         let data = &slices[0..self.data_shard_count];
@@ -174,7 +184,7 @@ impl<F: Field> ReedSolomon<F> {
         check_slices!(multi => slices, multi => buffer);
 
         if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
-            return self.verify_leopard(slices);
+            return self.verify_leopard_with_buffer(slices, buffer);
         }
 
         let data = &slices[0..self.data_shard_count];

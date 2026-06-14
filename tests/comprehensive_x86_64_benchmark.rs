@@ -73,7 +73,10 @@ fn measure_encode(
     // Warmup
     {
         let mut shards = make_full_shards(BASE_SEED, data_shards, parity_shards, shard_size);
+        #[cfg(feature = "std")]
         codec.encode_opt(black_box(&mut shards)).unwrap();
+        #[cfg(not(feature = "std"))]
+        codec.encode(black_box(&mut shards)).unwrap();
         black_box(());
     }
 
@@ -91,7 +94,10 @@ fn measure_encode(
     let start = Instant::now();
     for _ in 0..iterations {
         let mut shards = make_full_shards(BASE_SEED, data_shards, parity_shards, shard_size);
+        #[cfg(feature = "std")]
         codec.encode_opt(black_box(&mut shards)).unwrap();
+        #[cfg(not(feature = "std"))]
+        codec.encode(black_box(&mut shards)).unwrap();
         black_box(());
     }
     let elapsed = start.elapsed();

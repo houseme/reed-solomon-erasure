@@ -1,4 +1,5 @@
 use super::*;
+use alloc::vec;
 
 #[test]
 fn test_leopard_gf8_tables_initialize_expected_shapes() {
@@ -24,6 +25,7 @@ fn test_leopard_gf8_encode_driver_expected_parameters() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn test_print_tables() {
     let tables = init_leopard_gf8_tables();
     println!("fft_skew = {:?}", &tables.fft_skew[..]);
@@ -66,7 +68,9 @@ fn test_encode_decode_roundtrip_direct() {
         );
     }
     // Go produces: parity[0] = [168, 169, ...], parity[1] = [232, 233, ...]
+    #[cfg(feature = "std")]
     println!("parity[0] first 8: {:?}", &parity[0][..8]);
+    #[cfg(feature = "std")]
     println!("parity[1] first 8: {:?}", &parity[1][..8]);
 
     // Decode: lose shard 0 (a data shard).
@@ -132,10 +136,15 @@ fn test_gf8_roundtrip_3_2_uniform() {
             .unwrap();
     }
 
+    #[cfg(feature = "std")]
     println!("shard[0][..8] = {:?}", &shards[0][..8]);
+    #[cfg(feature = "std")]
     println!("shard[1][..8] = {:?}", &shards[1][..8]);
+    #[cfg(feature = "std")]
     println!("shard[2][..8] = {:?}", &shards[2][..8]);
+    #[cfg(feature = "std")]
     println!("shard[3][..8] = {:?}", &shards[3][..8]);
+    #[cfg(feature = "std")]
     println!("shard[4][..8] = {:?}", &shards[4][..8]);
 
     let original_0 = shards[0].clone();
@@ -160,6 +169,7 @@ fn test_gf8_roundtrip_3_2_uniform() {
     )
     .unwrap();
 
+    #[cfg(feature = "std")]
     println!("recovered[0][..8] = {:?}", &outputs[0][..8]);
     assert_eq!(
         outputs[0],

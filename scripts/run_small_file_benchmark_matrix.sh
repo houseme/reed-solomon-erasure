@@ -11,6 +11,7 @@ CMD=(
   --test benchmark_small_files
   benchmark_small_file_matrix_runs_and_exports_results
   --
+  --ignored
   --nocapture
 )
 

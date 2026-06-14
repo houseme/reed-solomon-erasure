@@ -25,7 +25,7 @@ for backend in "${BACKENDS[@]}"; do
   RSE_BACKEND_OVERRIDE="${backend}" \
   RSE_STRICT_BACKEND_OVERRIDE=1 \
     cargo test --release --features 'std simd-accel' --test benchmark_smoke \
-      benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
+      benchmark_smoke_matrix_runs_and_exports_results -- --ignored --nocapture
   cp target/benchmark-smoke/smoke-results.csv \
     "target/benchmark-smoke/smoke-results-release-${backend}.csv"
 done

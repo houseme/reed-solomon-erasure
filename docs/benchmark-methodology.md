@@ -16,7 +16,7 @@ Targets:
 Smoke (fast regression):
 
 ```bash
-cargo test --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
+cargo test --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
 
 Smoke profiles:
@@ -28,7 +28,7 @@ Smoke profiles:
 Example:
 
 ```bash
-RSE_SMOKE_PROFILE=quick cargo test --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
+RSE_SMOKE_PROFILE=quick cargo test --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
 
 Small-file matrix:
@@ -37,7 +37,7 @@ Small-file matrix:
 RSE_SMALL_FILE_PROFILE=fast \
 cargo test --release --features "std simd-accel" \
   --test benchmark_small_files \
-  benchmark_small_file_matrix_runs_and_exports_results -- --nocapture
+  benchmark_small_file_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
 
 Small-file profiles:
@@ -67,7 +67,12 @@ cargo bench --bench galois_backend --features std
 SIMD smoke (when available):
 
 ```bash
-cargo test --features "std simd-accel" --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --nocapture
+cargo test --features "std simd-accel" --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --ignored --nocapture
+```
+Use `--ignored` here as well because the artifact-producing smoke benchmark is intentionally not part of the default `cargo test` surface:
+
+```bash
+cargo test --features "std simd-accel" --test benchmark_smoke benchmark_smoke_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
 
 ## 3. Determinism Rules
@@ -189,6 +194,18 @@ Notes:
    - latency (`ns_per_iter`) when available
 4. For small-file decisions, prioritize `ns_per_iter` over `throughput_mb_s`, especially for `1 KiB` to `64 KiB`.
 5. Use median of repeated runs for decisions; avoid single-run conclusions.
+6. If only `1 KiB` or `4 KiB` cases look bad while neighboring points are stable, rerun that case in isolation with a higher iteration count before treating it as a real regression.
+
+Example drill-down:
+
+```bash
+RSE_SMALL_FILE_PROFILE=extended \
+RSE_SMALL_FILE_CASE_FILTER=10x4_1k \
+RSE_SMALL_FILE_ITERATIONS=40 \
+cargo test --release --features "std simd-accel" \
+  --test benchmark_small_files \
+  benchmark_small_file_matrix_runs_and_exports_results -- --ignored --nocapture
+```
 
 ## 6. Cache Metrics Interpretation
 
@@ -364,7 +381,7 @@ repeatable regression gate.
 Generate the current hotspot artifact:
 
 ```bash
-cargo test --release --features "std simd-accel" benchmark_reconstruction_hotspots -- --nocapture
+cargo test --release --features "std simd-accel" benchmark_reconstruction_hotspots -- --ignored --nocapture
 ```
 
 Compare it against a saved baseline:

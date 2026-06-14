@@ -111,7 +111,7 @@ RSE_SMALL_FILE_CASE_FILTER=4x2_1k,4x2_4k,10x4_1k \
 RSE_SMALL_FILE_ITERATIONS=12 \
 cargo test --release --features "std simd-accel" \
   --test benchmark_small_files \
-  benchmark_small_file_matrix_runs_and_exports_results -- --nocapture
+  benchmark_small_file_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
 
 ## 7. Output Artifacts
@@ -138,6 +138,7 @@ Before drawing conclusions:
 2. Confirm the same feature set and backend selection policy were used.
 3. Confirm whether the artifacts include `verify_with_buffer`; older archived data may not.
 4. Prefer comparing the same profile level, especially for `fast` vs `fast` or `extended` vs `extended`.
+5. Remember that the matrix entrypoint is marked `#[ignore]`; direct `cargo test` commands must include `--ignored`.
 
 For small-file regressions:
 
@@ -147,6 +148,18 @@ For small-file regressions:
    - `4+2`: `1 KiB`, `4 KiB`, `16 KiB`, `64 KiB`
    - `10+4`: `1 KiB`, `4 KiB`, `16 KiB`, `64 KiB` in `extended`
 4. If only `1 MiB` improves while `1 KiB` to `64 KiB` regresses, do not call that a small-file win.
+5. If an apparent regression is isolated to `1 KiB` or `4 KiB`, rerun the case with a higher iteration count before touching the kernel.
+
+Suggested rerun:
+
+```bash
+RSE_SMALL_FILE_PROFILE=extended \
+RSE_SMALL_FILE_CASE_FILTER=10x4_1k \
+RSE_SMALL_FILE_ITERATIONS=40 \
+cargo test --release --features "std simd-accel" \
+  --test benchmark_small_files \
+  benchmark_small_file_matrix_runs_and_exports_results -- --ignored --nocapture
+```
 
 ## 9. Automated Regression Checks
 

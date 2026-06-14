@@ -1,5 +1,6 @@
 extern crate alloc;
 
+use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::errors::Error;
@@ -28,9 +29,11 @@ thread_local! {
     static SCRATCH_CACHE: std::cell::RefCell<Option<Vec<u8>>> =
         const { std::cell::RefCell::new(None) };
 }
+#[cfg(feature = "std")]
+use super::PROFILE8;
 use super::{
     FftDit8Plan, IfftDit8Plan, IfftProfilePhase, LeopardGf8EncodeDriver, LeopardGf8Tables,
-    MODULUS8, PROFILE8, build_fft_dit8_plan, build_ifft_dit8_plan, build_leopard_gf8_encode_driver,
+    MODULUS8, build_fft_dit8_plan, build_ifft_dit8_plan, build_leopard_gf8_encode_driver,
     init_leopard_gf8_tables,
 };
 
@@ -697,13 +700,13 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
     start: usize,
     end: usize,
     tables: &LeopardGf8Tables,
-    phase: IfftProfilePhase,
+    _phase: IfftProfilePhase,
     shard_size: usize,
     scratch: &mut [u8],
 ) {
     #[cfg(feature = "std")]
-    PROFILE8.add_ifft_calls(phase);
-    let size = end - start;
+    PROFILE8.add_ifft_calls(_phase);
+    let _size = end - start;
 
     if plan.initial_blocks.is_empty() {
         for (idx, slot) in work.iter_mut().take(plan.mtrunc).enumerate() {
@@ -711,10 +714,10 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                 .copy_from_slice(&data[idx].as_ref()[start..end]);
         }
         #[cfg(feature = "std")]
-        PROFILE8.add_input_copy_bytes(phase, plan.mtrunc * size);
+        PROFILE8.add_input_copy_bytes(_phase, plan.mtrunc * _size);
         zero_trailing_lanes(work, plan.mtrunc, plan.m - plan.mtrunc);
         #[cfg(feature = "std")]
-        PROFILE8.add_zero_fill_bytes(phase, (plan.m - plan.mtrunc) * size);
+        PROFILE8.add_zero_fill_bytes(_phase, (plan.m - plan.mtrunc) * _size);
     } else {
         for block in &plan.initial_blocks {
             let available = core::cmp::min(plan.mtrunc.saturating_sub(block.r), 4);
@@ -724,7 +727,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                     .copy_from_slice(&data[block.r + i].as_ref()[start..end]);
             }
             #[cfg(feature = "std")]
-            PROFILE8.add_input_copy_bytes(phase, available * size);
+            PROFILE8.add_input_copy_bytes(_phase, available * _size);
             for slot in work
                 .iter_mut()
                 .skip(block.r + available)
@@ -733,7 +736,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
                 slot.as_mut().fill(0);
             }
             #[cfg(feature = "std")]
-            PROFILE8.add_zero_fill_bytes(phase, (4usize.saturating_sub(available)) * size);
+            PROFILE8.add_zero_fill_bytes(_phase, (4usize.saturating_sub(available)) * _size);
 
             dit4_at(
                 TransformDir::Inverse,
@@ -755,7 +758,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
             plan.m.saturating_sub(plan.clear_start),
         );
         #[cfg(feature = "std")]
-        PROFILE8.add_zero_fill_bytes(phase, plan.m.saturating_sub(plan.clear_start) * size);
+        PROFILE8.add_zero_fill_bytes(_phase, plan.m.saturating_sub(plan.clear_start) * _size);
 
         for block in &plan.later_blocks {
             dit4_at(
@@ -784,7 +787,7 @@ fn ifft_dit_encoder8_with_plan<T: AsRef<[u8]>, W: AsMut<[u8]>>(
         for idx in 0..plan.m {
             let src = &*work[idx].as_mut();
             #[cfg(feature = "std")]
-            PROFILE8.add_xor_bytes(phase, src.len());
+            PROFILE8.add_xor_bytes(_phase, src.len());
             slice_xor(src, xor_dst[idx].as_mut());
         }
     }

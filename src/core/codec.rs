@@ -16,8 +16,12 @@ use crate::matrix::Matrix;
 
 use super::{
     CodecFamily, CodecOptions, DATA_DECODE_MATRIX_CACHE_MAX_CAPACITY,
-    DATA_DECODE_MATRIX_CACHE_MIN_CAPACITY, MatrixMode, ReconstructionCacheMetrics,
-    ReconstructionCacheStats, ReedSolomon, RuntimeProfileMetrics, RuntimeProfileStats,
+    DATA_DECODE_MATRIX_CACHE_MIN_CAPACITY, MatrixMode, ReedSolomon,
+};
+#[cfg(feature = "std")]
+use super::{
+    ReconstructionCacheMetrics, ReconstructionCacheStats, RuntimeProfileMetrics,
+    RuntimeProfileStats,
 };
 
 impl<F: Field> ReedSolomon<F> {

@@ -426,7 +426,7 @@ impl crate::ReedSolomon<super::Field> {
     ) -> Result<bool, crate::Error> {
         self.ensure_classic_family_execution()?;
         if self.is_leopard_gf8_family() {
-            return self.verify(slices);
+            return self.verify_with_workspace(slices, workspace);
         }
         let shard_len = Self::first_shard_len(slices);
         workspace.resize(self, shard_len);

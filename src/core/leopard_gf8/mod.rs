@@ -98,6 +98,7 @@ enum IfftProfilePhase {
     RemainderGroup,
 }
 
+#[cfg(feature = "std")]
 #[derive(Debug, Default)]
 pub(crate) struct LeopardGf8ProfileMetrics {
     encode_calls: AtomicUsize,

@@ -79,7 +79,7 @@ run_small_file_gate() {
   run env RSE_SMALL_FILE_PROFILE="${RSE_SMALL_FILE_PROFILE:-fast}" \
     cargo test --release --features "std simd-accel" \
     --test benchmark_small_files \
-    benchmark_small_file_matrix_runs_and_exports_results -- --nocapture
+    benchmark_small_file_matrix_runs_and_exports_results -- --ignored --nocapture
 
   if [[ -n "${RSE_SMALL_FILE_BASELINE:-}" ]]; then
     run python3 scripts/check_benchmark_regression.py \
@@ -104,7 +104,7 @@ run_small_file_gate() {
 run_fast_checks() {
   run cargo check --tests
   run cargo test --test selftest
-  run_smoke_profile quick cargo test --test golden_vectors --test benchmark_smoke
+  run_smoke_profile quick cargo test --test golden_vectors --test benchmark_smoke -- --ignored --nocapture
   run cargo test --no-default-features
   run cargo test --features std
 }

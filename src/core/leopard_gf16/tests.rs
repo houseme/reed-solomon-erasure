@@ -3,6 +3,7 @@ use super::ops::{
 };
 use super::tables::build_tables16;
 use super::*;
+use alloc::vec;
 
 #[test]
 fn test_leopard_gf16_tables_shapes() {
@@ -625,20 +626,23 @@ fn test_leopard_gf16_encode_parity_values() {
     let parity_shards = 2;
     let shard_size = 64;
 
-    let tables = init_leopard_gf16_tables();
+    #[cfg(feature = "std")]
+    {
+        let tables = init_leopard_gf16_tables();
 
-    // Print the fft_skew values used for encoding
-    let m = 2usize;
-    let skew = &tables.fft_skew[m - 1..]; // fft_skew[1..]
-    println!("skew (fft_skew[1..]): {:?}", &skew[..8]);
-    println!(
-        "skew[1] = 0x{:04x} (used by first IFFT final_stage)",
-        skew[1]
-    );
-    println!(
-        "skew[3] = 0x{:04x} (used by second IFFT final_stage)",
-        skew[3]
-    );
+        // Print the fft_skew values used for encoding
+        let m = 2usize;
+        let skew = &tables.fft_skew[m - 1..]; // fft_skew[1..]
+        println!("skew (fft_skew[1..]): {:?}", &skew[..8]);
+        println!(
+            "skew[1] = 0x{:04x} (used by first IFFT final_stage)",
+            skew[1]
+        );
+        println!(
+            "skew[3] = 0x{:04x} (used by second IFFT final_stage)",
+            skew[3]
+        );
+    }
 
     let mut data: Vec<Vec<u8>> = Vec::new();
     for i in 0..data_shards {
@@ -651,7 +655,9 @@ fn test_leopard_gf16_encode_parity_values() {
 
     encode::encode_with_tables16(data_shards, parity_shards, &data, &mut parity).unwrap();
 
+    #[cfg(feature = "std")]
     println!("parity[0][:16] = {:?}", &parity[0][..16]);
+    #[cfg(feature = "std")]
     println!("parity[1][:16] = {:?}", &parity[1][..16]);
 
     // Go reference parity values for the same input:

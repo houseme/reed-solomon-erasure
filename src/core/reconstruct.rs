@@ -14,6 +14,9 @@ use rayon::prelude::*;
 #[cfg(feature = "std")]
 use std::sync::atomic::Ordering;
 
+#[cfg(not(feature = "std"))]
+use super::ReedSolomon;
+#[cfg(feature = "std")]
 use super::{ParallelPolicy, ReedSolomon};
 
 impl<F: Field> ReedSolomon<F> {
