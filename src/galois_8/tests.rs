@@ -418,6 +418,35 @@ fn test_rust_neon_matches_scalar_mul_slice() {
     feature = "std"
 ))]
 #[test]
+fn test_rust_neon_mul_slice_xor_c1_vectorized_fastpath() {
+    let _guard = NEON_PROFILE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
+    for &len in &lengths {
+        for _ in 0..16 {
+            let mut input = vec![0; len];
+            fill_random(&mut input);
+            let mut scalar = vec![0; len];
+            fill_random(&mut scalar);
+            let mut neon = scalar.clone();
+
+            mul_slice_xor_scalar_for_test(1, &input, &mut scalar);
+            aarch64::neon::rust_neon_mul_slice_xor(1, &input, &mut neon);
+
+            assert_eq!(scalar, neon);
+        }
+    }
+}
+
+#[cfg(all(
+    feature = "simd-neon",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "std"
+))]
+#[test]
 fn test_rust_neon_matches_scalar_mul_slice_xor() {
     let _guard = NEON_PROFILE_TEST_LOCK
         .lock()

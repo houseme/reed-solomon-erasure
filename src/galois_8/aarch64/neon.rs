@@ -39,9 +39,7 @@ pub(crate) fn rust_neon_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
         return;
     }
     if c == 1 {
-        for (i, o) in input.iter().zip(out.iter_mut()) {
-            *o ^= *i;
-        }
+        unsafe { rust_neon_mul_slice_xor_c1_impl(input, out) }
         return;
     }
 
@@ -229,4 +227,55 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
     }
 
     super::super::scalar::mul_slice_xor_pure_rust(c, tail_input, tail_out);
+}
+
+#[cfg(all(
+    feature = "simd-neon",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[target_feature(enable = "neon")]
+unsafe fn rust_neon_mul_slice_xor_c1_impl(input: &[u8], out: &mut [u8]) {
+    use core::arch::aarch64::{
+        uint8x16x4_t, veorq_u8, vld1q_u8, vld1q_u8_x4, vst1q_u8, vst1q_u8_x4,
+    };
+
+    let bytes_done = input.len() & !15usize;
+    let bytes_done_unrolled = input.len() & !63usize;
+    let (simd_input, tail_input) = input.split_at(bytes_done);
+    let (simd_out, tail_out) = out.split_at_mut(bytes_done);
+    let (unrolled_input, remainder_input) = simd_input.split_at(bytes_done_unrolled);
+    let (unrolled_out, remainder_out) = simd_out.split_at_mut(bytes_done_unrolled);
+
+    for (input_chunk, out_chunk) in unrolled_input
+        .chunks_exact(64)
+        .zip(unrolled_out.chunks_exact_mut(64))
+    {
+        let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input_chunk.as_ptr()) };
+        let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out_chunk.as_ptr()) };
+
+        unsafe {
+            vst1q_u8_x4(
+                out_chunk.as_mut_ptr(),
+                uint8x16x4_t(
+                    veorq_u8(inputs.0, outs.0),
+                    veorq_u8(inputs.1, outs.1),
+                    veorq_u8(inputs.2, outs.2),
+                    veorq_u8(inputs.3, outs.3),
+                ),
+            )
+        };
+    }
+
+    for (input_chunk, out_chunk) in remainder_input
+        .chunks_exact(16)
+        .zip(remainder_out.chunks_exact_mut(16))
+    {
+        let input_vec = unsafe { vld1q_u8(input_chunk.as_ptr()) };
+        let out_vec = unsafe { vld1q_u8(out_chunk.as_ptr()) };
+        unsafe { vst1q_u8(out_chunk.as_mut_ptr(), veorq_u8(input_vec, out_vec)) };
+    }
+
+    super::super::scalar::mul_slice_xor_pure_rust(1, tail_input, tail_out);
 }
