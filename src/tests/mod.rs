@@ -3287,6 +3287,49 @@ fn test_galois_8_reconstruct_opt_with_workspace_matches_reconstruct() {
     assert_eq!(expected, actual);
 }
 
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_reconstruct_opt_with_workspace_all_present_is_noop() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(64 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut actual = shards_to_option_shards(&shards);
+    let expected = actual.clone();
+    let workspace = r.prepare_reconstruct_opt_workspace(&actual).unwrap();
+
+    r.reconstruct_opt_with_workspace(&mut actual, &workspace)
+        .unwrap();
+
+    assert_eq!(expected, actual);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_galois_8_reconstruct_opt_serial_path_records_fallback_metric() {
+    let r = ReedSolomon::new(10, 4).unwrap();
+    let mut shards = make_random_shards!(8 * 1024, 14);
+    r.encode(&mut shards).unwrap();
+
+    let mut shards = shards_to_option_shards(&shards);
+    shards[0] = None;
+    shards[12] = None;
+
+    assert!(!r.parallel_policy(8 * 1024, 2).use_parallel);
+
+    r.reset_runtime_profile_stats();
+    r.reconstruct_opt(&mut shards).unwrap();
+    let stats = r.runtime_profile_stats();
+
+    if benchmark_metrics_enabled() {
+        assert_eq!(1, stats.reconstruct_entry_serial_calls);
+        assert_eq!(1, stats.reconstruct_opt_fallback_serial_calls);
+    } else {
+        assert_eq!(0, stats.reconstruct_entry_serial_calls);
+        assert_eq!(0, stats.reconstruct_opt_fallback_serial_calls);
+    }
+}
+
 #[test]
 fn test_reconstruct_marks_shard_slot_present() {
     let r = ReedSolomon::new(4, 2).unwrap();

@@ -546,6 +546,10 @@ impl crate::ReedSolomon<super::Field> {
         shards: &mut [Option<Vec<u8>>],
         workspace: &OptionVecReconstructWorkspace,
     ) -> Result<(), crate::Error> {
+        if workspace.0.shard_len == 0 {
+            return Ok(());
+        }
+
         let mut invalid_indices = smallvec::SmallVec::<[usize; 32]>::new();
         let mut shard_len = None;
         let mut number_present = 0usize;
@@ -729,6 +733,7 @@ impl crate::ReedSolomon<super::Field> {
                 parity_policy,
             )
         } else {
+            self.record_reconstruct_opt_fallback_serial_path();
             self.reconstruct_opt_with_workspace(shards, &workspace)
         }
     }
