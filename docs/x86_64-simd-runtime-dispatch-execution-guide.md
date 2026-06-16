@@ -1,5 +1,18 @@
 # x86_64 SIMD Runtime Dispatch 升级实战指南
 
+## 2026-06-16 状态勘误
+
+本文大量内容描述的是更早一轮“保守自动策略”设计与验证背景，其中关于“当前自动优先级”和“GFNI 仅 override-only”的部分已经落后于当前 `main`。
+
+截至 `2026-06-16` 当前工作区：
+
+1. [src/galois_8/backend.rs](/data/rustfs/reed-solomon-erasure/src/galois_8/backend.rs:489) 的真实自动顺序已是 `rust-gfni-avx512 -> rust-gfni-avx2 -> rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust`
+2. `GFNI` 不再只是文档层面的实验性 override 路径，而是已经进入当前代码实现的自动选路
+3. 如果你需要当前代码现实与最新压测，请优先看：
+   - [x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md)
+   - [x86_64-simd-benchmark-ledger.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-ledger.md)
+4. 本文其余内容仍可作为架构设计、风险分析和历史治理背景参考，但不应再直接当作“当前默认策略”说明
+
 ## 实施状态
 
 截至当前工作区状态，本指南对应的代码链路已完成首轮实现，且按阶段形成了以下实际提交：

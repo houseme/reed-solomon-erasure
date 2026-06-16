@@ -1,5 +1,17 @@
 # x86_64 SIMD 验证结果与收官评审记录
 
+## 2026-06-16 状态勘误
+
+以下主体内容主要反映 `2026-05-26` 时点的验证结论，不应再视为当前 `main` 的实时状态。
+
+截至 `2026-06-16` 当前工作区：
+
+1. [src/galois_8/backend.rs](/data/rustfs/reed-solomon-erasure/src/galois_8/backend.rs:489) 的真实自动顺序已经是 `rust-gfni-avx512 -> rust-gfni-avx2 -> rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust`
+2. 本轮新压测见 [x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md)
+3. 在当前 `AMD EPYC 9V45` 主机上，`auto` 实际命中的是 `rust-gfni-avx512`
+4. 因此，本文中“`GFNI` 仅通过 override 暴露”“`auto` 实际命中 `rust-avx2`”等表述，只代表当时快照，不代表当前代码现实
+5. 当前更准确的状态记录，应以 [x86_64-simd-benchmark-ledger.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-ledger.md) 末尾新增的 `2026-06-16` 条目为准
+
 ## 当前结论
 
 截至 2026-05-26，`x86_64` SIMD runtime dispatch 链路已完成首轮实现，且已经过当前机器实测复核：

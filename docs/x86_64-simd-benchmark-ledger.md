@@ -319,3 +319,75 @@ Microbenchmark：
 4. 如果下一步要推进默认顺序变更，更合理的候选已经从“`GFNI/AVX512` 二选一”收敛成：
    - 只继续严肃评估 `rust-avx512` 是否提升到 `rust-avx2` 前面
    - 不再优先考虑恢复 `GFNI` 自动优先
+
+## 2026-06-16 Mainline Re-Pull And Full x86_64 Re-Benchmark
+
+### 背景
+
+本轮目标是拉取最新 `main` 后，在当前 `x86_64` 主机上重新执行一次完整的 `release smoke + galois_backend` 采集，并把结果写回仓库。
+
+执行过程中先遇到一个主干编译问题：
+
+1. [src/core/mod.rs](/data/rustfs/reed-solomon-erasure/src/core/mod.rs:99) 错误引用了 `super::leopard::build_family_state`
+2. 修复为同模块内的 `leopard::build_family_state` 后，`cargo check --features 'std simd-accel' --lib` 恢复通过
+
+### 已执行命令
+
+1. `git pull --rebase`
+2. `cargo check --features 'std simd-accel' --lib`
+3. `./scripts/collect_x86_simd_benchmarks.sh`
+
+### 机器与产物
+
+机器：
+
+1. `AMD EPYC 9V45 96-Core Processor`
+2. `x86_64`
+3. 支持 `ssse3 / avx2 / avx512f / avx512bw / gfni`
+
+本轮产物：
+
+1. [benchmarks/x86_64-simd/2026-06-16-amd-epyc-9v45-96-core-processor.json](/data/rustfs/reed-solomon-erasure/benchmarks/x86_64-simd/2026-06-16-amd-epyc-9v45-96-core-processor.json)
+2. [benchmarks/x86_64-simd/2026-06-16-amd-epyc-9v45-96-core-processor.run-meta.json](/data/rustfs/reed-solomon-erasure/benchmarks/x86_64-simd/2026-06-16-amd-epyc-9v45-96-core-processor.run-meta.json)
+3. [x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md)
+4. [x86_64-simd-ledger-entry-2026-06-16-amd-epyc-9v45-96-core-processor.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-ledger-entry-2026-06-16-amd-epyc-9v45-96-core-processor.md)
+
+### 结果摘要
+
+当前拉下来的 `main` 与旧文档口径已经发生实质性漂移：
+
+1. [src/galois_8/backend.rs](/data/rustfs/reed-solomon-erasure/src/galois_8/backend.rs:489) 的真实自动顺序是：
+   - `rust-gfni-avx512`
+   - `rust-gfni-avx2`
+   - `rust-avx2`
+   - `rust-avx512`
+   - `rust-ssse3`
+   - `simd-c`
+   - `scalar-rust`
+2. 本轮 `auto` release smoke 也确认，当前主机上实际自动选中的是 `rust-gfni-avx512`
+
+关注案例：`10x4_1m`
+
+1. `encode`：`auto (rust-gfni-avx512)`，`634.9100 MB/s`
+2. `verify`：`auto (rust-gfni-avx512)`，`766.8945 MB/s`
+3. `reconstruct`：`auto (rust-gfni-avx512)`，`833.4703 MB/s`
+4. `reconstruct_data`：`auto (rust-gfni-avx512)`，`851.1184 MB/s`
+
+汇总 JSON 的综合排序：
+
+1. `recommended_default_priority`：
+   - `rust-gfni-avx512`
+   - `rust-avx512`
+   - `rust-gfni-avx2`
+   - `rust-avx2`
+   - `rust-ssse3`
+   - `scalar`
+   - `simd-c`
+2. `adoption_decision_stub.status = manual-review-required`
+3. `override_mismatch_count = 0`
+
+### 本轮判断
+
+1. 旧文档里“`GFNI` 仍保持 override-only”的说法，已经不再描述当前 `main` 的真实代码行为
+2. 这轮 benchmark 更适合被记录为“确认当前主干已切换到 GFNI 自动优先，并在当前同机样本上跑出了最好 `auto` 结果”
+3. 但是否继续保留这一实现方向，仍应和跨机器复核、文档策略一起再做一次人工审阅，而不是只凭单机结果立即下最终结论

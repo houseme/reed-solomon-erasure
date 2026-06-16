@@ -1,5 +1,16 @@
 # x86_64 SIMD GFNI Design Notes
 
+## 2026-06-16 状态勘误
+
+本文仍保留大量“为什么当前仍保持 override-only”的历史论证，但这已经不再描述最新 `main` 的真实代码行为。
+
+截至 `2026-06-16` 当前工作区：
+
+1. [src/galois_8/backend.rs](/data/rustfs/reed-solomon-erasure/src/galois_8/backend.rs:489) 已将 `GFNI` 放入当前自动选路
+2. 本轮 `AMD EPYC 9V45` 压测里，`auto` 实际命中 `rust-gfni-avx512`
+3. 因此，下文关于 “GFNI 当前仍保持 override-only” 的段落应理解为旧策略背景，而不是当前实现现状
+4. 本文仍然适合作为 `GFNI` 设计风险、basis conversion 假设和准入证据模板的背景材料
+
 ## 文档目标
 
 本文档记录当前 `GFNI` backend 的实现思路、代码中已经落地的 basis conversion 结构，以及默认不自动启用的原因。

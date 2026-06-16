@@ -1,5 +1,15 @@
 # x86_64 SIMD Runtime Dispatch 上线检查清单
 
+## 2026-06-16 状态勘误
+
+本清单主体对应的是 `2026-05-26` 的发布前快照。当前工作区若继续沿用本页中的“默认策略”勾选项，会与最新 `main` 的真实行为不一致。
+
+截至 `2026-06-16` 当前工作区：
+
+1. 当前自动选路不再是 `AVX2 -> AVX512 -> SSSE3 -> simd-c -> scalar`
+2. `GFNI` 也不再只是“仅通过 override 暴露”的代码现实
+3. 若要做新的发布前核查，应先以 [src/galois_8/backend.rs](/data/rustfs/reed-solomon-erasure/src/galois_8/backend.rs:489) 和 [x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md) 重建一版新的 checklist
+
 ## 1. 文档用途
 
 本文档用于在合并、发布、上线、交接前，快速核对当前 `x86_64` SIMD runtime dispatch 改造链路是否满足最低可交付要求。

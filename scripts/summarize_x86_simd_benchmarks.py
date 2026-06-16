@@ -20,6 +20,8 @@ KNOWN_BACKENDS = {
 }
 
 DEFAULT_POLICY_ELIGIBLE_BACKENDS_X86 = {
+    "rust-gfni-avx512",
+    "rust-gfni-avx2",
     "rust-avx2",
     "rust-avx512",
     "rust-ssse3",
@@ -39,6 +41,8 @@ SUPPORTED_RELEASE_SMOKE_FILES = {
 }
 
 CURRENT_RUNTIME_PRIORITY_X86 = [
+    "rust-gfni-avx512",
+    "rust-gfni-avx2",
     "rust-avx2",
     "rust-avx512",
     "rust-ssse3",
@@ -261,7 +265,7 @@ def choose_policy_eligible_priority(machine_json: Dict) -> Dict:
         "rationale": [
             "Starts from the benchmark-driven ranking.",
             "Filters out backends that are not currently eligible for default runtime dispatch.",
-            "Experimental GFNI backends remain override-only until correctness, documentation, and multi-machine validation are complete.",
+            "The eligible set is aligned to the runtime order implemented in src/galois_8/backend.rs.",
         ],
         "eligible_backends_x86": sorted(DEFAULT_POLICY_ELIGIBLE_BACKENDS_X86),
         "current_runtime_priority_x86": CURRENT_RUNTIME_PRIORITY_X86,

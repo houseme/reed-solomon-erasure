@@ -6,13 +6,308 @@
   "platform": "Linux-6.17.0-1015-azure-x86_64-with-glibc2.39",
   "lscpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  16\nOn-line CPU(s) list:                     0-15\nVendor ID:                               AuthenticAMD\nBIOS Vendor ID:                          Advanced Micro Devices, Inc.\nModel name:                              AMD EPYC 9V45 96-Core Processor\nBIOS Model name:                         AMD EPYC 9V45 96-Core Processor                 None CPU @ 2.6GHz\nBIOS CPU family:                         107\nCPU family:                              26\nModel:                                   2\nThread(s) per core:                      1\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                1\nBogoMIPS:                                5192.24\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves user_shstk avx_vnni avx512_bf16 clzero xsaveerptr rdpru arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm avx512_vp2intersect\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                64 MiB (2 instances)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-15\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n",
   "uname_a": "Linux rustfs-jumpbox 6.17.0-1015-azure #15~24.04.1-Ubuntu SMP Wed May  6 22:37:49 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
-  "criterion_galois_backend": [],
+  "criterion_galois_backend": [
+    {
+      "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_1048576",
+      "mean_ns": 18328.091698855853,
+      "lower_ns": 18185.445866731123,
+      "upper_ns": 18464.23708718073
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_4194304",
+      "mean_ns": 81433.39034527354,
+      "lower_ns": 80916.08858547248,
+      "upper_ns": 81966.545444285
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_65536",
+      "mean_ns": 762.2960227035951,
+      "lower_ns": 756.949626304525,
+      "upper_ns": 767.3266861040655
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_1048576",
+      "mean_ns": 18240.769293216457,
+      "lower_ns": 18121.798019574748,
+      "upper_ns": 18351.92198728579
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_4194304",
+      "mean_ns": 75372.93141106443,
+      "lower_ns": 74689.18350166318,
+      "upper_ns": 76065.31653011205
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_65536",
+      "mean_ns": 634.1846598511297,
+      "lower_ns": 630.3646150702559,
+      "upper_ns": 638.1091581435535
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_1048576",
+      "mean_ns": 17319.512856951522,
+      "lower_ns": 17152.456445026095,
+      "upper_ns": 17494.1616487196
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_4194304",
+      "mean_ns": 80666.8857523595,
+      "lower_ns": 80132.48180893392,
+      "upper_ns": 81287.30225761476
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_65536",
+      "mean_ns": 725.6352222506401,
+      "lower_ns": 719.8673663749088,
+      "upper_ns": 731.0994981102049
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_1048576",
+      "mean_ns": 17867.534947901935,
+      "lower_ns": 17734.91271701438,
+      "upper_ns": 18001.289259529705
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_4194304",
+      "mean_ns": 73920.26113127501,
+      "lower_ns": 73265.78621838303,
+      "upper_ns": 74522.4268945993
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_65536",
+      "mean_ns": 674.5479688902763,
+      "lower_ns": 669.0477022223854,
+      "upper_ns": 679.9250664144753
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+      "length": "len_1048576",
+      "mean_ns": 30441.497449789436,
+      "lower_ns": 30231.28837544542,
+      "upper_ns": 30674.62206430191
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+      "length": "len_4194304",
+      "mean_ns": 119449.59793571953,
+      "lower_ns": 118585.10738410596,
+      "upper_ns": 120341.65302533373
+    },
+    {
+      "benchmark": "galois_mul_slice_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+      "length": "len_65536",
+      "mean_ns": 1866.371712569156,
+      "lower_ns": 1850.5045910961273,
+      "upper_ns": 1882.9194369813279
+    },
+    {
+      "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_1048576",
+      "mean_ns": 206814.322160692,
+      "lower_ns": 204872.47289727128,
+      "upper_ns": 208684.7904815409
+    },
+    {
+      "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_4194304",
+      "mean_ns": 815210.3835082974,
+      "lower_ns": 808933.2290224116,
+      "upper_ns": 822063.6948791938
+    },
+    {
+      "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_65536",
+      "mean_ns": 15455.635834404025,
+      "lower_ns": 15352.320882454693,
+      "upper_ns": 15574.2595705854
+    },
+    {
+      "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_1048576",
+      "mean_ns": 1135575.1350669644,
+      "lower_ns": 1124062.709340402,
+      "upper_ns": 1147770.1744419641
+    },
+    {
+      "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_4194304",
+      "mean_ns": 4472989.189111111,
+      "lower_ns": 4436911.14111111,
+      "upper_ns": 4515130.459333333
+    },
+    {
+      "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_65536",
+      "mean_ns": 71707.42294885014,
+      "lower_ns": 70947.5014346644,
+      "upper_ns": 72432.78423931383
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_1048576",
+      "mean_ns": 19103.03429229334,
+      "lower_ns": 18842.95412964906,
+      "upper_ns": 19354.46816799289
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_4194304",
+      "mean_ns": 79040.52704710144,
+      "lower_ns": 78293.75916666667,
+      "upper_ns": 79725.47167753623
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+      "length": "len_65536",
+      "mean_ns": 880.2815030269114,
+      "lower_ns": 873.6997219169349,
+      "upper_ns": 886.6783750189903
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_1048576",
+      "mean_ns": 17924.598113152835,
+      "lower_ns": 17739.125417748106,
+      "upper_ns": 18098.243110968113
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_4194304",
+      "mean_ns": 78606.071475532,
+      "lower_ns": 77937.11916926595,
+      "upper_ns": 79203.64248132409
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+      "length": "len_65536",
+      "mean_ns": 655.9262689252744,
+      "lower_ns": 651.1993338661711,
+      "upper_ns": 661.3025925213163
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_1048576",
+      "mean_ns": 18263.460299182298,
+      "lower_ns": 18125.950962481966,
+      "upper_ns": 18443.319279725827
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_4194304",
+      "mean_ns": 82240.28256994273,
+      "lower_ns": 81784.89130041856,
+      "upper_ns": 82708.73341451041
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+      "length": "len_65536",
+      "mean_ns": 926.6757562585424,
+      "lower_ns": 920.454309787028,
+      "upper_ns": 933.2530647296327
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_1048576",
+      "mean_ns": 17937.684813094056,
+      "lower_ns": 17843.864594623352,
+      "upper_ns": 18047.21586220563
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_4194304",
+      "mean_ns": 74387.94978404172,
+      "lower_ns": 73955.26917264365,
+      "upper_ns": 74841.78063070642
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+      "length": "len_65536",
+      "mean_ns": 702.9292964425005,
+      "lower_ns": 695.613240438662,
+      "upper_ns": 710.3411764502744
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+      "length": "len_1048576",
+      "mean_ns": 37191.123438880706,
+      "lower_ns": 36747.82622474227,
+      "upper_ns": 37668.41245477418
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+      "length": "len_4194304",
+      "mean_ns": 146090.13869080148,
+      "lower_ns": 145335.45372324678,
+      "upper_ns": 146895.34219034607
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+      "length": "len_65536",
+      "mean_ns": 2320.499721290876,
+      "lower_ns": 2304.176420840357,
+      "upper_ns": 2337.8269000074097
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_1048576",
+      "mean_ns": 242718.0718811669,
+      "lower_ns": 240039.88210400575,
+      "upper_ns": 245458.6500415862
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_4194304",
+      "mean_ns": 1180153.5598090277,
+      "lower_ns": 1168754.8539301218,
+      "upper_ns": 1190367.9640625
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+      "length": "len_65536",
+      "mean_ns": 18183.45335351704,
+      "lower_ns": 18014.785520183712,
+      "upper_ns": 18346.956921380228
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_1048576",
+      "mean_ns": 1153732.4280977182,
+      "lower_ns": 1139848.0770089286,
+      "upper_ns": 1166948.934077381
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_4194304",
+      "mean_ns": 4564450.64188492,
+      "lower_ns": 4546565.305652778,
+      "upper_ns": 4582564.9335873015
+    },
+    {
+      "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+      "length": "len_65536",
+      "mean_ns": 72006.16306269841,
+      "lower_ns": 71353.65834676189,
+      "upper_ns": 72522.0046959643
+    }
+  ],
   "release_smoke": {
     "smoke-results-release-auto.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -27,13 +322,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "705.5371",
-        "ns_per_iter": "354340.00"
+        "throughput_mb_s": "675.7980",
+        "ns_per_iter": "369933.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -48,13 +343,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "420.1335",
-        "ns_per_iter": "595049.00"
+        "throughput_mb_s": "413.6861",
+        "ns_per_iter": "604323.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -69,13 +364,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "822.5741",
-        "ns_per_iter": "303924.00"
+        "throughput_mb_s": "781.3526",
+        "ns_per_iter": "319958.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -90,13 +385,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "975.9411",
-        "ns_per_iter": "256163.00"
+        "throughput_mb_s": "953.5761",
+        "ns_per_iter": "262171.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -111,13 +406,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "963.3986",
-        "ns_per_iter": "259498.00"
+        "throughput_mb_s": "922.9349",
+        "ns_per_iter": "270875.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -132,13 +427,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "622.8485",
-        "ns_per_iter": "16055268.00"
+        "throughput_mb_s": "634.9100",
+        "ns_per_iter": "15750264.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -153,13 +448,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "384.1687",
-        "ns_per_iter": "26030231.00"
+        "throughput_mb_s": "413.3403",
+        "ns_per_iter": "24193139.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -174,13 +469,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "742.3312",
-        "ns_per_iter": "13471076.00"
+        "throughput_mb_s": "766.8945",
+        "ns_per_iter": "13039604.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -195,13 +490,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "843.0842",
-        "ns_per_iter": "11861212.00"
+        "throughput_mb_s": "833.4703",
+        "ns_per_iter": "11998028.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -216,15 +511,15 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "853.6479",
-        "ns_per_iter": "11714432.00"
+        "throughput_mb_s": "851.1184",
+        "ns_per_iter": "11749246.00"
       }
     ],
     "smoke-results-release-rust-avx2.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -239,13 +534,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "701.4748",
-        "ns_per_iter": "356392.00"
+        "throughput_mb_s": "625.2063",
+        "ns_per_iter": "399868.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -260,13 +555,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "428.8746",
-        "ns_per_iter": "582921.00"
+        "throughput_mb_s": "380.1692",
+        "ns_per_iter": "657602.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -281,13 +576,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "819.4411",
-        "ns_per_iter": "305086.00"
+        "throughput_mb_s": "727.3489",
+        "ns_per_iter": "343714.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -302,13 +597,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "972.9784",
-        "ns_per_iter": "256943.00"
+        "throughput_mb_s": "844.4462",
+        "ns_per_iter": "296052.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -323,13 +618,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "954.9967",
-        "ns_per_iter": "261781.00"
+        "throughput_mb_s": "881.6072",
+        "ns_per_iter": "283573.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -344,13 +639,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "661.7298",
-        "ns_per_iter": "15111909.00"
+        "throughput_mb_s": "594.9079",
+        "ns_per_iter": "16809326.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -365,13 +660,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "408.7237",
-        "ns_per_iter": "24466405.00"
+        "throughput_mb_s": "382.8909",
+        "ns_per_iter": "26117103.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -386,13 +681,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "749.6758",
-        "ns_per_iter": "13339100.00"
+        "throughput_mb_s": "723.9091",
+        "ns_per_iter": "13813890.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -407,13 +702,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "807.0144",
-        "ns_per_iter": "12391353.00"
+        "throughput_mb_s": "826.7460",
+        "ns_per_iter": "12095613.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -428,15 +723,15 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "840.4224",
-        "ns_per_iter": "11898778.00"
+        "throughput_mb_s": "844.7117",
+        "ns_per_iter": "11838358.00"
       }
     ],
     "smoke-results-release-rust-avx512.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -451,13 +746,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "669.9772",
-        "ns_per_iter": "373147.00"
+        "throughput_mb_s": "610.4976",
+        "ns_per_iter": "409502.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -472,13 +767,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "432.1260",
-        "ns_per_iter": "578535.00"
+        "throughput_mb_s": "382.8220",
+        "ns_per_iter": "653045.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -493,13 +788,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "787.3421",
-        "ns_per_iter": "317524.00"
+        "throughput_mb_s": "736.9066",
+        "ns_per_iter": "339256.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -514,13 +809,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "959.4388",
-        "ns_per_iter": "260569.00"
+        "throughput_mb_s": "879.2786",
+        "ns_per_iter": "284324.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -535,13 +830,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "973.5847",
-        "ns_per_iter": "256783.00"
+        "throughput_mb_s": "855.4730",
+        "ns_per_iter": "292236.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -556,13 +851,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "638.5542",
-        "ns_per_iter": "15660378.00"
+        "throughput_mb_s": "597.1246",
+        "ns_per_iter": "16746923.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -577,13 +872,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "394.1204",
-        "ns_per_iter": "25372960.00"
+        "throughput_mb_s": "384.1945",
+        "ns_per_iter": "26028481.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -598,13 +893,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "757.3907",
-        "ns_per_iter": "13203226.00"
+        "throughput_mb_s": "731.0247",
+        "ns_per_iter": "13679429.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -619,13 +914,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "865.7643",
-        "ns_per_iter": "11550488.00"
+        "throughput_mb_s": "832.5870",
+        "ns_per_iter": "12010757.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -640,15 +935,15 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "844.4268",
-        "ns_per_iter": "11842353.00"
+        "throughput_mb_s": "833.1518",
+        "ns_per_iter": "12002614.00"
       }
     ],
     "smoke-results-release-rust-gfni-avx2.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -663,13 +958,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "647.2023",
-        "ns_per_iter": "386278.00"
+        "throughput_mb_s": "612.3849",
+        "ns_per_iter": "408240.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -684,13 +979,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "407.2875",
-        "ns_per_iter": "613817.00"
+        "throughput_mb_s": "359.6920",
+        "ns_per_iter": "695039.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -705,13 +1000,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "740.6639",
-        "ns_per_iter": "337535.00"
+        "throughput_mb_s": "731.2272",
+        "ns_per_iter": "341891.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -726,13 +1021,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "917.2393",
-        "ns_per_iter": "272557.00"
+        "throughput_mb_s": "867.6639",
+        "ns_per_iter": "288130.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -747,13 +1042,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "930.7105",
-        "ns_per_iter": "268612.00"
+        "throughput_mb_s": "858.8262",
+        "ns_per_iter": "291095.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -768,13 +1063,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "626.3060",
-        "ns_per_iter": "15966635.00"
+        "throughput_mb_s": "596.4441",
+        "ns_per_iter": "16766031.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -789,13 +1084,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "393.3807",
-        "ns_per_iter": "25420670.00"
+        "throughput_mb_s": "383.8271",
+        "ns_per_iter": "26053398.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -810,13 +1105,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "765.7154",
-        "ns_per_iter": "13059682.00"
+        "throughput_mb_s": "731.7462",
+        "ns_per_iter": "13665940.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -831,13 +1126,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "848.7990",
-        "ns_per_iter": "11781352.00"
+        "throughput_mb_s": "831.6993",
+        "ns_per_iter": "12023576.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -852,15 +1147,15 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "850.8350",
-        "ns_per_iter": "11753160.00"
+        "throughput_mb_s": "843.5400",
+        "ns_per_iter": "11854803.00"
       }
     ],
     "smoke-results-release-rust-gfni-avx512.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -875,13 +1170,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "643.8984",
-        "ns_per_iter": "388260.00"
+        "throughput_mb_s": "631.7902",
+        "ns_per_iter": "395701.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -896,13 +1191,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "417.8827",
-        "ns_per_iter": "598254.00"
+        "throughput_mb_s": "373.2792",
+        "ns_per_iter": "669740.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -917,13 +1212,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "760.3129",
-        "ns_per_iter": "328812.00"
+        "throughput_mb_s": "744.9766",
+        "ns_per_iter": "335581.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -938,13 +1233,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "943.6954",
-        "ns_per_iter": "264916.00"
+        "throughput_mb_s": "862.6847",
+        "ns_per_iter": "289793.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -959,13 +1254,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "956.9708",
-        "ns_per_iter": "261241.00"
+        "throughput_mb_s": "903.0715",
+        "ns_per_iter": "276833.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -980,13 +1275,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "644.2938",
-        "ns_per_iter": "15520870.00"
+        "throughput_mb_s": "600.1612",
+        "ns_per_iter": "16662191.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1001,13 +1296,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "413.1240",
-        "ns_per_iter": "24205805.00"
+        "throughput_mb_s": "384.2301",
+        "ns_per_iter": "26026070.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1022,13 +1317,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "766.9282",
-        "ns_per_iter": "13039031.00"
+        "throughput_mb_s": "729.5998",
+        "ns_per_iter": "13706145.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1043,13 +1338,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "813.1070",
-        "ns_per_iter": "12298505.00"
+        "throughput_mb_s": "822.6058",
+        "ns_per_iter": "12156491.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1064,15 +1359,15 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "867.1448",
-        "ns_per_iter": "11532100.00"
+        "throughput_mb_s": "835.1981",
+        "ns_per_iter": "11973207.00"
       }
     ],
     "smoke-results-release-rust-ssse3.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1087,13 +1382,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "636.1534",
-        "ns_per_iter": "392987.00"
+        "throughput_mb_s": "593.2043",
+        "ns_per_iter": "421440.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1108,13 +1403,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "402.9678",
-        "ns_per_iter": "620397.00"
+        "throughput_mb_s": "360.2482",
+        "ns_per_iter": "693966.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1129,13 +1424,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "719.4058",
-        "ns_per_iter": "347509.00"
+        "throughput_mb_s": "698.6870",
+        "ns_per_iter": "357814.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1150,13 +1445,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "880.2662",
-        "ns_per_iter": "284005.00"
+        "throughput_mb_s": "803.2258",
+        "ns_per_iter": "311245.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1171,13 +1466,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "891.0782",
-        "ns_per_iter": "280559.00"
+        "throughput_mb_s": "839.5601",
+        "ns_per_iter": "297775.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1192,13 +1487,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "620.7908",
-        "ns_per_iter": "16108487.00"
+        "throughput_mb_s": "588.1444",
+        "ns_per_iter": "17002628.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1213,13 +1508,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "401.9017",
-        "ns_per_iter": "24881705.00"
+        "throughput_mb_s": "379.2963",
+        "ns_per_iter": "26364612.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1234,13 +1529,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "713.6115",
-        "ns_per_iter": "14013227.00"
+        "throughput_mb_s": "682.2038",
+        "ns_per_iter": "14658377.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1255,13 +1550,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "840.7883",
-        "ns_per_iter": "11893600.00"
+        "throughput_mb_s": "810.6554",
+        "ns_per_iter": "12335697.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1276,15 +1571,15 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "845.7944",
-        "ns_per_iter": "11823205.00"
+        "throughput_mb_s": "819.2273",
+        "ns_per_iter": "12206624.00"
       }
     ],
     "smoke-results-release-scalar.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1299,13 +1594,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "667.4516",
-        "ns_per_iter": "374559.00"
+        "throughput_mb_s": "567.3720",
+        "ns_per_iter": "440628.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1320,13 +1615,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "403.8022",
-        "ns_per_iter": "619115.00"
+        "throughput_mb_s": "356.2989",
+        "ns_per_iter": "701658.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1341,13 +1636,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "581.3778",
-        "ns_per_iter": "430013.00"
+        "throughput_mb_s": "546.8988",
+        "ns_per_iter": "457123.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1362,13 +1657,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "672.3593",
-        "ns_per_iter": "371825.00"
+        "throughput_mb_s": "615.8895",
+        "ns_per_iter": "405917.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1383,13 +1678,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "669.2043",
-        "ns_per_iter": "373578.00"
+        "throughput_mb_s": "628.4344",
+        "ns_per_iter": "397814.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1404,13 +1699,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "655.3050",
-        "ns_per_iter": "15260070.00"
+        "throughput_mb_s": "592.7441",
+        "ns_per_iter": "16870686.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1425,13 +1720,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "387.9242",
-        "ns_per_iter": "25778234.00"
+        "throughput_mb_s": "369.1693",
+        "ns_per_iter": "27087842.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1446,13 +1741,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "470.8952",
-        "ns_per_iter": "21236148.00"
+        "throughput_mb_s": "441.9887",
+        "ns_per_iter": "22625013.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1467,13 +1762,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "610.7694",
-        "ns_per_iter": "16372792.00"
+        "throughput_mb_s": "609.4604",
+        "ns_per_iter": "16407956.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1488,15 +1783,15 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "613.8362",
-        "ns_per_iter": "16290990.00"
+        "throughput_mb_s": "619.2484",
+        "ns_per_iter": "16148608.00"
       }
     ],
     "smoke-results-release-simd-c.csv": [
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1511,13 +1806,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495029",
-        "throughput_mb_s": "641.6475",
-        "ns_per_iter": "389622.00"
+        "throughput_mb_s": "605.4339",
+        "ns_per_iter": "412927.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1532,13 +1827,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495089",
-        "throughput_mb_s": "333.1374",
-        "ns_per_iter": "750441.00"
+        "throughput_mb_s": "295.8639",
+        "ns_per_iter": "844983.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1553,13 +1848,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494982",
-        "throughput_mb_s": "274.5262",
-        "ns_per_iter": "910660.00"
+        "throughput_mb_s": "257.2379",
+        "ns_per_iter": "971863.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1574,13 +1869,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726494999",
-        "throughput_mb_s": "295.5837",
-        "ns_per_iter": "845784.00"
+        "throughput_mb_s": "273.2847",
+        "ns_per_iter": "914797.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1595,13 +1890,13 @@
         "parity_shards": "2",
         "shard_size": "65536",
         "seed": "65406575726495072",
-        "throughput_mb_s": "296.5177",
-        "ns_per_iter": "843120.00"
+        "throughput_mb_s": "275.4044",
+        "ns_per_iter": "907756.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1616,13 +1911,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252981",
-        "throughput_mb_s": "633.0107",
-        "ns_per_iter": "15797522.00"
+        "throughput_mb_s": "588.5657",
+        "ns_per_iter": "16990457.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1637,13 +1932,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253041",
-        "throughput_mb_s": "347.8635",
-        "ns_per_iter": "28746910.00"
+        "throughput_mb_s": "320.8938",
+        "ns_per_iter": "31162954.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1658,13 +1953,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252934",
-        "throughput_mb_s": "170.8434",
-        "ns_per_iter": "58533133.00"
+        "throughput_mb_s": "165.4550",
+        "ns_per_iter": "60439399.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1679,13 +1974,13 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004252951",
-        "throughput_mb_s": "300.2981",
-        "ns_per_iter": "33300243.00"
+        "throughput_mb_s": "288.6839",
+        "ns_per_iter": "34639970.00"
       },
       {
         "schema_version": "1",
         "artifact_kind": "smoke-results",
-        "git_revision": "7eac7c3",
+        "git_revision": "84a4e88",
         "target_triple": "x86_64-linux-unknown",
         "features": "std|simd-accel",
         "benchmark_metrics_enabled": "false",
@@ -1700,8 +1995,8 @@
         "parity_shards": "4",
         "shard_size": "1048576",
         "seed": "64843600004253024",
-        "throughput_mb_s": "304.9275",
-        "ns_per_iter": "32794677.00"
+        "throughput_mb_s": "298.2945",
+        "ns_per_iter": "33523922.00"
       }
     ]
   },
@@ -1718,208 +2013,588 @@
   "rankings_10x4_1m": {
     "encode": [
       {
-        "backend": "rust-avx2",
-        "backend_override": "rust-avx2",
-        "throughput_mb_s": 661.7298,
-        "source": "smoke-results-release-rust-avx2.csv"
-      },
-      {
-        "backend": "scalar-rust",
-        "backend_override": "scalar",
-        "throughput_mb_s": 655.305,
-        "source": "smoke-results-release-scalar.csv"
+        "backend": "rust-gfni-avx512",
+        "backend_override": "auto",
+        "throughput_mb_s": 634.91,
+        "source": "smoke-results-release-auto.csv"
       },
       {
         "backend": "rust-gfni-avx512",
         "backend_override": "rust-gfni-avx512",
-        "throughput_mb_s": 644.2938,
+        "throughput_mb_s": 600.1612,
         "source": "smoke-results-release-rust-gfni-avx512.csv"
       },
       {
         "backend": "rust-avx512",
         "backend_override": "rust-avx512",
-        "throughput_mb_s": 638.5542,
+        "throughput_mb_s": 597.1246,
         "source": "smoke-results-release-rust-avx512.csv"
-      },
-      {
-        "backend": "simd-c",
-        "backend_override": "simd-c",
-        "throughput_mb_s": 633.0107,
-        "source": "smoke-results-release-simd-c.csv"
       },
       {
         "backend": "rust-gfni-avx2",
         "backend_override": "rust-gfni-avx2",
-        "throughput_mb_s": 626.306,
+        "throughput_mb_s": 596.4441,
         "source": "smoke-results-release-rust-gfni-avx2.csv"
       },
       {
-        "backend": "rust-gfni-avx512",
-        "backend_override": "auto",
-        "throughput_mb_s": 622.8485,
-        "source": "smoke-results-release-auto.csv"
+        "backend": "rust-avx2",
+        "backend_override": "rust-avx2",
+        "throughput_mb_s": 594.9079,
+        "source": "smoke-results-release-rust-avx2.csv"
+      },
+      {
+        "backend": "scalar-rust",
+        "backend_override": "scalar",
+        "throughput_mb_s": 592.7441,
+        "source": "smoke-results-release-scalar.csv"
+      },
+      {
+        "backend": "simd-c",
+        "backend_override": "simd-c",
+        "throughput_mb_s": 588.5657,
+        "source": "smoke-results-release-simd-c.csv"
       },
       {
         "backend": "rust-ssse3",
         "backend_override": "rust-ssse3",
-        "throughput_mb_s": 620.7908,
+        "throughput_mb_s": 588.1444,
         "source": "smoke-results-release-rust-ssse3.csv"
       }
     ],
     "verify": [
       {
         "backend": "rust-gfni-avx512",
-        "backend_override": "rust-gfni-avx512",
-        "throughput_mb_s": 766.9282,
-        "source": "smoke-results-release-rust-gfni-avx512.csv"
+        "backend_override": "auto",
+        "throughput_mb_s": 766.8945,
+        "source": "smoke-results-release-auto.csv"
       },
       {
         "backend": "rust-gfni-avx2",
         "backend_override": "rust-gfni-avx2",
-        "throughput_mb_s": 765.7154,
+        "throughput_mb_s": 731.7462,
         "source": "smoke-results-release-rust-gfni-avx2.csv"
       },
       {
         "backend": "rust-avx512",
         "backend_override": "rust-avx512",
-        "throughput_mb_s": 757.3907,
+        "throughput_mb_s": 731.0247,
         "source": "smoke-results-release-rust-avx512.csv"
+      },
+      {
+        "backend": "rust-gfni-avx512",
+        "backend_override": "rust-gfni-avx512",
+        "throughput_mb_s": 729.5998,
+        "source": "smoke-results-release-rust-gfni-avx512.csv"
       },
       {
         "backend": "rust-avx2",
         "backend_override": "rust-avx2",
-        "throughput_mb_s": 749.6758,
+        "throughput_mb_s": 723.9091,
         "source": "smoke-results-release-rust-avx2.csv"
-      },
-      {
-        "backend": "rust-gfni-avx512",
-        "backend_override": "auto",
-        "throughput_mb_s": 742.3312,
-        "source": "smoke-results-release-auto.csv"
       },
       {
         "backend": "rust-ssse3",
         "backend_override": "rust-ssse3",
-        "throughput_mb_s": 713.6115,
+        "throughput_mb_s": 682.2038,
         "source": "smoke-results-release-rust-ssse3.csv"
       },
       {
         "backend": "scalar-rust",
         "backend_override": "scalar",
-        "throughput_mb_s": 470.8952,
+        "throughput_mb_s": 441.9887,
         "source": "smoke-results-release-scalar.csv"
       },
       {
         "backend": "simd-c",
         "backend_override": "simd-c",
-        "throughput_mb_s": 170.8434,
+        "throughput_mb_s": 165.455,
         "source": "smoke-results-release-simd-c.csv"
       }
     ],
     "reconstruct": [
       {
+        "backend": "rust-gfni-avx512",
+        "backend_override": "auto",
+        "throughput_mb_s": 833.4703,
+        "source": "smoke-results-release-auto.csv"
+      },
+      {
         "backend": "rust-avx512",
         "backend_override": "rust-avx512",
-        "throughput_mb_s": 865.7643,
+        "throughput_mb_s": 832.587,
         "source": "smoke-results-release-rust-avx512.csv"
       },
       {
         "backend": "rust-gfni-avx2",
         "backend_override": "rust-gfni-avx2",
-        "throughput_mb_s": 848.799,
+        "throughput_mb_s": 831.6993,
         "source": "smoke-results-release-rust-gfni-avx2.csv"
-      },
-      {
-        "backend": "rust-gfni-avx512",
-        "backend_override": "auto",
-        "throughput_mb_s": 843.0842,
-        "source": "smoke-results-release-auto.csv"
-      },
-      {
-        "backend": "rust-ssse3",
-        "backend_override": "rust-ssse3",
-        "throughput_mb_s": 840.7883,
-        "source": "smoke-results-release-rust-ssse3.csv"
-      },
-      {
-        "backend": "rust-gfni-avx512",
-        "backend_override": "rust-gfni-avx512",
-        "throughput_mb_s": 813.107,
-        "source": "smoke-results-release-rust-gfni-avx512.csv"
       },
       {
         "backend": "rust-avx2",
         "backend_override": "rust-avx2",
-        "throughput_mb_s": 807.0144,
+        "throughput_mb_s": 826.746,
         "source": "smoke-results-release-rust-avx2.csv"
+      },
+      {
+        "backend": "rust-gfni-avx512",
+        "backend_override": "rust-gfni-avx512",
+        "throughput_mb_s": 822.6058,
+        "source": "smoke-results-release-rust-gfni-avx512.csv"
+      },
+      {
+        "backend": "rust-ssse3",
+        "backend_override": "rust-ssse3",
+        "throughput_mb_s": 810.6554,
+        "source": "smoke-results-release-rust-ssse3.csv"
       },
       {
         "backend": "scalar-rust",
         "backend_override": "scalar",
-        "throughput_mb_s": 610.7694,
+        "throughput_mb_s": 609.4604,
         "source": "smoke-results-release-scalar.csv"
       },
       {
         "backend": "simd-c",
         "backend_override": "simd-c",
-        "throughput_mb_s": 300.2981,
+        "throughput_mb_s": 288.6839,
         "source": "smoke-results-release-simd-c.csv"
       }
     ],
     "reconstruct_data": [
       {
         "backend": "rust-gfni-avx512",
-        "backend_override": "rust-gfni-avx512",
-        "throughput_mb_s": 867.1448,
-        "source": "smoke-results-release-rust-gfni-avx512.csv"
-      },
-      {
-        "backend": "rust-gfni-avx512",
         "backend_override": "auto",
-        "throughput_mb_s": 853.6479,
+        "throughput_mb_s": 851.1184,
         "source": "smoke-results-release-auto.csv"
-      },
-      {
-        "backend": "rust-gfni-avx2",
-        "backend_override": "rust-gfni-avx2",
-        "throughput_mb_s": 850.835,
-        "source": "smoke-results-release-rust-gfni-avx2.csv"
-      },
-      {
-        "backend": "rust-ssse3",
-        "backend_override": "rust-ssse3",
-        "throughput_mb_s": 845.7944,
-        "source": "smoke-results-release-rust-ssse3.csv"
-      },
-      {
-        "backend": "rust-avx512",
-        "backend_override": "rust-avx512",
-        "throughput_mb_s": 844.4268,
-        "source": "smoke-results-release-rust-avx512.csv"
       },
       {
         "backend": "rust-avx2",
         "backend_override": "rust-avx2",
-        "throughput_mb_s": 840.4224,
+        "throughput_mb_s": 844.7117,
         "source": "smoke-results-release-rust-avx2.csv"
+      },
+      {
+        "backend": "rust-gfni-avx2",
+        "backend_override": "rust-gfni-avx2",
+        "throughput_mb_s": 843.54,
+        "source": "smoke-results-release-rust-gfni-avx2.csv"
+      },
+      {
+        "backend": "rust-gfni-avx512",
+        "backend_override": "rust-gfni-avx512",
+        "throughput_mb_s": 835.1981,
+        "source": "smoke-results-release-rust-gfni-avx512.csv"
+      },
+      {
+        "backend": "rust-avx512",
+        "backend_override": "rust-avx512",
+        "throughput_mb_s": 833.1518,
+        "source": "smoke-results-release-rust-avx512.csv"
+      },
+      {
+        "backend": "rust-ssse3",
+        "backend_override": "rust-ssse3",
+        "throughput_mb_s": 819.2273,
+        "source": "smoke-results-release-rust-ssse3.csv"
       },
       {
         "backend": "scalar-rust",
         "backend_override": "scalar",
-        "throughput_mb_s": 613.8362,
+        "throughput_mb_s": 619.2484,
         "source": "smoke-results-release-scalar.csv"
       },
       {
         "backend": "simd-c",
         "backend_override": "simd-c",
-        "throughput_mb_s": 304.9275,
+        "throughput_mb_s": 298.2945,
         "source": "smoke-results-release-simd-c.csv"
       }
     ]
   },
   "criterion_rankings": {
-    "galois_mul_slice": [],
-    "galois_mul_slice_xor": []
+    "galois_mul_slice": [
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 634.1846598511297
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 655.9262689252744
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 674.5479688902763
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 702.9292964425005
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 725.6352222506401
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 762.2960227035951
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 880.2815030269114
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 926.6757562585424
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_65536",
+        "mean_ns": 1866.371712569156
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_65536",
+        "mean_ns": 2320.499721290876
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 15455.635834404025
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 17319.512856951522
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 17867.534947901935
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 17924.598113152835
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 17937.684813094056
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 18183.45335351704
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 18240.769293216457
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 18263.460299182298
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 18328.091698855853
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 19103.03429229334
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_1048576",
+        "mean_ns": 30441.497449789436
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_1048576",
+        "mean_ns": 37191.123438880706
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 71707.42294885014
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 72006.16306269841
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 73920.26113127501
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 74387.94978404172
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 75372.93141106443
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 78606.071475532
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 79040.52704710144
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 80666.8857523595
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 81433.39034527354
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 82240.28256994273
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_4194304",
+        "mean_ns": 119449.59793571953
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_4194304",
+        "mean_ns": 146090.13869080148
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 206814.322160692
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 242718.0718811669
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 815210.3835082974
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1135575.1350669644
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1153732.4280977182
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 1180153.5598090277
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 4472989.189111111
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 4564450.64188492
+      }
+    ],
+    "galois_mul_slice_xor": [
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_65536",
+        "mean_ns": 655.9262689252744
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_65536",
+        "mean_ns": 702.9292964425005
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_65536",
+        "mean_ns": 880.2815030269114
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_65536",
+        "mean_ns": 926.6757562585424
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_65536",
+        "mean_ns": 2320.499721290876
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_1048576",
+        "mean_ns": 17924.598113152835
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_1048576",
+        "mean_ns": 17937.684813094056
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_65536",
+        "mean_ns": 18183.45335351704
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_1048576",
+        "mean_ns": 18263.460299182298
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_1048576",
+        "mean_ns": 19103.03429229334
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_1048576",
+        "mean_ns": 37191.123438880706
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_65536",
+        "mean_ns": 72006.16306269841
+      },
+      {
+        "backend_override": "rust-gfni-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx512_RustGfniAvx512_RustSimd_override_rust-gfni-avx512",
+        "length": "len_4194304",
+        "mean_ns": 74387.94978404172
+      },
+      {
+        "backend_override": "rust-avx512",
+        "benchmark": "galois_mul_slice_xor_rust-avx512_RustAvx512_RustSimd_override_rust-avx512",
+        "length": "len_4194304",
+        "mean_ns": 78606.071475532
+      },
+      {
+        "backend_override": "rust-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-avx2_RustAvx2_RustSimd_override_rust-avx2",
+        "length": "len_4194304",
+        "mean_ns": 79040.52704710144
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "benchmark": "galois_mul_slice_xor_rust-gfni-avx2_RustGfniAvx2_RustSimd_override_rust-gfni-avx2",
+        "length": "len_4194304",
+        "mean_ns": 82240.28256994273
+      },
+      {
+        "backend_override": "rust-ssse3",
+        "benchmark": "galois_mul_slice_xor_rust-ssse3_RustSsse3_RustSimd_override_rust-ssse3",
+        "length": "len_4194304",
+        "mean_ns": 146090.13869080148
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_1048576",
+        "mean_ns": 242718.0718811669
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_1048576",
+        "mean_ns": 1153732.4280977182
+      },
+      {
+        "backend_override": "scalar",
+        "benchmark": "galois_mul_slice_xor_scalar-rust_ScalarRust_Scalar_override_scalar",
+        "length": "len_4194304",
+        "mean_ns": 1180153.5598090277
+      },
+      {
+        "backend_override": "simd-c",
+        "benchmark": "galois_mul_slice_xor_simd-c_SimdC_SimdC_override_simd-c",
+        "length": "len_4194304",
+        "mean_ns": 4564450.64188492
+      }
+    ]
   },
   "recommended_default_priority": {
     "priority_order": [
@@ -1934,31 +2609,31 @@
     "scored_backends": [
       {
         "backend_override": "rust-gfni-avx512",
-        "score": 5.3024
+        "score": 9.2117
       },
       {
         "backend_override": "rust-avx512",
-        "score": 5.3008
+        "score": 9.1096
       },
       {
         "backend_override": "rust-gfni-avx2",
-        "score": 5.277
+        "score": 8.9825
       },
       {
         "backend_override": "rust-avx2",
-        "score": 5.175
+        "score": 8.8694
       },
       {
         "backend_override": "rust-ssse3",
-        "score": 5.0745
+        "score": 7.0504
       },
       {
         "backend_override": "scalar",
-        "score": 3.9371
+        "score": 4.2001
       },
       {
         "backend_override": "simd-c",
-        "score": 2.3017
+        "score": 2.3108
       }
     ],
     "rationale": [
@@ -1968,6 +2643,8 @@
       "The recommendation is benchmark-driven and may differ from the current runtime dispatch order."
     ],
     "current_runtime_priority_x86": [
+      "rust-gfni-avx512",
+      "rust-gfni-avx2",
       "rust-avx2",
       "rust-avx512",
       "rust-ssse3",
@@ -1978,7 +2655,9 @@
   },
   "policy_eligible_default_priority": {
     "priority_order": [
+      "rust-gfni-avx512",
       "rust-avx512",
+      "rust-gfni-avx2",
       "rust-avx2",
       "rust-ssse3",
       "scalar",
@@ -1986,39 +2665,51 @@
     ],
     "scored_backends": [
       {
+        "backend_override": "rust-gfni-avx512",
+        "score": 9.2117
+      },
+      {
         "backend_override": "rust-avx512",
-        "score": 5.3008
+        "score": 9.1096
+      },
+      {
+        "backend_override": "rust-gfni-avx2",
+        "score": 8.9825
       },
       {
         "backend_override": "rust-avx2",
-        "score": 5.175
+        "score": 8.8694
       },
       {
         "backend_override": "rust-ssse3",
-        "score": 5.0745
+        "score": 7.0504
       },
       {
         "backend_override": "scalar",
-        "score": 3.9371
+        "score": 4.2001
       },
       {
         "backend_override": "simd-c",
-        "score": 2.3017
+        "score": 2.3108
       }
     ],
     "rationale": [
       "Starts from the benchmark-driven ranking.",
       "Filters out backends that are not currently eligible for default runtime dispatch.",
-      "Experimental GFNI backends remain override-only until correctness, documentation, and multi-machine validation are complete."
+      "The eligible set is aligned to the runtime order implemented in src/galois_8/backend.rs."
     ],
     "eligible_backends_x86": [
       "rust-avx2",
       "rust-avx512",
+      "rust-gfni-avx2",
+      "rust-gfni-avx512",
       "rust-ssse3",
       "scalar",
       "simd-c"
     ],
     "current_runtime_priority_x86": [
+      "rust-gfni-avx512",
+      "rust-gfni-avx2",
       "rust-avx2",
       "rust-avx512",
       "rust-ssse3",

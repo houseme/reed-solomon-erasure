@@ -1,5 +1,15 @@
 # x86_64 SIMD Runtime Dispatch 最终交付总结
 
+## 2026-06-16 状态勘误
+
+本文主体内容对应的是 `2026-05-26` 前后的阶段性收官总结，其中“当前默认策略”一节已经不再反映最新 `main`。
+
+截至 `2026-06-16` 当前工作区：
+
+1. 当前 `x86_64` 自动选路已是 `rust-gfni-avx512 -> rust-gfni-avx2 -> rust-avx2 -> rust-avx512 -> rust-ssse3 -> simd-c -> scalar-rust`
+2. 最新同机完整压测结果见 [x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md](/data/rustfs/reed-solomon-erasure/docs/x86_64-simd-benchmark-summary-2026-06-16-amd-epyc-9v45-96-core-processor.md)
+3. 因而本文中“`GFNI` 仅支持 override”“`AVX2` 当前默认高于 `AVX512`”等表述，应理解为历史快照，而不是当前代码结论
+
 ## 已完成
 
 1. 平台与 ISA 已拆分到 `src/galois_8/{scalar,legacy,x86,aarch64}`
