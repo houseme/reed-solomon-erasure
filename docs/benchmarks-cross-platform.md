@@ -133,10 +133,10 @@ go test -bench=BenchmarkReconstruct -benchtime=5s -cpu=1
 | Aspect | rustfs-erasure-codec (Rust) | klauspost/reedsolomon (Go) |
 |--------|---------------------------|---------------------------|
 | SIMD dispatch | Runtime (CPUID) | Runtime (CPUID) |
-| GF backends | Scalar, SSSE3, AVX2, AVX-512, GFNI, NEON | Scalar, SSSE3, AVX2, AVX-512, GFNI |
-| Leopard codec | GF8 (FFT-based, high shard count) | GF8 + GF16 |
+| GF backends | Scalar, SSSE3, AVX2, AVX-512, GFNI, NEON, VSX(feature-gated) | Scalar, SSSE3, AVX2, AVX-512, GFNI, NEON, ppc64le accel |
+| Leopard codec | GF8 + GF16 | GF8 + GF16 |
 | Parallelism | Rayon + configurable policy | Goroutines |
-| Streaming API | Not yet implemented | Supported |
+| Streaming API | Supported on `galois_8` block-based path | Supported via `NewStream()` |
 
 ---
 
