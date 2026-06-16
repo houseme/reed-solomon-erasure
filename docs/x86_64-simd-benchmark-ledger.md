@@ -391,3 +391,27 @@ Microbenchmark：
 1. 旧文档里“`GFNI` 仍保持 override-only”的说法，已经不再描述当前 `main` 的真实代码行为
 2. 这轮 benchmark 更适合被记录为“确认当前主干已切换到 GFNI 自动优先，并在当前同机样本上跑出了最好 `auto` 结果”
 3. 但是否继续保留这一实现方向，仍应和跨机器复核、文档策略一起再做一次人工审阅，而不是只凭单机结果立即下最终结论
+
+### 2026-06-16 Same-Day Re-Run After Remote Main Update
+
+在提交并推送上一轮结果后，本轮再次 `git pull --rebase` 到更新后的 `main`，并在同一台 `AMD EPYC 9V45` 主机上重跑了一次完整采集。
+
+已执行命令：
+
+1. `git pull --rebase`
+2. `cargo check --features 'std simd-accel' --lib`
+3. `./scripts/collect_x86_simd_benchmarks.sh`
+
+复跑后的 `10x4_1m` 关键结果：
+
+1. `encode`: `auto (rust-gfni-avx512)`，`639.9361 MB/s`
+2. `verify`: `auto (rust-gfni-avx512)`，`817.6464 MB/s`
+3. `reconstruct`: `auto (rust-gfni-avx512)`，`893.0404 MB/s`
+4. `reconstruct_data`: `auto (rust-gfni-avx512)`，`897.7649 MB/s`
+
+与同日上一轮记录相比，这次复跑继续强化了同一个结论：
+
+1. `auto` 仍稳定命中 `rust-gfni-avx512`
+2. `recommended_default_priority` 仍为 `rust-gfni-avx512 -> rust-avx512 -> rust-gfni-avx2 -> rust-avx2 -> rust-ssse3 -> scalar -> simd-c`
+3. `override_mismatch_count` 仍为 `0`
+4. 这次远端更新没有推翻“GFNI 自动优先”的当前代码现实，反而让同机 release smoke 的四项关键吞吐进一步上升

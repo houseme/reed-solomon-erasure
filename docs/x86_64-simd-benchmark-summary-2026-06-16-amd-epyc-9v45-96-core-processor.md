@@ -23,7 +23,7 @@
 本轮在正式压测前，先修复了当前 `main` 上的一个编译问题：
 
 1. [src/core/mod.rs](/data/rustfs/reed-solomon-erasure/src/core/mod.rs:99) 原本错误引用了 `super::leopard::build_family_state`
-2. 实际修复为同模块内的 `leopard::build_family_state`
+2. 实际修复先落成同模块内调用，随后在 rebase 过程中与远端收敛为 `crate::core::leopard::build_family_state`
 3. 修复后 `cargo check --features 'std simd-accel' --lib` 可以通过，压测流程才得以完成
 
 ## 当前代码自动选路现实
@@ -44,39 +44,39 @@
 
 `encode`
 
-1. `auto` (`rust-gfni-avx512`): `634.9100 MB/s`
-2. `rust-gfni-avx512`: `600.1612 MB/s`
-3. `rust-avx512`: `597.1246 MB/s`
-4. `rust-gfni-avx2`: `596.4441 MB/s`
+1. `auto` (`rust-gfni-avx512`): `639.9361 MB/s`
+2. `rust-gfni-avx512`: `606.8683 MB/s`
+3. `rust-ssse3`: `594.7480 MB/s`
+4. `rust-gfni-avx2`: `593.8489 MB/s`
 
 `verify`
 
-1. `auto` (`rust-gfni-avx512`): `766.8945 MB/s`
-2. `rust-gfni-avx2`: `731.7462 MB/s`
-3. `rust-avx512`: `731.0247 MB/s`
-4. `rust-gfni-avx512`: `729.5998 MB/s`
+1. `auto` (`rust-gfni-avx512`): `817.6464 MB/s`
+2. `rust-gfni-avx512`: `744.9607 MB/s`
+3. `rust-avx512`: `729.6699 MB/s`
+4. `rust-gfni-avx2`: `729.5057 MB/s`
 
 `reconstruct`
 
-1. `auto` (`rust-gfni-avx512`): `833.4703 MB/s`
-2. `rust-avx512`: `832.5870 MB/s`
-3. `rust-gfni-avx2`: `831.6993 MB/s`
-4. `rust-avx2`: `826.7460 MB/s`
+1. `auto` (`rust-gfni-avx512`): `893.0404 MB/s`
+2. `rust-avx512`: `838.7359 MB/s`
+3. `rust-avx2`: `830.0097 MB/s`
+4. `rust-gfni-avx512`: `828.2781 MB/s`
 
 `reconstruct_data`
 
-1. `auto` (`rust-gfni-avx512`): `851.1184 MB/s`
-2. `rust-avx2`: `844.7117 MB/s`
-3. `rust-gfni-avx2`: `843.5400 MB/s`
-4. `rust-gfni-avx512`: `835.1981 MB/s`
+1. `auto` (`rust-gfni-avx512`): `897.7649 MB/s`
+2. `rust-avx512`: `848.6149 MB/s`
+3. `rust-avx2`: `844.5187 MB/s`
+4. `rust-gfni-avx512`: `838.9544 MB/s`
 
 ## Microbenchmark 观察
 
 基于 `galois_backend` 的 `1 MiB / 4 MiB` 重点长度：
 
-1. `galois_mul_slice` 的 `1 MiB` 点位由 `rust-gfni-avx2` 领先
-2. `galois_mul_slice` 的 `4 MiB` 点位由 `rust-gfni-avx512` 领先
-3. `galois_mul_slice_xor` 的 `1 MiB` 点位由 `rust-avx512` 轻微领先
+1. `galois_mul_slice` 的 `1 MiB` 点位由 `rust-gfni-avx512` 轻微领先
+2. `galois_mul_slice` 的 `4 MiB` 点位仍由 `rust-gfni-avx512` 领先
+3. `galois_mul_slice_xor` 的 `1 MiB` 点位由 `rust-gfni-avx512` 领先
 4. `galois_mul_slice_xor` 的 `4 MiB` 点位由 `rust-gfni-avx512` 领先
 
 这说明当前主机上，`GFNI` 与 `AVX512` 都已经不只是单点优势，至少在这轮同机采样里属于主力候选，而不再符合旧文档中的“GFNI 仅 override-only”描述。
@@ -108,7 +108,8 @@
 1. 这轮 `x86_64` 同机完整采集表明，当前代码现实已经是 `GFNI` 自动优先，而不是旧文档记录的 `AVX2` 保守优先
 2. 在本机 `10x4_1m` release smoke 上，`auto` 全部四项都跑在 `rust-gfni-avx512` 上，且结果都处于第一
 3. 汇总脚本此前仍按旧口径把 `GFNI` 排除出默认候选，这和当前代码、测试以及本轮实测不一致；本轮已将结果记录口径校正到当前代码现实
-4. 尽管如此，machine JSON 仍保留 `manual-review-required`，因为当前证据依然只有同一台 `AMD EPYC 9V45` 主机的一轮采集
+4. 在同日基于更新后的远端 `main` 复跑后，`auto` 的 `encode / verify / reconstruct / reconstruct_data` 分别提升到 `639.9361 / 817.6464 / 893.0404 / 897.7649 MB/s`
+5. 尽管如此，machine JSON 仍保留 `manual-review-required`，因为当前证据依然只有同一台 `AMD EPYC 9V45` 主机的一轮采集
 
 ## 后续建议
 

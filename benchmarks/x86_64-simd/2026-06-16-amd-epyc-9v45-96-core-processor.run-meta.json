@@ -1,7 +1,7 @@
 {
   "date_utc": "2026-06-16",
   "machine_slug": "amd-epyc-9v45-96-core-processor",
-  "git_revision": "84a4e88",
+  "git_revision": "729c1f3",
   "feature_set": "std|simd-accel",
   "backends": [
     "auto",
