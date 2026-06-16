@@ -112,6 +112,143 @@ large-block behavior.
 - Rust toolchain version: not summarized in this document
 - Memory size: not summarized in this document
 
+**Host Baseline**
+
+#### System Information
+
+| Property | Value |
+|----------|-------|
+| OS | ubuntu |
+| OS Version | Linux (Ubuntu 24.04) |
+| Architecture | x86_64 |
+| Hostname | rustfs-jumpbox |
+| Kernel Version | Linux 6.17.0-1015-azure |
+
+#### CPU Information
+
+| Property | Value |
+|----------|-------|
+| Cores | 16 |
+| Brand | AMD EPYC 9V45 96-Core Processor |
+| Frequency | 4115 MHz |
+| Usage | 0.0% |
+
+#### Memory Information
+
+| Property | Value |
+|----------|-------|
+| Total | 31.34 GB |
+| Used | 2.75 GB (8.8%) |
+| Available | 28.59 GB |
+| Total Swap | 0 B |
+| Used Swap | 0 B |
+
+#### Disk Information
+
+| Name | Mount Point | Type | Total | Used | Available | Usage | Removable |
+|------|-------------|------|-------|------|-----------|-------|----------|
+| /dev/root | / | ext4 | 28.02 GB | 17.99 GB | 10.03 GB | 64.2% | false |
+| /dev/nvme0n1p16 | /boot | ext4 | 880.39 MB | 178.00 MB | 702.39 MB | 20.2% | false |
+| /dev/nvme0n1p15 | /boot/efi | vfat | 104.33 MB | 6.10 MB | 98.22 MB | 5.8% | false |
+| /dev/nvme0n2 | /data/rustfs | xfs | 499.76 GB | 35.49 GB | 464.26 GB | 7.1% | false |
+
+#### Runtime Information
+
+| Property | Value |
+|----------|-------|
+| Process ID | 2584271 |
+| Memory Usage | 161.62 MB |
+| CPU Usage | 0.00% |
+| CPU Parallelism | 16 |
+
+#### Build Information
+
+| Property | Value |
+|----------|-------|
+| Version | 1.0.0-beta.8 |
+| Build Time | 2026-06-15 02:47:58 +00:00 |
+| Build Profile | release |
+| Build OS | linux-x86_64 |
+| Rust Version | rustc 1.96.0 (ac68faa20 2026-05-25) |
+| Git Branch | main |
+| Git Commit | 6508f88d3a5edb428a5d623f927ce384691f0cd4 |
+| Git Tag |  |
+| Git Status |  |
+
+#### Configuration Information
+
+| Property | Value |
+|----------|-------|
+| Server Address | :9000 |
+| Console Enable | true |
+| Console Address | :9001 |
+| Region | us-east-1 |
+| Access Key | r***n|11 |
+| Secret Key | **** |
+| OBS Endpoint | (not set) |
+| TLS Path | (not set) |
+| KMS Enabled | false |
+| KMS Backend | local |
+| Buffer Profile | GeneralPurpose |
+| Workload Profile | (disabled) |
+| FTPS | --- |
+| FTPS > Build Feature | enabled |
+| FTPS > Enabled (`RUSTFS_FTPS_ENABLE`) | false |
+| FTPS > Address (`RUSTFS_FTPS_ADDRESS`) | 0.0.0.0:8022 |
+| FTPS > TLS Enabled (`RUSTFS_FTPS_TLS_ENABLED`) | true |
+| FTPS > Certs Dir (`RUSTFS_FTPS_CERTS_DIR`) | (not set) |
+| FTPS > CA File (`RUSTFS_FTPS_CA_FILE`) | (not set) |
+| FTPS > Passive Ports (`RUSTFS_FTPS_PASSIVE_PORTS`) | 40000-50000 |
+| FTPS > External IP (`RUSTFS_FTPS_EXTERNAL_IP`) | (not set) |
+| WebDAV | --- |
+| WebDAV > Build Feature | enabled |
+| WebDAV > Enabled (`RUSTFS_WEBDAV_ENABLE`) | false |
+| WebDAV > Address (`RUSTFS_WEBDAV_ADDRESS`) | 0.0.0.0:8080 |
+| WebDAV > TLS Enabled (`RUSTFS_WEBDAV_TLS_ENABLED`) | true |
+| WebDAV > Certs Dir (`RUSTFS_WEBDAV_CERTS_DIR`) | (not set) |
+| WebDAV > CA File (`RUSTFS_WEBDAV_CA_FILE`) | (not set) |
+| WebDAV > Max Body Size (`RUSTFS_WEBDAV_MAX_BODY_SIZE`) | 5368709120 bytes |
+| WebDAV > Request Timeout (`RUSTFS_WEBDAV_REQUEST_TIMEOUT`) | 300 seconds |
+
+#### Build Features
+
+| Property | Value |
+|----------|-------|
+| Enabled Features | 2/8 |
+
+##### Feature Status
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| metrics-gpu | ✗ | Metrics GPU support |
+| ftps | ✓ | FTPS protocol support |
+| swift | ✗ | Swift storage backend |
+| webdav | ✓ | WebDAV protocol support |
+| license | ✗ | License validation |
+| io-scheduler-debug | ✗ | Enable debug information in I/O scheduler |
+| manual-test-runners | ✗ | Enable manual test binaries |
+| full | ✗ | All features enabled |
+
+##### Default Features
+
+| Feature | Note |
+|---------|------|
+| ftps | enabled by default |
+| webdav | enabled by default |
+
+##### Feature Dependencies
+
+| Feature | Dependencies |
+|---------|-------------|
+| metrics-gpu | rustfs-obs/gpu |
+| ftps | rustfs-protocols/ftps |
+| swift | rustfs-protocols/swift |
+| webdav | rustfs-protocols/webdav |
+| license | (none) |
+| io-scheduler-debug | (none) |
+| manual-test-runners | (none) |
+| full | metrics-gpu + ftps + swift + webdav |
+
 | Config | Shard Size | Encode (GiB/s) | Reconstruct (GiB/s) |
 |--------|------------|----------------|---------------------|
 | 10×4 | 4 KiB | 3.56 | 3.33 |
@@ -123,6 +260,14 @@ Data sources:
 - `benchmarks/x86_64-simd/comprehensive-x86_64-benchmark.json` — broader x86_64 encode-only matrix for deeper drill-down
 
 > **Note**: This table uses the archived auto-path sample from `2026-05-27`. For newer x86 backend-policy and host-specific validation context, see [GFNI results doc](benchmarks-gfni-results.md) and the newer x86_64 benchmark artifacts under `benchmarks/x86_64-simd/`.
+
+Why the gap versus aarch64 is large:
+
+- This is not a same-host comparison: the x86_64 numbers come from an Ubuntu 24.04 Azure VM (`rustfs-jumpbox`) with `16` visible CPUs, while the aarch64 numbers come from an Apple Silicon MacBook Pro host.
+- The archived x86_64 sample used the conservative auto-selected `rust-avx2` path, while the aarch64 sample used `rust-neon`; the backend choice is part of the result, not just the ISA label.
+- The CPU brand string says `AMD EPYC 9V45 96-Core Processor`, but this benchmark host only exposed `16` cores / parallelism to the runtime. That VM sizing difference alone can materially change Rayon scheduling, cache pressure, and sustained large-shard throughput.
+- The gap grows with shard size instead of shrinking: versus the aarch64 artifact, x86_64 is about `+7.9% / +10.3%` at `10x4_4k`, then `-14.4% / -17.6%` at `10x4_64k`, and `-28.5% / -48.7%` at `10x4_1m` for `encode / reconstruct`.
+- That pattern points to host and runtime-path differences more than a simple “x86 vs ARM” conclusion. In this report, the safest reading is: these are cross-host benchmark snapshots, not a controlled architecture-only shootout.
 
 ### x86_64 (Intel with GFNI)
 
