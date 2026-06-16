@@ -12,6 +12,58 @@ fn quickcheck_shard_len(size: usize) -> usize {
     1 + size % QUICKCHECK_MAX_SHARD_LEN
 }
 
+fn qc_mix(seed: &mut u64) -> u64 {
+    *seed = seed.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    let mut z = *seed;
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
+fn qc_seed(parts: &[usize]) -> u64 {
+    let mut seed = 0x6a09_e667_f3bc_c909_u64;
+    for &part in parts {
+        seed ^= (part as u64).wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let _ = qc_mix(&mut seed);
+    }
+    seed
+}
+
+fn deterministic_shards_u16x2(per_shard: usize, size: usize, seed: u64) -> Vec<Vec<[u8; 2]>> {
+    let mut seed = seed;
+    let mut shards = Vec::with_capacity(size);
+    for _ in 0..size {
+        let mut shard = vec![[0; 2]; per_shard];
+        for word in &mut shard {
+            let value = qc_mix(&mut seed).to_le_bytes();
+            word.copy_from_slice(&value[..2]);
+        }
+        shards.push(shard);
+    }
+    shards
+}
+
+fn deterministic_corrupt_positions(n: usize, total: usize, seed: u64) -> Vec<usize> {
+    let n = n.min(total);
+    let mut seed = seed;
+    let mut positions: Vec<usize> = (0..total).collect();
+    for i in 0..n {
+        let remaining = total - i;
+        let j = i + (qc_mix(&mut seed) as usize % remaining);
+        positions.swap(i, j);
+    }
+    positions.truncate(n);
+    positions
+}
+
+fn deterministic_fill_u16x2(slice: &mut [[u8; 2]], seed: u64) {
+    let mut seed = seed;
+    for word in slice {
+        let value = qc_mix(&mut seed).to_le_bytes();
+        word.copy_from_slice(&value[..2]);
+    }
+}
+
 fn qc_params(data: usize, parity: usize) -> (usize, usize) {
     let data = 1 + data % 15;
     let mut parity = 1 + parity % 15;
@@ -19,17 +71,6 @@ fn qc_params(data: usize, parity: usize) -> (usize, usize) {
         parity -= data + parity - 16;
     }
     (data, parity)
-}
-
-fn gen_corrupt_positions(n: usize, total: usize) -> Vec<usize> {
-    let n = n.min(total);
-    let mut positions: Vec<usize> = (0..total).collect();
-    for i in 0..n {
-        let j = rand::random_range(i..total);
-        positions.swap(i, j);
-    }
-    positions.truncate(n);
-    positions
 }
 
 macro_rules! make_random_shards {
@@ -66,12 +107,15 @@ quickcheck! {
                                            size: usize) -> bool {
         let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
+        let total = data + parity;
+        let seed = qc_seed(&[data, parity, corrupt, size, 0]);
+        let corrupt_pos_s =
+            deterministic_corrupt_positions(corrupt, total, seed ^ 0x1000);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
-        let mut expect = make_random_shards!(size, data + parity);
+        let mut expect = deterministic_shards_u16x2(size, total, seed);
         {
             let mut refs =
                 convert_2D_slices!(expect =>to_mut_vec &mut [[u8; 2]]);
@@ -84,10 +128,10 @@ quickcheck! {
         let mut shards = expect.clone();
 
         // corrupt shards
-        for &p in corrupt_pos_s.iter() {
-            fill_random(&mut shards[p]);
+        for (i, &p) in corrupt_pos_s.iter().enumerate() {
+            deterministic_fill_u16x2(&mut shards[p], seed ^ 0x2000 ^ i as u64);
         }
-        let mut slice_present = vec![true; data + parity];
+        let mut slice_present = vec![true; total];
         for &p in corrupt_pos_s.iter() {
             slice_present[p] = false;
         }
@@ -125,12 +169,15 @@ quickcheck! {
                                                   size: usize) -> bool {
         let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
+        let total = data + parity;
+        let seed = qc_seed(&[data, parity, corrupt, size, 1]);
+        let corrupt_pos_s =
+            deterministic_corrupt_positions(corrupt, total, seed ^ 0x1000);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
-        let mut expect = make_random_shards!(size, data + parity);
+        let mut expect = deterministic_shards_u16x2(size, total, seed);
         r.encode(&mut expect).unwrap();
 
         let expect = expect;
@@ -158,12 +205,15 @@ quickcheck! {
                  size: usize) -> bool {
         let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
+        let total = data + parity;
+        let seed = qc_seed(&[data, parity, corrupt, size, 2]);
+        let corrupt_pos_s =
+            deterministic_corrupt_positions(corrupt, total, seed ^ 0x1000);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
-        let mut expect = make_random_shards!(size, data + parity);
+        let mut expect = deterministic_shards_u16x2(size, total, seed);
         {
             let mut refs =
                 convert_2D_slices!(expect =>to_mut_vec &mut [[u8; 2]]);
@@ -176,8 +226,8 @@ quickcheck! {
         let mut shards = expect.clone();
 
         // corrupt shards
-        for &p in corrupt_pos_s.iter() {
-            fill_random(&mut shards[p]);
+        for (i, &p) in corrupt_pos_s.iter().enumerate() {
+            deterministic_fill_u16x2(&mut shards[p], seed ^ 0x2000 ^ i as u64);
         }
 
         ({
@@ -205,12 +255,15 @@ quickcheck! {
                         size: usize) -> bool {
         let (data, parity) = qc_params(data, parity);
         let corrupt = corrupt % (parity + 1);
-        let corrupt_pos_s = gen_corrupt_positions(corrupt, data + parity);
         let size = quickcheck_shard_len(size);
+        let total = data + parity;
+        let seed = qc_seed(&[data, parity, corrupt, size, 3]);
+        let corrupt_pos_s =
+            deterministic_corrupt_positions(corrupt, total, seed ^ 0x1000);
 
         let r = ReedSolomon::new(data, parity).unwrap();
 
-        let mut expect = make_random_shards!(size, data + parity);
+        let mut expect = deterministic_shards_u16x2(size, total, seed);
         r.encode(&mut expect).unwrap();
 
         let expect = expect;
@@ -218,8 +271,8 @@ quickcheck! {
         let mut shards = expect.clone();
 
         // corrupt shards
-        for &p in corrupt_pos_s.iter() {
-            fill_random(&mut shards[p]);
+        for (i, &p) in corrupt_pos_s.iter().enumerate() {
+            deterministic_fill_u16x2(&mut shards[p], seed ^ 0x2000 ^ i as u64);
         }
 
         r.verify(&expect).unwrap()
