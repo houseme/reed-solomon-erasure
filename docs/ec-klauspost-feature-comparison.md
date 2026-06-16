@@ -1,7 +1,7 @@
 # rustfs-erasure-codec vs klauspost/reedsolomon 功能对比分析
 
 > 文档日期：2026-05-31
-> Rust 项目版本：6.0.0
+> Rust 项目版本：7.0.0
 > Go 参考版本：v1.14.0
 
 ---

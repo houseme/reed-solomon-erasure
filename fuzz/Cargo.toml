@@ -18,7 +18,11 @@ rustfs-erasure-codec.workspace = true
 [[bin]]
 name = "fuzz_encode_verify"
 path = "fuzz_targets/fuzz_encode_verify.rs"
+test = false
+bench = false
 
 [[bin]]
 name = "fuzz_encode_reconstruct"
 path = "fuzz_targets/fuzz_encode_reconstruct.rs"
+test = false
+bench = false
