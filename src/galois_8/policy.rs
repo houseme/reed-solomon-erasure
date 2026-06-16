@@ -381,7 +381,7 @@ impl crate::ReedSolomon<super::Field> {
             }
         }
 
-        let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+        let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices)?;
         let required_missing_data_indices = required
             .map(|required| {
                 (0..self.data_shard_count())
@@ -717,12 +717,8 @@ impl crate::ReedSolomon<super::Field> {
             .filter(|&&idx| idx < self.data_shard_count())
             .count();
         let missing = workspace.0.invalid_indices.len();
-        let decision = self.reconstruct_parallel_decision(
-            workspace.0.shard_len,
-            missing_data,
-            missing,
-            false,
-        );
+        let decision =
+            self.reconstruct_parallel_decision(workspace.0.shard_len, missing_data, missing, false);
         self.record_reconstruct_entry_path(decision.use_parallel);
         if decision.use_parallel {
             let (data_policy, parity_policy) = self.reconstruct_stage_policies(false);
@@ -879,7 +875,8 @@ impl crate::ReedSolomon<super::Field> {
                 return Ok(());
             }
 
-            let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+            let data_decode_matrix =
+                self.get_data_decode_matrix(&valid_indices, &invalid_indices)?;
             let parity_rows = self.get_parity_rows();
             let mut reduced_rows: smallvec::SmallVec<[smallvec::SmallVec<[u8; 32]>; 32]> =
                 smallvec::SmallVec::with_capacity(output_indices.len());

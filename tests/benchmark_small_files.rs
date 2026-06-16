@@ -83,7 +83,8 @@ fn capture_reconstruct_profile_10x4_64k() {
     let seed = derived_seed(Operation::Reconstruct, case);
     let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
     let logical_data_bytes = case.shard_size * case.data_shards;
-    let mut original = make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+    let mut original =
+        make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
     rs.encode(&mut original).unwrap();
 
     let mut snapshots = Vec::new();
@@ -102,7 +103,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         operation: "reconstruct",
         case_label: case.label,
         iterations,
-        throughput_mb_s: logical_data_bytes as f64 / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0),
+        throughput_mb_s: logical_data_bytes as f64
+            / (1024.0 * 1024.0)
+            / (ns_per_iter / 1_000_000_000.0),
         ns_per_iter,
         stats: rs.runtime_profile_stats(),
     });
@@ -121,7 +124,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         operation: "reconstruct_opt",
         case_label: case.label,
         iterations,
-        throughput_mb_s: logical_data_bytes as f64 / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0),
+        throughput_mb_s: logical_data_bytes as f64
+            / (1024.0 * 1024.0)
+            / (ns_per_iter / 1_000_000_000.0),
         ns_per_iter,
         stats: rs.runtime_profile_stats(),
     });
@@ -132,7 +137,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         let mut shards: Vec<Option<Vec<u8>>> = original.iter().cloned().map(Some).collect();
         shards[0] = None;
         shards[case.data_shards] = None;
-        let _ = rs.plan_option_vec_reconstruct_for_bench(&shards, None).unwrap();
+        let _ = rs
+            .plan_option_vec_reconstruct_for_bench(&shards, None)
+            .unwrap();
     }
     let elapsed = start.elapsed();
     let ns_per_iter = elapsed.as_nanos() as f64 / iterations as f64;
@@ -140,7 +147,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         operation: "reconstruct_plan_only",
         case_label: case.label,
         iterations,
-        throughput_mb_s: logical_data_bytes as f64 / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0),
+        throughput_mb_s: logical_data_bytes as f64
+            / (1024.0 * 1024.0)
+            / (ns_per_iter / 1_000_000_000.0),
         ns_per_iter,
         stats: rs.runtime_profile_stats(),
     });
@@ -160,7 +169,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         operation: "reconstruct_execute_serial_only",
         case_label: case.label,
         iterations,
-        throughput_mb_s: logical_data_bytes as f64 / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0),
+        throughput_mb_s: logical_data_bytes as f64
+            / (1024.0 * 1024.0)
+            / (ns_per_iter / 1_000_000_000.0),
         ns_per_iter,
         stats: rs.runtime_profile_stats(),
     });
@@ -168,7 +179,9 @@ fn capture_reconstruct_profile_10x4_64k() {
     let mut preplanned_shards: Vec<Option<Vec<u8>>> = original.iter().cloned().map(Some).collect();
     preplanned_shards[0] = None;
     preplanned_shards[case.data_shards] = None;
-    let preplanned = rs.prepare_reconstruct_opt_workspace(&preplanned_shards).unwrap();
+    let preplanned = rs
+        .prepare_reconstruct_opt_workspace(&preplanned_shards)
+        .unwrap();
 
     let start = Instant::now();
     rs.reset_runtime_profile_stats();
@@ -185,7 +198,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         operation: "reconstruct_execute_preplanned_serial",
         case_label: case.label,
         iterations,
-        throughput_mb_s: logical_data_bytes as f64 / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0),
+        throughput_mb_s: logical_data_bytes as f64
+            / (1024.0 * 1024.0)
+            / (ns_per_iter / 1_000_000_000.0),
         ns_per_iter,
         stats: rs.runtime_profile_stats(),
     });
@@ -203,7 +218,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         operation: "reconstruct_shard_slot",
         case_label: case.label,
         iterations,
-        throughput_mb_s: logical_data_bytes as f64 / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0),
+        throughput_mb_s: logical_data_bytes as f64
+            / (1024.0 * 1024.0)
+            / (ns_per_iter / 1_000_000_000.0),
         ns_per_iter,
         stats: rs.runtime_profile_stats(),
     });
@@ -224,7 +241,9 @@ fn capture_reconstruct_profile_10x4_64k() {
         operation: "reconstruct_some_data_only",
         case_label: case.label,
         iterations,
-        throughput_mb_s: logical_data_bytes as f64 / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0),
+        throughput_mb_s: logical_data_bytes as f64
+            / (1024.0 * 1024.0)
+            / (ns_per_iter / 1_000_000_000.0),
         ns_per_iter,
         stats: rs.runtime_profile_stats(),
     });
@@ -240,7 +259,11 @@ fn write_small_file_profile_snapshots(snapshots: &[SmallFileProfileSnapshot]) {
 
     let mut json = String::from("[\n");
     for (i, snapshot) in snapshots.iter().enumerate() {
-        let suffix = if i + 1 == snapshots.len() { "\n" } else { ",\n" };
+        let suffix = if i + 1 == snapshots.len() {
+            "\n"
+        } else {
+            ",\n"
+        };
         json.push_str(&format!(
             concat!(
                 "  {{\"operation\":\"{}\",\"case_label\":\"{}\",\"iterations\":{},",
@@ -830,8 +853,16 @@ fn benchmark_small_file_matrix_runs_and_exports_results() {
             iterations,
         ));
         results.push(run_operation(case, SmallFileOp::ReconstructOpt, iterations));
-        results.push(run_operation(case, SmallFileOp::ReconstructShardSlot, iterations));
-        results.push(run_operation(case, SmallFileOp::ReconstructSomeDataOnly, iterations));
+        results.push(run_operation(
+            case,
+            SmallFileOp::ReconstructShardSlot,
+            iterations,
+        ));
+        results.push(run_operation(
+            case,
+            SmallFileOp::ReconstructSomeDataOnly,
+            iterations,
+        ));
         results.push(run_operation(
             case,
             SmallFileOp::Standard(Operation::ReconstructData),
