@@ -6,7 +6,7 @@ resolver = "3"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
-repository = "https://github.com/darrenldl/reed-solomon-erasure"
+repository = "https://github.com/houseme/reed-solomon-erasure"
 
 [workspace.dependencies]
 cc = "1.2"
@@ -19,7 +19,7 @@ parking_lot = "0.12.5"
 quickcheck = "1.1.0"
 rand = "0.10.1"
 rayon = "1.12"
-reed-solomon-erasure = { version = "6.0.0", path = "." }
+rustfs-erasure-codec = { version = "7.0.0", path = "." }
 smallvec = "1.15"
 spin = { version = "0.12.0", default-features = false, features = ["once", "spin_mutex"] }
 wasm-bindgen = "0.2.125"
@@ -27,8 +27,8 @@ wee_alloc = "0.4"
 
 
 [package]
-name = "reed-solomon-erasure"
-version = "6.0.0"
+name = "rustfs-erasure-codec"
+version = "7.0.0"
 authors = ["Darren Ldl <darrenldldev@gmail.com>"]
 edition.workspace = true
 build = "build.rs"
@@ -38,8 +38,8 @@ exclude = [
 ]
 rust-version.workspace = true
 description = "Rust implementation of Reed-Solomon erasure coding"
-documentation = "https://docs.rs/reed-solomon-erasure"
-homepage = "https://github.com/darrenldl/reed-solomon-erasure"
+documentation = "https://docs.rs/rustfs-erasure-codec"
+homepage = "https://github.com/houseme/reed-solomon-erasure"
 repository.workspace = true
 readme = "README.md"
 keywords = ["reed-solomon", "erasure"]
@@ -61,12 +61,6 @@ simd-vsx = ["cc", "libc"]
 # Backwards-compatible umbrella: enables all SIMD backends.
 simd-accel = ["simd-neon", "simd-ssse3", "simd-avx2", "simd-avx512", "simd-gfni", "simd-vsx"]
 benchmark-metrics = []
-
-[badges]
-travis-ci = { repository = "darrenldl/reed-solomon-erasure" }
-appveyor = { repository = "darrenldl/reed-solomon-erasure" }
-codecov = { repository = "darrenldl/reed-solomon-erasure" }
-coveralls = { repository = "darrenldl/reed-solomon-erasure" }
 
 [dependencies]
 libc = { workspace = true, optional = true }

@@ -40,7 +40,7 @@ pub enum MatrixMode {
 /// Use `CodecOptions::default()` for sensible defaults, or the builder methods:
 ///
 /// ```ignore
-/// use reed_solomon_erasure::core::{CodecOptions, CodecFamily};
+/// use rustfs_erasure_codec::core::{CodecOptions, CodecFamily};
 ///
 /// let opts = CodecOptions::builder()
 ///     .codec_family(CodecFamily::LeopardGF8)

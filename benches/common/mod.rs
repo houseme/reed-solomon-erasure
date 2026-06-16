@@ -5,7 +5,7 @@ use std::process::Command;
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
 
-use reed_solomon_erasure::galois_8::{active_backend_id, active_backend_kind, active_backend_name};
+use rustfs_erasure_codec::galois_8::{active_backend_id, active_backend_kind, active_backend_name};
 
 pub const BASE_SEED: u64 = 0x00EC_5EED_2026_0524;
 

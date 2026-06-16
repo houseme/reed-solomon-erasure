@@ -267,7 +267,7 @@ Leopard GF8 的限制未在公共 API 文档中充分说明。需要在代码文
 /// # 示例
 ///
 /// ```rust
-/// use reed_solomon_erasure::{ReedSolomon, CodecOptions, CodecFamily};
+/// use rustfs_erasure_codec::{ReedSolomon, CodecOptions, CodecFamily};
 ///
 /// let rs = ReedSolomon::with_options(
 ///     10, 4,

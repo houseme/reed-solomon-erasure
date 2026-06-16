@@ -1,8 +1,12 @@
-# WASM Package — reed-solomon-erasure
+# WASM Package — rustfs-erasure-codec
 
-WebAssembly build of the [reed-solomon-erasure](../README.md) library, exposing `encode` and `reconstruct` operations for use in browsers and Node.js.
+WebAssembly build of the [rustfs-erasure-codec](../README.md) library, exposing `encode` and `reconstruct` operations for use in browsers and Node.js.
 
-**Package:** `reed-solomon-erasure-wasm` v0.2.4
+This package lives inside the current
+[houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
+repository and tracks the main Rust codebase in this checkout.
+
+**Package:** `rustfs-erasure-codec-wasm` v0.2.4
 **Dependencies:** [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen), [`wee_alloc`](https://github.com/rustwasm/wee_alloc)
 
 ## Building
@@ -32,10 +36,10 @@ The [`ReedSolomonErasure`](src/index.ts) class provides the high-level interface
 const rs = await ReedSolomonErasure.fromCurrentDirectory();
 
 // Browser: async instantiation from fetch()
-const rs = await ReedSolomonErasure.fromResponse(fetch("reed_solomon_erasure_bg.wasm"));
+const rs = await ReedSolomonErasure.fromResponse(fetch("rustfs_erasure_codec_bg.wasm"));
 
 // Node.js: synchronous instantiation from bytes
-const bytes = readFileSync("reed_solomon_erasure_bg.wasm");
+const bytes = readFileSync("rustfs_erasure_codec_bg.wasm");
 const rs = ReedSolomonErasure.fromBytes(bytes);
 ```
 
@@ -68,7 +72,7 @@ const rs = ReedSolomonErasure.fromBytes(bytes);
 ## Usage Example
 
 ```typescript
-import { ReedSolomonErasure } from "reed-solomon-erasure-wasm";
+import { ReedSolomonErasure } from "rustfs-erasure-codec-wasm";
 
 const rs = await ReedSolomonErasure.fromCurrentDirectory();
 
@@ -101,3 +105,8 @@ console.assert(reconstructResult === ReedSolomonErasure.RESULT_OK);
 
 - **Nazar Mokrynskyi** ([@nazar-pc](https://github.com/nazar-pc)) — original WASM package author
 - **Darren Ldl** ([@darrenldl](https://github.com/darrenldl)) — subsequent modifications
+
+## Maintenance
+
+The WASM package is now maintained as part of the main repository workflow in
+`houseme/reed-solomon-erasure`.

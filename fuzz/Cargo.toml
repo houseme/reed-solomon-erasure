@@ -1,5 +1,5 @@
 [package]
-name = "reed-solomon-erasure-fuzz"
+name = "rustfs-erasure-codec-fuzz"
 version = "0.0.1"
 authors = ["Automatically generated"]
 edition.workspace = true
@@ -13,7 +13,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys.workspace = true
-reed-solomon-erasure.workspace = true
+rustfs-erasure-codec.workspace = true
 
 [[bin]]
 name = "fuzz_encode_verify"

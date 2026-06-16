@@ -1,5 +1,5 @@
 #[cfg(test)]
-use reed_solomon_erasure::galois_8::active_backend_name;
+use rustfs_erasure_codec::galois_8::active_backend_name;
 
 #[cfg(test)]
 fn expected_backend_name(override_value: &str) -> Option<&str> {

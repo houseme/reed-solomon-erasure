@@ -1,7 +1,7 @@
 #[path = "../benches/common/mod.rs"]
 mod bench_common;
 
-use reed_solomon_erasure::galois_8::ReedSolomon;
+use rustfs_erasure_codec::galois_8::ReedSolomon;
 
 use self::bench_common::{Operation, SMOKE_CASES, derived_seed, make_full_shards};
 

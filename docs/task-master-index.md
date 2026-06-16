@@ -1,7 +1,7 @@
 # 任务主索引
 
 > 最后更新: 2026-06-04（P0-2e 并发流完成，P2-2 ppc64le VSX 后端核实完成，文档状态修正）
-> 基于 reed-solomon-erasure vs klauspost/reedsolomon 对比分析
+> 基于 rustfs-erasure-codec vs klauspost/reedsolomon 对比分析
 
 ---
 

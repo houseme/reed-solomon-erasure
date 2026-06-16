@@ -9,7 +9,7 @@
 ## 提示语 1: 验证阶段 (首次使用)
 
 ```
-你是一个 Rust 性能工程师。请在当前 x86_64 机器上验证 reed-solomon-erasure 项目的 leopard_gf8 编码器。
+你是一个 Rust 性能工程师。请在当前 x86_64 机器上验证 rustfs-erasure-codec 项目的 leopard_gf8 编码器。
 
 ## 背景
 
@@ -217,7 +217,7 @@ AVX2 (src/galois_8/x86/avx2.rs):
 ## 提示语 3: 快速验证 (仅确认编译 + 测试通过)
 
 ```
-在当前 x86_64 机器上快速验证 reed-solomon-erasure:
+在当前 x86_64 机器上快速验证 rustfs-erasure-codec:
 
 1. cargo build --features std — 确认编译通过
 2. cargo test --lib --features std — 确认 199 测试通过

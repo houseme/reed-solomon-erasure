@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use reed_solomon_erasure::galois_8::ReedSolomon;
+use rustfs_erasure_codec::galois_8::ReedSolomon;
 
 use self::bench_common::{
     ARTIFACT_SCHEMA_VERSION, BenchCase, Operation, backend, backend_id, backend_kind,
@@ -316,9 +316,9 @@ fn run_operation(case: BenchCase, operation: SmallFileOp, iterations: usize) -> 
                 let codec = ReedSolomon::with_options(
                     case.data_shards,
                     case.parity_shards,
-                    reed_solomon_erasure::CodecOptions {
-                        codec_family: reed_solomon_erasure::CodecFamily::LeopardGF8,
-                        ..reed_solomon_erasure::CodecOptions::default()
+                    rustfs_erasure_codec::CodecOptions {
+                        codec_family: rustfs_erasure_codec::CodecFamily::LeopardGF8,
+                        ..rustfs_erasure_codec::CodecOptions::default()
                     },
                 )
                 .unwrap();
@@ -329,9 +329,9 @@ fn run_operation(case: BenchCase, operation: SmallFileOp, iterations: usize) -> 
             let codec = ReedSolomon::with_options(
                 case.data_shards,
                 case.parity_shards,
-                reed_solomon_erasure::CodecOptions {
-                    codec_family: reed_solomon_erasure::CodecFamily::LeopardGF8,
-                    ..reed_solomon_erasure::CodecOptions::default()
+                rustfs_erasure_codec::CodecOptions {
+                    codec_family: rustfs_erasure_codec::CodecFamily::LeopardGF8,
+                    ..rustfs_erasure_codec::CodecOptions::default()
                 },
             )
             .unwrap();

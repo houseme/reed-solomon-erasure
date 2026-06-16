@@ -92,7 +92,7 @@ if let FamilyState::LeopardGF8(_) = self.family_state {
 当分片数较多时，Leopard GF8 比 Classic 更高效:
 
 ```rust
-use reed_solomon_erasure::{ReedSolomon, CodecOptions, CodecFamily};
+use rustfs_erasure_codec::{ReedSolomon, CodecOptions, CodecFamily};
 
 let rs = ReedSolomon::with_options(
     32, 4,  // 32 data + 4 parity

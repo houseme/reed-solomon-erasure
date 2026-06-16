@@ -1,5 +1,5 @@
 [package]
-name = "reed-solomon-erasure-wasm"
+name = "rustfs-erasure-codec-wasm"
 version = "0.2.4"
 authors = ["Nazar Mokrynskyi <nazar@mokrynskyi.com>", "Darren Ldl <darrenldldev@gmail.com>"]
 edition.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-reed-solomon-erasure.workspace = true
+rustfs-erasure-codec.workspace = true
 wasm-bindgen.workspace = true
 wee_alloc.workspace = true
 

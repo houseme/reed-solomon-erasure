@@ -1,7 +1,7 @@
 # Cross-Platform Benchmark Report
 
 > Date: 2026-06-01
-> Library: reed-solomon-erasure v6.0.0
+> Library: rustfs-erasure-codec v6.0.0
 
 ---
 
@@ -130,7 +130,7 @@ go test -bench=BenchmarkReconstruct -benchtime=5s -cpu=1
 
 ### Key Differences
 
-| Aspect | reed-solomon-erasure (Rust) | klauspost/reedsolomon (Go) |
+| Aspect | rustfs-erasure-codec (Rust) | klauspost/reedsolomon (Go) |
 |--------|---------------------------|---------------------------|
 | SIMD dispatch | Runtime (CPUID) | Runtime (CPUID) |
 | GF backends | Scalar, SSSE3, AVX2, AVX-512, GFNI, NEON | Scalar, SSSE3, AVX2, AVX-512, GFNI |

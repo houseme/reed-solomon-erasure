@@ -1,6 +1,6 @@
 # Documentation Index
 
-This directory contains development documentation, design documents, benchmark results, and task tracking for the reed-solomon-erasure project.
+This directory contains development documentation, design documents, benchmark results, and task tracking for the rustfs-erasure-codec project.
 
 > Documents from the 2026 rewrite (by houseme) are primarily in **Chinese**, while older documents and some newer ones are in **English**.
 

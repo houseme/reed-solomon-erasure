@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 #[cfg(feature = "std")]
-use reed_solomon_erasure::ShardSlot;
-use reed_solomon_erasure::galois_8::ReedSolomon;
+use rustfs_erasure_codec::ShardSlot;
+use rustfs_erasure_codec::galois_8::ReedSolomon;
 #[cfg(feature = "std")]
-use reed_solomon_erasure::galois_8::{mark_missing_slots, shards_to_slots};
-use reed_solomon_erasure::{CodecFamily, CodecOptions};
+use rustfs_erasure_codec::galois_8::{mark_missing_slots, shards_to_slots};
+use rustfs_erasure_codec::{CodecFamily, CodecOptions};
 
 use self::bench_common::{
     ARTIFACT_SCHEMA_VERSION, BenchCase, FAST_SMOKE_CASES, Operation, QUICK_SMOKE_CASES,
@@ -956,7 +956,7 @@ fn build_reconstruct_variant_result(
 fn measure_reconstruct_variant_once(
     runner: &mut ReconstructVariantRunner,
     original: &[Vec<u8>],
-) -> Result<(), reed_solomon_erasure::Error> {
+) -> Result<(), rustfs_erasure_codec::Error> {
     let mut shards: Vec<Option<Vec<u8>>> = original.iter().cloned().map(Some).collect();
     match runner.kind {
         ReconstructBenchKind::DirectSerial => {
@@ -1349,7 +1349,7 @@ fn run_leopard_encode_profile(case: BenchCase, iterations: usize) -> LeopardEnco
     )
     .unwrap();
 
-    reed_solomon_erasure::reset_leopard_gf8_profile_stats();
+    rustfs_erasure_codec::reset_leopard_gf8_profile_stats();
     let start = Instant::now();
     for _ in 0..iterations {
         let mut shards =
@@ -1359,7 +1359,7 @@ fn run_leopard_encode_profile(case: BenchCase, iterations: usize) -> LeopardEnco
     let elapsed = start.elapsed();
     let ns_per_iter = elapsed.as_nanos() as f64 / iterations as f64;
     let throughput_mb_s = bytes / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0);
-    let stats = reed_solomon_erasure::leopard_gf8_profile_stats();
+    let stats = rustfs_erasure_codec::leopard_gf8_profile_stats();
 
     LeopardEncodeProfileResult {
         throughput_mb_s,

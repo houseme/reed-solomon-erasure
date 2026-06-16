@@ -675,7 +675,7 @@ cargo bench --bench throughput_matrix
 
 辅助产物：
 
-- `target/release/deps/reed_solomon_erasure-ec9534e3728d9d83.s`
+- `target/release/deps/rustfs_erasure_codec-ec9534e3728d9d83.s`
 
 ## 24. 压测卫生规则（2026-05-25）
 

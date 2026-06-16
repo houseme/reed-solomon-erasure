@@ -44,7 +44,7 @@
 
 ```rust
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
-use reed_solomon_erasure::ReedSolomon;
+use rustfs_erasure_codec::ReedSolomon;
 
 fn bench_encode(c: &mut Criterion) {
     let mut group = c.benchmark_group("encode");

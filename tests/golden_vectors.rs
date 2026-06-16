@@ -1,6 +1,6 @@
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
-use reed_solomon_erasure::galois_8::ReedSolomon;
+use rustfs_erasure_codec::galois_8::ReedSolomon;
 
 fn checksum_bytes(data: &[u8]) -> u64 {
     data.iter().fold(0xcbf29ce484222325u64, |acc, &b| {

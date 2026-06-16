@@ -40,7 +40,7 @@
 
 ## 1. 文档目标
 
-本文档用于指导 `reed-solomon-erasure` 在 `x86_64` 平台上完成 SIMD 指令集优化、运行时分发升级、平台拆分治理、测试与 benchmark 门禁建设。
+本文档用于指导 `rustfs-erasure-codec` 在 `x86_64` 平台上完成 SIMD 指令集优化、运行时分发升级、平台拆分治理、测试与 benchmark 门禁建设。
 
 本文档强调四个原则：
 

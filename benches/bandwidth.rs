@@ -3,7 +3,7 @@ use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use rand::distr::{Distribution, StandardUniform};
 use rand::rngs::SmallRng;
 use rand::{SeedableRng, rng};
-use reed_solomon_erasure::galois_8::ReedSolomon;
+use rustfs_erasure_codec::galois_8::ReedSolomon;
 use std::convert::TryInto;
 use std::hint::black_box;
 

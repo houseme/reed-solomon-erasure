@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use reed_solomon_erasure::galois_8::ReedSolomon;
+use rustfs_erasure_codec::galois_8::ReedSolomon;
 
 fuzz_target!(|data: &[u8]| {
     if data.len() >= 4 {

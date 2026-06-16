@@ -552,7 +552,7 @@ fn write_block_par<W: Write + Send>(
 对于大文件，可以使用流式 API 避免将整个文件加载到内存:
 
 ```rust
-use reed_solomon_erasure::{ReedSolomon, StreamOptions};
+use rustfs_erasure_codec::{ReedSolomon, StreamOptions};
 use std::fs::File;
 use std::io::BufReader;
 

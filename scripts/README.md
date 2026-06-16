@@ -1,6 +1,6 @@
 # Scripts
 
-Build, benchmark, release validation, and report generation scripts for `reed-solomon-erasure`.
+Build, benchmark, release validation, and report generation scripts for `rustfs-erasure-codec`.
 
 ## Quick Reference
 

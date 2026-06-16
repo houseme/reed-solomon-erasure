@@ -1,6 +1,6 @@
 # Fuzz Testing
 
-This directory contains fuzz testing targets for the `reed-solomon-erasure` library using [`libfuzzer-sys`](https://github.com/rust-fuzz/libfuzzer) (via [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz)).
+This directory contains fuzz testing targets for the `rustfs-erasure-codec` library using [`libfuzzer-sys`](https://github.com/rust-fuzz/libfuzzer) (via [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz)).
 
 ## Targets
 
@@ -51,4 +51,4 @@ Crash artifacts from past fuzz runs are preserved in this directory (e.g., `cras
 ## Authors
 
 - Original fuzzing suite by Darren Ldl
-- Built on top of the `reed-solomon-erasure` library (see [../README.md](../README.md))
+- Built on top of the `rustfs-erasure-codec` library (see [../README.md](../README.md))

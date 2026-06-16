@@ -2,7 +2,7 @@
 
 ## 1. 文档目标
 
-本文档用于指导 `reed-solomon-erasure` 对标 MinIO EC 路线及其底层 `klauspost/reedsolomon` 的工程能力，形成一套完整、可执行、可验证、可分阶段落地的演进方案。
+本文档用于指导 `rustfs-erasure-codec` 对标 MinIO EC 路线及其底层 `klauspost/reedsolomon` 的工程能力，形成一套完整、可执行、可验证、可分阶段落地的演进方案。
 
 本文档关注四类目标：
 
@@ -48,7 +48,7 @@ MinIO 的 EC 在工程上有两个层次：
 
 ### 3.2 当前 crate
 
-当前 `reed-solomon-erasure` 的定位是底层通用编码库，而不是完整存储系统中的 EC 子系统。
+当前 `rustfs-erasure-codec` 的定位是底层通用编码库，而不是完整存储系统中的 EC 子系统。
 
 其优势在于：
 

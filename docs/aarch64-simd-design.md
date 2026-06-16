@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-This document describes the aarch64 SIMD backend architecture for GF(2^8) multiplication in `reed-solomon-erasure`.
+This document describes the aarch64 SIMD backend architecture for GF(2^8) multiplication in `rustfs-erasure-codec`.
 
 ## 2. Backend Hierarchy
 

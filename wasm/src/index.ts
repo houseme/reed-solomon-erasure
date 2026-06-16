@@ -36,9 +36,9 @@ export class ReedSolomonErasure {
     public static async fromCurrentDirectory(): Promise<ReedSolomonErasure> {
         if (currentScript) {
             const pathToCurrentScript = currentScript.src.split('/').slice(0, -1).join('/');
-            return ReedSolomonErasure.fromResponse(fetch(`${pathToCurrentScript}/reed_solomon_erasure_bg.wasm`));
+            return ReedSolomonErasure.fromResponse(fetch(`${pathToCurrentScript}/rustfs_erasure_codec_bg.wasm`));
         } else {
-            return ReedSolomonErasure.fromBytes(readFileSync(`${__dirname}/reed_solomon_erasure_bg.wasm`));
+            return ReedSolomonErasure.fromBytes(readFileSync(`${__dirname}/rustfs_erasure_codec_bg.wasm`));
         }
     }
 

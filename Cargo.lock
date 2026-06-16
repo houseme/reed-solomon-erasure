@@ -669,40 +669,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reed-solomon-erasure"
-version = "6.0.0"
-dependencies = [
- "cc",
- "criterion",
- "hashlink",
- "libc",
- "libm",
- "parking_lot",
- "quickcheck",
- "rand",
- "rayon",
- "smallvec",
- "spin",
-]
-
-[[package]]
-name = "reed-solomon-erasure-fuzz"
-version = "0.0.1"
-dependencies = [
- "libfuzzer-sys",
- "reed-solomon-erasure",
-]
-
-[[package]]
-name = "reed-solomon-erasure-wasm"
-version = "0.2.4"
-dependencies = [
- "reed-solomon-erasure",
- "wasm-bindgen",
- "wee_alloc",
-]
-
-[[package]]
 name = "regex"
 version = "1.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -730,6 +696,40 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "rustfs-erasure-codec"
+version = "7.0.0"
+dependencies = [
+ "cc",
+ "criterion",
+ "hashlink",
+ "libc",
+ "libm",
+ "parking_lot",
+ "quickcheck",
+ "rand",
+ "rayon",
+ "smallvec",
+ "spin",
+]
+
+[[package]]
+name = "rustfs-erasure-codec-fuzz"
+version = "0.0.1"
+dependencies = [
+ "libfuzzer-sys",
+ "rustfs-erasure-codec",
+]
+
+[[package]]
+name = "rustfs-erasure-codec-wasm"
+version = "0.2.4"
+dependencies = [
+ "rustfs-erasure-codec",
+ "wasm-bindgen",
+ "wee_alloc",
+]
 
 [[package]]
 name = "rustversion"

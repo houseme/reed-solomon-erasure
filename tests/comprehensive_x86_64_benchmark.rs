@@ -11,8 +11,8 @@ use std::hint::black_box;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use reed_solomon_erasure::galois_8::ReedSolomon;
-use reed_solomon_erasure::{CodecFamily, CodecOptions};
+use rustfs_erasure_codec::galois_8::ReedSolomon;
+use rustfs_erasure_codec::{CodecFamily, CodecOptions};
 
 use self::bench_common::make_full_shards;
 

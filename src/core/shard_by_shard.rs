@@ -22,10 +22,10 @@ use super::ReedSolomon;
 /// # Example
 ///
 /// ```
-/// # #[macro_use] extern crate reed_solomon_erasure;
-/// # use reed_solomon_erasure::*;
+/// # #[macro_use] extern crate rustfs_erasure_codec;
+/// # use rustfs_erasure_codec::*;
 /// # fn main () {
-/// use reed_solomon_erasure::galois_8::Field;
+/// use rustfs_erasure_codec::galois_8::Field;
 /// let r: ReedSolomon<Field> = ReedSolomon::new(3, 2).unwrap();
 ///
 /// let mut sbs = ShardByShard::new(&r);

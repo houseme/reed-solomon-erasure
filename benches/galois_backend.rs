@@ -3,7 +3,7 @@ mod common;
 use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use reed_solomon_erasure::galois_8;
+use rustfs_erasure_codec::galois_8;
 #[path = "../tests/common/mod.rs"]
 mod test_common;
 

@@ -1,4 +1,4 @@
-use reed_solomon_erasure::{Error, galois_8::ReedSolomon};
+use rustfs_erasure_codec::{Error, galois_8::ReedSolomon};
 use wasm_bindgen::prelude::*;
 
 #[global_allocator]

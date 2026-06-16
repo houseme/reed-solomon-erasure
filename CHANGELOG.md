@@ -1,17 +1,17 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project are documented in this file.
 
-- **Versions 0.9.0 – 6.0.0**: authored by [Darren Ldl](https://github.com/darrenldl), maintained by the [rust-rse](https://github.com/rust-rse) community (2021–2022).
-- **Versions > 6.0.0**: authored by [houseme](https://github.com/houseme).
-- Format follows [Keep a Changelog](https://keepachangelog.com/) for recent versions; older entries use a simpler flat-list format.
+- **Versions 0.9.0 – 6.0.0**: originally authored by [Darren Ldl](https://github.com/darrenldl), with later maintenance by the [rust-rse](https://github.com/rust-rse) community (2021–2022).
+- **Current mainline repository**: maintained under [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure).
+- Format follows [Keep a Changelog](https://keepachangelog.com/) for recent versions; older entries keep their simpler historical flat-list format.
 
 ---
 
 ## 7.0.0 (Unreleased)
 
-> Author: [houseme](https://github.com/houseme/reed-solomon-erasure) (2026-05-24 ~ present)
-> Branch: `main` (diverged from `master` / upstream `rust-rse`)
+> Maintained in [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
+> Current line: Rust 2024 rewrite and runtime SIMD/Leopard work
 
 ### Added
 - Runtime-dispatched GF(2^8) backend architecture under `src/galois_8/`, replacing the prior single-file layout with dedicated modules (`backend`, `policy`, `profile`, `scalar`, `legacy`, `x86`, `aarch64`).
@@ -140,7 +140,7 @@ All notable changes to this project will be documented in this file.
   - `-march=native` is not available for GCC on Android, see issue #23
 
 ## 3.1.0
-- Impl'd `std::error::Error` for `reed_solomon_erasure::Error` and `reed_solomon_erasure::SBSError`
+- Impl'd `std::error::Error` for `rustfs_erasure_codec::Error` and `rustfs_erasure_codec::SBSError`
   - See issue [#17](https://github.com/darrenldl/reed-solomon-erasure/issues/17), suggested by [DrPeterVanNostrand](https://github.com/DrPeterVanNostrand)
 - Added fuzzing suite
   - No code changes due to this as no bugs were found

@@ -1,4 +1,4 @@
-# reed-solomon-erasure vs klauspost/reedsolomon 功能对比分析
+# rustfs-erasure-codec vs klauspost/reedsolomon 功能对比分析
 
 > 文档日期：2026-05-31
 > Rust 项目版本：6.0.0
@@ -20,7 +20,7 @@
 
 ## 1. 总体概览
 
-| 维度 | klauspost/reedsolomon (Go) | reed-solomon-erasure (Rust) |
+| 维度 | klauspost/reedsolomon (Go) | rustfs-erasure-codec (Rust) |
 |------|---------------------------|----------------------------|
 | 语言 | Go | Rust (2024 edition, MSRV 1.95) |
 | 许可证 | MIT | MIT |

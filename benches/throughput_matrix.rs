@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use reed_solomon_erasure::galois_8::{ReedSolomon, RustNeonProfileStats, rust_neon_profile_stats};
-use reed_solomon_erasure::{
+use rustfs_erasure_codec::galois_8::{ReedSolomon, RustNeonProfileStats, rust_neon_profile_stats};
+use rustfs_erasure_codec::{
     CodecFamily, CodecOptions, ReconstructionCacheStats, RuntimeProfileStats,
 };
 

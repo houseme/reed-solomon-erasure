@@ -9,8 +9,8 @@
 //! # Example
 //!
 //! ```no_run
-//! use reed_solomon_erasure::galois_8::ReedSolomon;
-//! use reed_solomon_erasure::stream::StreamOptions;
+//! use rustfs_erasure_codec::galois_8::ReedSolomon;
+//! use rustfs_erasure_codec::stream::StreamOptions;
 //! use std::fs::File;
 //! use std::io::BufReader;
 //!

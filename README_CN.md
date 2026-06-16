@@ -1,320 +1,285 @@
-# reed-solomon-erasure
+# rustfs-erasure-codec
+
+[![CI](https://github.com/houseme/reed-solomon-erasure/actions/workflows/ci.yml/badge.svg)](https://github.com/houseme/reed-solomon-erasure/actions/workflows/ci.yml)
+[![Crates](https://img.shields.io/crates/v/rustfs-erasure-codec.svg)](https://crates.io/crates/rustfs-erasure-codec)
+[![Documentation](https://docs.rs/rustfs-erasure-codec/badge.svg)](https://docs.rs/rustfs-erasure-codec)
+[![dependency status](https://deps.rs/repo/github/houseme/reed-solomon-erasure/status.svg)](https://deps.rs/repo/github/houseme/reed-solomon-erasure)
+[![Crates.io Total Downloads](https://img.shields.io/crates/d/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
+[![Crates.io License](https://img.shields.io/crates/l/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
+[![Crates.io Version](https://img.shields.io/crates/v/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
 
 [English](README.md) | 中文
 
-[![CI](https://github.com/houseme/reed-solomon-erasure/actions/workflows/ci.yml/badge.svg)](https://github.com/houseme/reed-solomon-erasure/actions/workflows/ci.yml)
-[![Crates](https://img.shields.io/crates/v/reed-solomon-erasure.svg)](https://crates.io/crates/reed-solomon-erasure)
-[![Documentation](https://docs.rs/reed-solomon-erasure/badge.svg)](https://docs.rs/reed-solomon-erasure)
-[![dependency status](https://deps.rs/repo/github/houseme/reed-solomon-erasure/status.svg)](https://deps.rs/repo/github/houseme/reed-solomon-erasure)
+Reed-Solomon 纠删码的 Rust 实现。
 
-Reed-Solomon 纠删码的 Rust 实现
+当前仓库中的主线代码已经对齐到较新的 Rust 2024 重构版本，核心能力包括：
 
-> **项目来源：** 版本 0.9.0–6.0.0 由 [Darren Ldl](https://github.com/darrenldl) 创建（2017–2021），并由 [rust-rse](https://github.com/rust-rse) 社区维护（2021–2022）。版本 >6.0.0 由 [houseme](https://github.com/houseme) 开发（2026–至今），基于 Rust 2024 edition 重写，包含运行时 SIMD 分发、Leopard-GF8 编解码器以及 NEON/x86 SIMD 后端。
+- 经典 `GF(2^8)` 与 `GF(2^16)` Reed-Solomon 编解码
+- 面向 `galois_8` 的运行时 SIMD 后端分发
+- 多种经典矩阵模式
+- 面向高分片场景的 Leopard 编解码器族
+- 面向热点路径的低分配验证与恢复辅助 API
+- 流式接口、基准测试与发布校验脚本
 
-CI 已迁移至统一的 GitHub Actions 工作流（`.github/workflows/ci.yml`），包含测试、构建、安全检查、拼写检查和基于标签的发布阶段。
+WASM 绑定见 [wasm/README.md](wasm/README.md)。
 
-WASM 构建同样可用，详见下方 **WASM 用法** 章节。
+## 亮点
 
-本项目移植自 [BackBlaze 的 Java 实现](https://github.com/Backblaze/JavaReedSolomon)、[Klaus Post 的 Go 实现](https://github.com/klauspost/reedsolomon) 和 [Nicolas Trangez 的 Haskell 实现](https://github.com/NicolasT/reedsolomon)。
+- `galois_8::ReedSolomon` 是当前最主要、优化最完整的执行路径。
+- `galois_16::ReedSolomon` 仍可用于经典 `GF(2^16)` 场景。
+- `CodecOptions` 可统一配置编解码器族、矩阵模式、缓存策略和并行策略。
+- `VerifyWorkspace` 与 `ShardSlot<T>` 可降低重复调用时的分配成本。
+- `decode_idx(...)` 与 `reconstruct_some(...)` 适合经典族上的渐进式恢复或定向恢复。
+- `stream::StreamOptions` 支持大文件按块编码、校验和恢复。
 
-版本 `1.X.X` 移植自 BackBlaze 的实现，性能较低，因为可添加并行性的位置较少。
+## 安装
 
-版本 `>= 2.0.0` 移植自 Klaus Post 的实现。SIMD C 代码移植自 Nicolas Trangez 的实现，并做了少量修改。
-
-详见 [注意事项](#注意事项) 和 [许可证](#许可证) 章节。
-
-## WASM 用法
-
-详见 [wasm/README.md](wasm/README.md)（英文）。
-
-## Rust 用法
-
-在 `Cargo.toml` 中添加以下依赖：
+添加 crate：
 
 ```toml
 [dependencies]
-reed-solomon-erasure = "6.0"
+rustfs-erasure-codec = "7.0.0"
 ```
 
-或启用 SIMD 加速（推荐用于性能敏感场景）：
+如果关注吞吐，建议开启 SIMD：
 
 ```toml
 [dependencies]
-reed-solomon-erasure = { version = "6.0", features = ["simd-accel"] }
+rustfs-erasure-codec = { version = "7.0.0", features = ["simd-accel"] }
 ```
 
-> **注意：** `simd-accel` 特性现在优先使用 Rust 运行时分发的 SIMD 后端（x86_64 上的 SSSE3、AVX2、AVX512、GFNI；aarch64 上的 NEON）。捆绑的 `simd_c` 实现保留作为旧版回退。
->
-> 运行时可通过 `RSE_BACKEND_OVERRIDE` 环境变量强制指定后端，或在构建时通过 `RUST_REED_SOLOMON_ERASURE_ARCH` 配置旧版 C 后端的 `-march` 参数。
+也可以只开启目标平台需要的后端：
 
-## 示例
+```toml
+[dependencies]
+rustfs-erasure-codec = { version = "7.0.0", features = ["simd-neon"] }   # aarch64
+# rustfs-erasure-codec = { version = "7.0.0", features = ["simd-ssse3"] } # x86_64
+# rustfs-erasure-codec = { version = "7.0.0", features = ["simd-avx2"] }  # x86_64
+# rustfs-erasure-codec = { version = "7.0.0", features = ["simd-avx512"] }# x86_64
+# rustfs-erasure-codec = { version = "7.0.0", features = ["simd-gfni"] }  # x86_64
+# rustfs-erasure-codec = { version = "7.0.0", features = ["simd-vsx"] }   # powerpc64
+```
+
+说明：
+
+- `simd-accel` 是总开关，会启用所有 Rust/C SIMD 后端。
+- 运行时会自动探测 ISA，不支持时会安全回退到标量路径。
+- 默认启用 `std`；如需 `no_std`，请关闭默认特性。
+
+## 快速开始
 
 ```rust
-use reed_solomon_erasure::galois_8::ReedSolomon;
-use reed_solomon_erasure::VerifyWorkspace;
-// 或使用 Galois 2^16 后端
-// use reed_solomon_erasure::galois_16::ReedSolomon;
+use rustfs_erasure_codec::galois_8::ReedSolomon;
+use rustfs_erasure_codec::VerifyWorkspace;
 
 fn main() {
-    let r = ReedSolomon::new(3, 2).unwrap(); // 3 个数据分片，2 个校验分片
+    let rs = ReedSolomon::new(3, 2).unwrap();
 
-    let mut master_copy = vec![
-        vec![0, 1,  2,  3],
-        vec![4, 5,  6,  7],
+    let mut shards = vec![
+        vec![0, 1, 2, 3],
+        vec![4, 5, 6, 7],
         vec![8, 9, 10, 11],
-        vec![0, 0,  0,  0], // 最后 2 行是校验分片
-        vec![0, 0,  0,  0],
+        vec![0, 0, 0, 0],
+        vec![0, 0, 0, 0],
     ];
 
-    // 构建校验分片
-    r.encode(&mut master_copy).unwrap();
+    rs.encode(&mut shards).unwrap();
 
-    // 复制并转换为 Option 分片排列，用于 reconstruct_shards
-    let mut shards: Vec<_> = master_copy.iter().cloned().map(Some).collect();
+    let original = shards.clone();
+    let mut missing: Vec<Option<Vec<u8>>> = shards.into_iter().map(Some).collect();
+    missing[0] = None;
+    missing[4] = None;
 
-    // 最多可移除 2 个分片（可以是数据分片或校验分片）
-    shards[0] = None;
-    shards[4] = None;
+    rs.reconstruct(&mut missing).unwrap();
 
-    // 尝试重建丢失的分片
-    r.reconstruct(&mut shards).unwrap();
+    let rebuilt: Vec<Vec<u8>> = missing.into_iter().map(|shard| shard.unwrap()).collect();
+    let mut verify_workspace = VerifyWorkspace::new(&rs, rebuilt[0].len());
 
-    // 转换回普通分片排列
-    let result: Vec<_> = shards.into_iter().filter_map(|x| x).collect();
-
-    let mut verify_workspace = VerifyWorkspace::new(&r, master_copy[0].len());
-    assert!(r.verify_with_workspace(&result, &mut verify_workspace).unwrap());
-    assert_eq!(master_copy, result);
+    assert!(rs.verify_with_workspace(&rebuilt, &mut verify_workspace).unwrap());
+    assert_eq!(rebuilt, original);
 }
 ```
 
-对于重复的验证调用，推荐使用 `verify_with_workspace` 或 `verify_with_buffer`，而非普通的 `verify`，以便在多次调用间复用校验分片的临时缓冲区。
+如果 `verify(...)` 需要高频调用，优先使用 `verify_with_workspace(...)`
+或 `verify_with_buffer(...)` 来复用校验分片临时缓冲区。
 
-对于 `galois_8` 上的 SIMD 敏感工作负载，可以使用 `reed_solomon_erasure::galois_8::alloc_aligned_shards(...)` 或 `galois_8::ReedSolomon::alloc_aligned(...)` 分配 64 字节对齐的分片。这些辅助函数返回实现了 `AsRef<[u8]>` 和 `AsMut<[u8]>` 的 `AlignedShard` 缓冲区，可直接传递给现有的编码/验证 API，无需更改编解码器输出语义。
+## 低分配辅助接口
+
+对于重复恢复场景，`ShardSlot<T>` 可以避免每次丢片后重新分配缓冲区：
+
+```rust
+use rustfs_erasure_codec::galois_8::{ReedSolomon, mark_missing_slots, shards_to_slots};
+
+fn main() {
+    let rs = ReedSolomon::new(4, 2).unwrap();
+    let mut shards = vec![
+        vec![0, 1, 2, 3],
+        vec![4, 5, 6, 7],
+        vec![8, 9, 10, 11],
+        vec![12, 13, 14, 15],
+        vec![0, 0, 0, 0],
+        vec![0, 0, 0, 0],
+    ];
+
+    rs.encode(&mut shards).unwrap();
+
+    let mut slots = shards_to_slots(&shards);
+    mark_missing_slots(&mut slots, &[1, 5]);
+    rs.reconstruct(&mut slots).unwrap();
+
+    assert!(slots[1].is_present());
+    assert!(slots[5].is_present());
+}
+```
+
+对 `galois_8` 的 SIMD 敏感负载，还可以使用下列接口分配 64 字节对齐分片：
+
+- `rustfs_erasure_codec::galois_8::alloc_aligned_shards(...)`
+- `galois_8::ReedSolomon::alloc_aligned(...)`
 
 ## 编解码器族
 
-`CodecOptions::codec_family` 显式指定算法族：
+`CodecOptions::codec_family` 用于选择算法族：
 
-- `CodecFamily::Classic`
-  - 默认族
-  - 保持当前经典行为和兼容性假设
-- `CodecFamily::LeopardGF8`
-  - 保留用于显式高分片数的 Leopard GF(2^8) 族
-  - 现在可以作为显式内部族原型构建
-  - 暴露设置元数据，如 `leopard_setup_matrix_shape()`
-  - `encode(...)`、`encode_sep(...)` 和 `encode_opt(...)` 现在连接到显式的族特定原型路径
-  - `verify`、`reconstruct`、`update` 和 `decode_idx` 仍返回 `Error::UnsupportedLeopardPrototype`
-- `CodecFamily::LeopardGF16`
-  - 保留用于未来的 Leopard GF(2^16) 族
-  - 目前仅作为原型骨架暴露，返回 `Error::UnsupportedLeopardPrototype`
+| 编解码器族         | 状态                   | 说明                                                                                                                 |
+|---------------|----------------------|--------------------------------------------------------------------------------------------------------------------|
+| `Classic`     | 完整支持                 | 默认族。支持 `update`、`encode_single`、`decode_idx`、`reconstruct_some` 以及矩阵模式切换。                                          |
+| `LeopardGF8`  | 适用于 `galois_8` 高分片场景 | 基于 FFT 的 `GF(2^8)` Leopard 路径。要求分片长度是 64 字节的整数倍，总分片数不超过 256。`update`、`encode_single*`、`decode_idx` 等经典族专属 API 不支持。 |
+| `LeopardGF16` | 适用于更高总分片数场景          | 基于 FFT 的 Leopard 族。`update`、`encode_single*`、`decode_idx` 等经典族专属 API 不支持。                                          |
 
-这意味着经典用户不会被静默切换到其他族。任何未来的 Leopard 使用都将是显式选择加入的。
+示例：
+
+```rust
+use rustfs_erasure_codec::galois_8::ReedSolomon;
+use rustfs_erasure_codec::{CodecFamily, CodecOptions};
+
+let rs = ReedSolomon::with_options(
+32,
+16,
+CodecOptions {
+codec_family: CodecFamily::LeopardGF8,
+..CodecOptions::default ()
+},
+).unwrap();
+```
 
 ## 矩阵模式
 
-`CodecOptions::matrix_mode` 现在支持多种矩阵族：
+`CodecOptions::matrix_mode` 只对 `CodecFamily::Classic` 生效：
 
-- `MatrixMode::Vandermonde`
-  - 默认模式
-  - 保持经典输出行为
-- `MatrixMode::Cauchy`
-  - 替代编码矩阵
-  - 输出与默认模式不兼容
-- `MatrixMode::JerasureLike`
-  - 受 Jerasure 风格布局启发的替代编码矩阵
-  - 输出与默认模式不兼容
-- `MatrixMode::Custom`
-  - 需要通过 `ReedSolomon::with_custom_matrix(...)` 显式指定校验行
-  - `with_options(... MatrixMode::Custom ...)` 不带矩阵载荷时返回 `Error::InvalidCustomMatrix`
+- `Vandermonde`：默认经典行为
+- `Cauchy`：替代编码矩阵
+- `JerasureLike`：Jerasure 风格矩阵布局
+- `Custom`：通过 `ReedSolomon::with_custom_matrix(...)` 显式提供矩阵行
 
-如果需要与现有经典 Reed-Solomon 载荷或 MinIO 导向的经典输出期望兼容，请使用 `MatrixMode::Vandermonde`。
+如果你需要兼容已有经典载荷格式，建议继续使用 `MatrixMode::Vandermonde`。
 
-`with_custom_matrix(...)` 最简示例：
+最小自定义矩阵示例：
 
 ```rust
-use reed_solomon_erasure::{CodecOptions, galois_8::ReedSolomon};
+use rustfs_erasure_codec::galois_8::ReedSolomon;
+use rustfs_erasure_codec::CodecOptions;
 
-// 3 个数据分片和 2 个校验分片的自定义校验行示例。
-// 这些行定义了生成矩阵的校验部分。
 let custom_rows = vec![vec![1u8, 1, 1], vec![1u8, 2, 4]];
-
-let custom = ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default()).unwrap();
-
-let mut shards = vec![
-    vec![1u8, 2, 3, 4],
-    vec![5u8, 6, 7, 8],
-    vec![9u8, 10, 11, 12],
-    vec![0u8; 4],
-    vec![0u8; 4],
-];
-custom.encode(&mut shards).unwrap();
-assert!(custom.verify(&shards).unwrap());
+let rs = ReedSolomon::with_custom_matrix(3, 2, & custom_rows, CodecOptions::default ()).unwrap();
 ```
 
-## 渐进式解码
+## 进阶 API
 
-对于多步恢复流程，`decode_idx(...)` 允许在输入分片到达时逐步累积重建贡献，而不需要一次性调用 `reconstruct(...)`：
+### 渐进式恢复
 
-```rust
-use reed_solomon_erasure::galois_8::ReedSolomon;
+`decode_idx(...)` 仅适用于经典 `galois_8::ReedSolomon`，适合输入分片分批到达、无法一次性执行完整 `reconstruct(...)` 的场景。
 
-let rs = ReedSolomon::new(5, 3).unwrap();
+### 定向恢复
 
-let mut shards = vec![
-    vec![1u8, 2, 3, 4],
-    vec![5u8, 6, 7, 8],
-    vec![9u8, 10, 11, 12],
-    vec![13u8, 14, 15, 16],
-    vec![17u8, 18, 19, 20],
-    vec![0u8; 4],
-    vec![0u8; 4],
-    vec![0u8; 4],
-];
-rs.encode(&mut shards).unwrap();
+`reconstruct_some(...)` 只恢复你标记为必需的分片，适合不需要还原整条 stripe 的场景。
 
-// 增量重建分片 1 和 4。
-let mut dst = vec![None; 8];
-dst[1] = Some(vec![0u8; 4]);
-dst[4] = Some(vec![0u8; 4]);
+### 流式处理
 
-// 标记为 `true` 的位置预期在多次调用中作为输入到达。
-let expect_input = vec![true, false, true, true, false, true, true, false];
+流式接口位于 `rustfs_erasure_codec::stream`，默认 `std` 特性下可用：
 
-let mut first_input = vec![None; 8];
-first_input[0] = Some(shards[0].clone());
-first_input[2] = Some(shards[2].clone());
-rs.decode_idx(&mut dst, Some(&expect_input), &first_input).unwrap();
+- `encode_stream(...)`
+- `verify_stream(...)`
+- `reconstruct_stream(...)`
 
-let mut second_input = vec![None; 8];
-second_input[3] = Some(shards[3].clone());
-second_input[5] = Some(shards[5].clone());
-second_input[6] = Some(shards[6].clone());
-rs.decode_idx(&mut dst, Some(&expect_input), &second_input).unwrap();
+当数据量太大、不适合整组分片常驻内存时，优先使用它。`StreamOptions`
+默认块大小是 4 MiB，可按吞吐和内存占用自行调节。
 
-assert_eq!(dst[1].as_deref(), Some(shards[1].as_slice()));
-assert_eq!(dst[4].as_deref(), Some(shards[4].as_slice()));
-```
+## 运行时后端控制
 
-`decode_idx(...)` 还支持合并模式：传入 `expect_input = None`，将另一个部分解码结果 XOR 累积到目标缓冲区中。
+`galois_8` 主路径支持运行时后端查看与强制覆盖。
 
-## 自行测试性能
+环境变量：
 
-您可以使用标准 `cargo bench` 命令快速测试不同配置下的性能（例如数据/校验分片比率、并行参数）。
+- `RSE_BACKEND_OVERRIDE`：强制指定后端，例如 `scalar`、`rust-neon`、`rust-avx2`、`rust-avx512`、`rust-gfni-avx2`、
+  `rust-gfni-avx512`、`rust-ssse3`、`rust-vsx`、`simd-c`
+- `RSE_STRICT_BACKEND_OVERRIDE=1`：若请求后端未生效，则让校验失败
+- `RUST_REED_SOLOMON_ERASURE_ARCH`：调整 legacy C 后端的构建目标
 
-## 性能
+公开辅助函数：
 
-版本 1.X.X 和 2.0.0 不使用 SIMD。版本 2.1.0 起使用 Nicolas 的 C 代码进行 SIMD 操作。
+- `galois_8::active_backend_name()`
+- `galois_8::active_backend_kind()`
+- `galois_8::active_backend_id()`
 
-版本 >= 4.0.0 已经过大幅架构重构，支持运行时 SIMD 分发。详细的基准测试方法和结果请参阅 [`docs/benchmark-methodology.md`](docs/benchmark-methodology.md)。
+## 调优选项
 
-### 参考基准测试
+`CodecOptions` 暴露了几个常用调优项：
 
-| 平台 | CPU | 后端 | 编码 10x2x1M | 重建 10x2x1M |
-|---|---|---|---|---|
-| x86_64 | AMD EPYC 9V45 | AVX2 | ~12 GB/s | ~10 GB/s |
-| aarch64 | Apple M5 Max | NEON | ~10 GB/s | ~8 GB/s |
+- `fast_one_parity`：当 `parity_shards == 1` 时启用 XOR 快路径
+- `inversion_cache`：开启或关闭解码矩阵缓存
+- `inversion_cache_capacity`：显式控制缓存容量
+- `max_parallel_jobs`：限制单个 codec 实例的并行度
 
-> 以上为冒烟基准测试的近似数据。实际性能取决于分片数量、分片大小和 CPU。请运行 `cargo bench` 获取您硬件上的精确数据。
+并行策略也可通过环境变量控制：
 
-## 基准测试
+- `RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES`
+- `RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB`
+- `RS_PARALLEL_POLICY_MAX_JOBS`
+
+## 基准测试与校验
+
+常见工作流：
 
 ```bash
-# 运行所有基准测试
-cargo bench
+# 运行测试
+cargo test
 
-# 启用 SIMD 加速运行基准测试
+# 运行基准
 cargo bench --features simd-accel
 
-# 运行基准冒烟测试（快速配置）
-VALIDATION_PROFILE=fast cargo test --test benchmark_smoke
+# 执行发布校验流程
+bash scripts/release-check.sh
 
-# 运行扩展冒烟测试
-VALIDATION_PROFILE=extended cargo test --test benchmark_smoke
+# 执行扩展校验流程
+VALIDATION_PROFILE=extended bash scripts/release-check.sh
+
+# 采集 x86_64 SIMD 基准产物
+bash scripts/collect_x86_simd_benchmarks.sh
 ```
 
-详见 [`docs/benchmark-methodology.md`](docs/benchmark-methodology.md)（英文）了解完整的方法论、配置和结果解读。
+推荐同时参考：
 
-## 更新日志
+- [docs/benchmark-methodology.md](docs/benchmark-methodology.md)
+- [docs/README-performance-index.md](docs/README-performance-index.md)
+- [scripts/README.md](scripts/README.md)
+- [docs/README.md](docs/README.md)
 
-[更新日志](CHANGELOG.md)
+## 项目来源
+
+版本 `0.9.0` 到 `6.0.0` 最初由
+[Darren Ldl](https://github.com/darrenldl) 创建，并由
+[rust-rse](https://github.com/rust-rse) 社区继续维护。当前仓库中的主线代码则包含
+[houseme](https://github.com/houseme) 维护的 Rust 2024 重构版本，以及新的 SIMD /
+Leopard 相关工作。
 
 ## 贡献
 
-欢迎贡献。提交贡献即表示您同意将您的作品按照本项目 LICENSE 文件中声明的相同许可证进行授权。
-
-## 致谢
-
-#### 2026 年重大重写
-
-感谢 [houseme](https://github.com/houseme) 对库的重大重写：
-
-- 迁移至 Rust 2024 edition（rust-version 1.95）
-- 运行时分发的 GF(2^8) 后端架构，包含 SIMD 后端（SSSE3、AVX2、AVX512、GFNI、NEON）
-- Leopard-GF8 编解码器族实现
-- 全面的基准测试、CI 和发布自动化基础设施
-- 详尽的文档和设计文档
-
-#### 库重构和 Galois 2^16 后端
-
-感谢以下人员对库的重构和引入 Galois 2^16 后端的贡献：
-
-  - [@drskalman](https://github.com/drskalman)
-
-  - Jeff Burdges [@burdges](https://github.com/burdges)
-
-  - Robert Habermeier [@rphmeier](https://github.com/rphmeier)
-
-#### WASM 构建
-
-感谢 Nazar Mokrynskyi [@nazar-pc](https://github.com/nazar-pc) 提交的 WASM 构建包。
-
-他是 `wasm` 文件夹中文件的原始作者。文件后续可能已被修改。
-
-#### AVX512 支持
-
-感谢 [@sakridge](https://github.com/sakridge) 添加 AVX512 支持（见 [PR #69](https://github.com/darrenldl/reed-solomon-erasure/pull/69)）
-
-#### build.rs 改进
-
-感谢 [@ryoqun](https://github.com/ryoqun) 在交叉编译场景下改进库的可用性（见 [PR #75](https://github.com/darrenldl/reed-solomon-erasure/pull/75)）
-
-#### no_std 支持
-
-感谢 Nazar Mokrynskyi [@nazar-pc](https://github.com/nazar-pc) 添加 `no_std` 支持（见 [PR #90](https://github.com/darrenldl/reed-solomon-erasure/pull/90)）
-
-#### 测试人员
-
-感谢以下人员在各种平台上进行测试和基准测试：
-
-  - Laurențiu Nicola [@lnicola](https://github.com/lnicola/)（平台：Linux、Intel）
-
-  - Roger Andersen [@hexjelly](https://github.com/hexjelly)（平台：Windows、AMD）
-
-## 注意事项
-
-#### 代码质量审查
-
-如果您想评估本库的代码质量，可以参考审计注释。
-
-搜索 "AUDIT" 即可查看面向代码审查的开发笔记。
-
-#### 实现说明
-
-`1.X.X` 实现主要移植自 [BackBlaze 的 Java 实现](https://github.com/Backblaze/JavaReedSolomon)。
-
-`2.0.0` 起主要移植自 [Klaus Post 的 Go 实现](https://github.com/klauspost/reedsolomon)，C 文件移植自 [Nicolas Trangez 的 Haskell 实现](https://github.com/NicolasT/reedsolomon)。
-
-`>= 7.0.0` 引入了运行时分发的 GF(2^8) 后端架构，包含 Rust SIMD 实现（x86_64 上的 SSSE3、AVX2、AVX512、GFNI；aarch64 上的 NEON）、Leopard-GF8 编解码器族、多种矩阵模式（Vandermonde、Cauchy、JerasureLike、Custom）以及通过 `decode_idx` 实现的渐进式解码。
-
-所有版本的测试套件均以 [Klaus Post 的 Go 实现](https://github.com/klauspost/reedsolomon) 为基础。
+欢迎贡献。对于后端相关、性能敏感或基准敏感的修改，建议附带聚焦的验证结果。
 
 ## 许可证
 
-#### Nicolas Trangez 的 Haskell Reed-Solomon 实现
+本项目采用 MIT License，详见 [LICENSE](LICENSE)。
 
-用于 SIMD 操作的 C 文件（无/少量修改）复制自 [Nicolas Trangez 的 Haskell 实现](https://github.com/NicolasT/reedsolomon)，遵循与 NicolasT 项目相同的 MIT 许可证。
-
-#### 总结
-
-所有文件均在 MIT 许可证下发布。
+仓库内打包的 `simd_c` 源码派生自
+[Nicolas Trangez 的 Haskell 实现](https://github.com/NicolasT/reedsolomon)，同样遵循 MIT License。
