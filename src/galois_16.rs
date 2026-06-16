@@ -238,7 +238,7 @@ impl Element {
     fn polynom_div(self, rhs: Self) -> (Element, Element) {
         let divisor_degree = rhs.degree();
         if rhs.is_zero() {
-            return (Element::zero(), self);
+            (Element::zero(), self)
         } else if self.degree() < divisor_degree {
             // If divisor's degree (len-1) is bigger, all dividend is a remainder
             (Element::zero(), self)

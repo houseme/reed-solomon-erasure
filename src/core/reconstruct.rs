@@ -306,8 +306,7 @@ impl<F: Field> ReedSolomon<F> {
             false,
         );
 
-        let data_decode_matrix = self
-            .get_data_decode_matrix(&valid_indices, &invalid_indices)?;
+        let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices)?;
 
         if !missing_data_indices.is_empty() {
             #[cfg(feature = "std")]
@@ -532,8 +531,8 @@ impl<F: Field> ReedSolomon<F> {
                 return Ok(());
             }
 
-            let data_decode_matrix = self
-                .get_data_decode_matrix(&valid_indices, &invalid_indices)?;
+            let data_decode_matrix =
+                self.get_data_decode_matrix(&valid_indices, &invalid_indices)?;
             let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
                 SmallVec::with_capacity(required_missing_data_indices.len());
             for &idx in &required_missing_data_indices {
@@ -723,13 +722,13 @@ impl<F: Field> ReedSolomon<F> {
                 .fetch_add(1, Ordering::Relaxed);
 
             let mut cache = self.data_decode_matrix_cache.lock();
-        if let Some(entry) = cache.get(invalid_indices) {
-            #[cfg(feature = "std")]
-            self.reconstruction_cache_metrics
-                .hits
-                .fetch_add(1, Ordering::Relaxed);
+            if let Some(entry) = cache.get(invalid_indices) {
+                #[cfg(feature = "std")]
+                self.reconstruction_cache_metrics
+                    .hits
+                    .fetch_add(1, Ordering::Relaxed);
                 return Ok(entry.clone());
-        }
+            }
 
             #[cfg(feature = "std")]
             self.reconstruction_cache_metrics
@@ -743,9 +742,11 @@ impl<F: Field> ReedSolomon<F> {
                 sub_matrix.set(sub_matrix_row, c, self.matrix.get(valid_index, c));
             }
         }
-        let data_decode_matrix = Arc::new(sub_matrix.invert().map_err(|_| {
-            Error::InvalidCustomMatrix
-        })?);
+        let data_decode_matrix = Arc::new(
+            sub_matrix
+                .invert()
+                .map_err(|_| Error::InvalidCustomMatrix)?,
+        );
         if self.options.inversion_cache {
             let data_decode_matrix = data_decode_matrix.clone();
             let mut cache = self.data_decode_matrix_cache.lock();
@@ -868,8 +869,7 @@ impl<F: Field> ReedSolomon<F> {
             );
         }
 
-        let data_decode_matrix = self
-            .get_data_decode_matrix(&valid_indices, &invalid_indices)?;
+        let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices)?;
 
         let mut matrix_rows: SmallVec<[&[F::Elem]; 32]> =
             SmallVec::with_capacity(self.parity_shard_count);

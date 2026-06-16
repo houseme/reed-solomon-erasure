@@ -65,15 +65,18 @@ impl<F: Field> ReedSolomon<F> {
         parity_rows
     }
 
-    pub(crate) fn build_matrix(data_shards: usize, total_shards: usize) -> Result<Matrix<F>, Error> {
+    pub(crate) fn build_matrix(
+        data_shards: usize,
+        total_shards: usize,
+    ) -> Result<Matrix<F>, Error> {
         let vandermonde = Matrix::vandermonde(total_shards, data_shards);
 
         let top = vandermonde.sub_matrix(0, 0, data_shards, data_shards);
-        let top_inverted = top.invert().map_err(|_| {
-            Error::InvalidCustomMatrix
-        })?;
+        let top_inverted = top.invert().map_err(|_| Error::InvalidCustomMatrix)?;
 
-        vandermonde.multiply(&top_inverted).map_err(|_| Error::InvalidCustomMatrix)
+        vandermonde
+            .multiply(&top_inverted)
+            .map_err(|_| Error::InvalidCustomMatrix)
     }
 
     pub(crate) fn build_cauchy_matrix(
@@ -226,9 +229,7 @@ impl<F: Field> ReedSolomon<F> {
         match options.matrix_mode {
             MatrixMode::Vandermonde => Self::build_matrix(data_shards, total_shards),
             MatrixMode::Cauchy => Self::build_cauchy_matrix(data_shards, total_shards),
-            MatrixMode::JerasureLike => {
-                Self::build_jerasure_like_matrix(data_shards, total_shards)
-            }
+            MatrixMode::JerasureLike => Self::build_jerasure_like_matrix(data_shards, total_shards),
             MatrixMode::Custom => Err(Error::InvalidCustomMatrix),
         }
     }

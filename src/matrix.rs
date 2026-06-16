@@ -337,8 +337,11 @@ mod tests {
 
     #[test]
     fn test_inconsistent_row_sizes() {
-        let err =
-            Matrix::<galois_8::Field>::new_with_data(vec![vec![1, 0, 0], vec![0, 1], vec![0, 0, 1]]);
+        let err = Matrix::<galois_8::Field>::new_with_data(vec![
+            vec![1, 0, 0],
+            vec![0, 1],
+            vec![0, 0, 1],
+        ]);
 
         assert_eq!(err, Err(Error::InconsistentRowSizes));
     }
@@ -418,6 +421,9 @@ mod tests {
 
     #[test]
     fn test_matrix_inverse_singular() {
-        assert_eq!(matrix!([4, 2], [12, 6]).invert(), Err(Error::SingularMatrix));
+        assert_eq!(
+            matrix!([4, 2], [12, 6]).invert(),
+            Err(Error::SingularMatrix)
+        );
     }
 }
