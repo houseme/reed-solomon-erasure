@@ -50,11 +50,23 @@ RSE_WRITE_PROFILE_REPORT=1 cargo bench
 
 ### aarch64 (Apple Silicon)
 
-**Hardware**: Apple Silicon (`aarch64-macos-unknown`)
+**Hardware**: Apple Silicon MacBook Pro
 **Backend**: `rust-neon` (auto-selected)
 **Feature**: `simd-neon`
 **Artifact source**: `benchmarks/small-file/2026-05-27-aarch64-apple-silicon-extended.{json,csv}`
 **Profile**: `extended` (`iterations = 5`)
+
+**Benchmark Environment**
+- Target triple: `aarch64-macos-unknown`
+- Features: `std|simd-accel`
+- Backend kind: `RustSimd`
+- Backend override: `auto` (`override_honored = true`)
+- Benchmark metrics feature: disabled
+- Machine note: Apple Silicon MacBook Pro
+- CPU / SoC exact model: not recorded in the benchmark artifact
+- Memory size: not recorded in the benchmark artifact
+- Rust toolchain version: not recorded in the benchmark artifact
+- Power / thermal state: not recorded in the benchmark artifact
 
 | Config | Shard Size | Encode (GiB/s) | Reconstruct (GiB/s) |
 |--------|------------|----------------|---------------------|
@@ -78,6 +90,17 @@ large-block behavior.
 **Hardware**: AMD EPYC 9V45 (96-core)
 **Backend**: `rust-avx2` (auto-selected in the archived cross-platform sample)
 **Feature**: `simd-avx2`
+
+**Benchmark Environment**
+- CPU: AMD EPYC 9V45
+- Logical core note: 96-core processor
+- Target triple: `x86_64-linux-unknown`
+- Features: `std|simd-accel`
+- Expected default backend: `rust-avx2`
+- Backend override: `auto` in the archived small-file sample
+- Machine-level `lscpu` details: recorded in the x86 machine JSON and summary docs
+- Rust toolchain version: not summarized in this document
+- Memory size: not summarized in this document
 
 | Config | Shard Size | Encode (GiB/s) | Reconstruct (GiB/s) |
 |--------|------------|----------------|---------------------|
@@ -122,6 +145,23 @@ Expected backends:
 | `RSE_WRITE_PROFILE_REPORT` | Export profiling data as JSON |
 | `VALIDATION_PROFILE` | Smoke test profile (`fast`, `extended`) |
 | `RS_PARALLEL_POLICY_MAX_JOBS` | Limit parallelism for reproducible results |
+
+### Why Hardware Context Matters
+
+The current report mixes data from different hosts and collection styles:
+
+- Apple Silicon numbers come from small-file `extended` smoke artifacts
+- AMD EPYC numbers combine archived `10x4` small-file samples and broader x86 benchmark summaries
+
+When absolute throughput differs substantially, read the results together with:
+
+- CPU / SoC class
+- target triple
+- selected SIMD backend
+- profile / iteration count
+- whether the source is a smoke artifact or a Criterion benchmark
+
+Without that context, large gaps are easy to misread as regressions when they may simply reflect hardware class, runtime backend selection, or workload shape.
 
 ---
 
