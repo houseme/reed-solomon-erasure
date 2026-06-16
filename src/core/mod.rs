@@ -76,15 +76,26 @@ pub struct ReedSolomon<F: Field> {
     runtime_profile_metrics: RuntimeProfileMetrics,
 }
 
-impl<F: Field> Clone for ReedSolomon<F> {
+impl<F: Field + Clone> Clone for ReedSolomon<F> {
     fn clone(&self) -> ReedSolomon<F> {
-        match ReedSolomon::with_options(
-            self.data_shard_count,
-            self.parity_shard_count,
-            self.options,
-        ) {
-            Ok(codec) => codec,
-            Err(_) => panic!("existing codec invariants must produce a valid clone"),
+        let options = self.options;
+        #[cfg(feature = "std")]
+        let policy_cache = self.policy_cache;
+        ReedSolomon {
+            data_shard_count: self.data_shard_count,
+            parity_shard_count: self.parity_shard_count,
+            total_shard_count: self.total_shard_count,
+            codec_family: self.codec_family,
+            family_state: self.family_state.clone(),
+            matrix: self.matrix.clone(),
+            options,
+            #[cfg(feature = "std")]
+            policy_cache,
+            data_decode_matrix_cache: Mutex::new(LruCache::new(options.inversion_cache_capacity)),
+            #[cfg(feature = "std")]
+            reconstruction_cache_metrics: ReconstructionCacheMetrics::default(),
+            #[cfg(feature = "std")]
+            runtime_profile_metrics: RuntimeProfileMetrics::default(),
         }
     }
 }

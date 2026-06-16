@@ -116,15 +116,32 @@ pub trait Field: Sized {
 
     fn nth_internal(n: usize) -> Self::Elem;
 
-    /// Yield the nth element of the field. Panics if n >= ORDER.
+    /// Return `Some` when `n < ORDER`, otherwise `None`.
+    fn nth_checked(n: usize) -> Option<Self::Elem> {
+        if n >= Self::ORDER {
+            None
+        } else {
+            Some(Self::nth_internal(n))
+        }
+    }
+
+    /// Yield the nth element of the field.
+    ///
+    /// For out-of-range `n`, returns a wrapping value in production and triggers a
+    /// debug assertion.
     /// Assignment is arbitrary but must be unique to `n`.
     fn nth(n: usize) -> Self::Elem {
-        if n >= Self::ORDER {
-            let pow = log2(Self::ORDER as f32) as usize;
-            panic!("{} out of bounds for GF(2^{}) member", n, pow)
-        }
-
-        Self::nth_internal(n)
+        Self::nth_checked(n).unwrap_or_else(|| {
+            debug_assert!(
+                false,
+                "Field::nth received out-of-range index: {} for GF(2^{}) order {}",
+                n,
+                log2(Self::ORDER as f32) as usize,
+                Self::ORDER
+            );
+            let fallback_n = n % Self::ORDER.max(1);
+            Self::nth_internal(fallback_n)
+        })
     }
 
     /// Multiply a slice of elements by another. Writes into the output slice.

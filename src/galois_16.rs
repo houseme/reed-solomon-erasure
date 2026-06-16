@@ -189,7 +189,10 @@ impl Element {
         if self.is_zero() {
             let rhs = match rhs {
                 EgcdRhs::Element(elem) => elem,
-                EgcdRhs::ExtPoly => panic!("const_egcd invoked with divisible"),
+                EgcdRhs::ExtPoly => {
+                    debug_assert!(false, "const_egcd invoked with divisible");
+                    Element::constant(1)
+                }
             };
             (rhs.0[1], Element::constant(0), Element::constant(1))
         } else {
