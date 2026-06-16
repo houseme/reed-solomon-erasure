@@ -101,6 +101,35 @@ fn main() {
 For repeated verify calls, prefer `verify_with_workspace` or `verify_with_buffer`
 over plain `verify`, so the parity scratch buffer can be reused across calls.
 
+For repeated reconstruct calls, prefer `ShardSlot<Vec<u8>>` over
+`Option<Vec<u8>>` when you can keep ownership of the shard buffers. This avoids
+reallocating missing shards on every call:
+
+```rust
+use reed_solomon_erasure::galois_8::{ReedSolomon, mark_missing_slots, shards_to_slots};
+
+fn main() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+
+    let mut shards = vec![
+        vec![0, 1, 2, 3],
+        vec![4, 5, 6, 7],
+        vec![8, 9, 10, 11],
+        vec![0, 0, 0, 0],
+        vec![0, 0, 0, 0],
+        vec![0, 0, 0, 0],
+    ];
+    r.encode(&mut shards).unwrap();
+
+    let mut slots = shards_to_slots(&shards);
+    mark_missing_slots(&mut slots, &[0, 5]);
+
+    r.reconstruct(&mut slots).unwrap();
+    assert!(slots[0].is_present());
+    assert!(slots[5].is_present());
+}
+```
+
 ### LeopardGF8 Example
 
 ```rust

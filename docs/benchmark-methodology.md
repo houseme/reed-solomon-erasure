@@ -100,6 +100,14 @@ Cache analysis outputs (tests):
 - `target/benchmark-smoke/reconstruction-hotspot-results.json`
 - `target/benchmark-smoke/reconstruction-hotspot-results.csv`
 
+Artifact history rule:
+
+- benchmark-smoke JSON/CSV artifacts are append-history ledgers, not single-run
+  overwrite snapshots
+- repeated executions append new records to the existing file
+- when comparing one run to another, either filter by the newest appended rows
+  or archive/copy the file before the next run
+
 These artifact-producing reconstruction benchmarks are marked `#[ignore]` on purpose.
 Run them explicitly so normal `cargo test` stays bounded and does not mix
 correctness validation with long-running CPU-saturating workload measurement.
@@ -195,6 +203,7 @@ Notes:
 4. For small-file decisions, prioritize `ns_per_iter` over `throughput_mb_s`, especially for `1 KiB` to `64 KiB`.
 5. Use median of repeated runs for decisions; avoid single-run conclusions.
 6. If only `1 KiB` or `4 KiB` cases look bad while neighboring points are stable, rerun that case in isolation with a higher iteration count before treating it as a real regression.
+7. If a full `extended` run shows broad small-file regressions but targeted filtered reruns disagree, treat the filtered reruns as the more trustworthy signal for code-change decisions.
 
 Example drill-down:
 

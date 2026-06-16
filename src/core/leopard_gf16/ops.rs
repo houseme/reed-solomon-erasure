@@ -110,7 +110,7 @@ pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
         unsafe { core::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), byte_len) };
     let src_bytes = unsafe { core::slice::from_raw_parts(src.as_ptr().cast::<u8>(), byte_len) };
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe {
@@ -492,7 +492,7 @@ pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
     debug_assert!(src.len().is_multiple_of(64));
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe {
@@ -576,7 +576,7 @@ pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
     debug_assert!(src.len().is_multiple_of(64));
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe {

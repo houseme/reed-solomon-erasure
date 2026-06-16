@@ -12,7 +12,10 @@ mod profile;
 mod scalar;
 pub(crate) mod x86;
 
-pub use aligned::{AlignedShard, SHARD_ALIGNMENT, alloc_aligned_shards};
+pub use aligned::{
+    AlignedShard, SHARD_ALIGNMENT, alloc_aligned_shards, alloc_shard_slots, mark_missing_slots,
+    shards_to_slots,
+};
 pub use backend::{BackendId, BackendKind};
 #[cfg(feature = "std")]
 pub(crate) use policy::resolve_runtime_parallel_policy_cache;

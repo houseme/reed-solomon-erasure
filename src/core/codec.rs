@@ -337,6 +337,54 @@ impl<F: Field> ReedSolomon<F> {
         self.runtime_profile_metrics.reset();
     }
 
+    #[cfg(feature = "std")]
+    pub(crate) fn record_reconstruct_entry_path(&self, parallel: bool) {
+        self.runtime_profile_metrics
+            .record_reconstruct_entry(parallel);
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn record_reconstruct_opt_fallback_serial_path(&self) {
+        self.runtime_profile_metrics
+            .record_reconstruct_opt_fallback_serial();
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn record_reconstruct_runtime(
+        &self,
+        data_only: bool,
+        missing_data_count: usize,
+        missing_parity_count: usize,
+        all_present: bool,
+    ) {
+        self.runtime_profile_metrics.record_reconstruct(
+            data_only,
+            missing_data_count,
+            missing_parity_count,
+            all_present,
+        );
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn record_reconstruct_data_stage_runtime(
+        &self,
+        shard_len: usize,
+        output_count: usize,
+    ) {
+        self.runtime_profile_metrics
+            .record_reconstruct_data_stage(shard_len, output_count);
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn record_reconstruct_parity_stage_runtime(
+        &self,
+        shard_len: usize,
+        output_count: usize,
+    ) {
+        self.runtime_profile_metrics
+            .record_reconstruct_parity_stage(shard_len, output_count);
+    }
+
     /// Split a contiguous data buffer into `data_shard_count` equal-length shards.
     ///
     /// The last shard is zero-padded if `data.len()` is not evenly divisible.

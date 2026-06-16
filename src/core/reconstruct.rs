@@ -337,6 +337,8 @@ impl<F: Field> ReedSolomon<F> {
                     .collect();
 
                 if data_only && outputs.len() <= 2 {
+                    self.runtime_profile_metrics
+                        .record_reconstruct_data_small_output_specialized();
                     self.code_some_slices_one_or_two_outputs_reconstruct_data_par_raw(
                         &matrix_rows,
                         &sub_shards,
@@ -536,40 +538,50 @@ impl<F: Field> ReedSolomon<F> {
                 matrix_rows.push(data_decode_matrix.get_row(idx));
             }
 
-            let sub_shards_snapshot: Vec<Vec<F::Elem>> = valid_indices
+            // Borrow present input shards directly and defer output mutation until
+            // after compute completes, so the required-data-only path avoids
+            // cloning every valid shard into temporary owned buffers.
+            let mut sub_shard_ptrs: SmallVec<[(*const F::Elem, usize); 32]> =
+                SmallVec::with_capacity(valid_indices.len());
+            for &idx in &valid_indices {
+                let shard = shards[idx]
+                    .get()
+                    .expect("valid shard index must be present");
+                sub_shard_ptrs.push((shard.as_ptr(), shard.len()));
+            }
+
+            let sub_shards: SmallVec<[&[F::Elem]; 32]> = sub_shard_ptrs
                 .iter()
-                .map(|&idx| {
-                    shards[idx]
-                        .get()
-                        .expect("valid shard index must be present")
-                        .to_vec()
+                .map(|&(ptr, len)| {
+                    // SAFETY: each pointer/length pair was captured from a present
+                    // shard in `shards` after full length validation. The compute
+                    // phase only reads from these inputs and writes into separate
+                    // owned recovery buffers, so the pointed-to shard storage
+                    // remains valid and unmodified for the duration of these
+                    // borrowed slices.
+                    unsafe { core::slice::from_raw_parts(ptr, len) }
                 })
                 .collect();
-            let sub_shards: SmallVec<[&[F::Elem]; 32]> = sub_shards_snapshot
-                .iter()
-                .map(|shard| shard.as_slice())
-                .collect();
-
-            let mut recovered_data: Vec<Vec<F::Elem>> = required_missing_data_indices
-                .iter()
-                .map(|_| vec![F::zero(); shard_len])
-                .collect();
-            let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = recovered_data
-                .iter_mut()
-                .map(|shard| shard.as_mut_slice())
-                .collect();
-            self.code_some_slices(&matrix_rows, &sub_shards, &mut outputs);
-            drop(outputs);
-
-            for (idx, recovered) in required_missing_data_indices
-                .into_iter()
-                .zip(recovered_data)
-            {
+            let mut output_ptrs: SmallVec<[(*mut F::Elem, usize); 32]> =
+                SmallVec::with_capacity(required_missing_data_indices.len());
+            for &idx in &required_missing_data_indices {
                 match shards[idx].get_or_initialize(shard_len) {
-                    Ok(dst) | Err(Ok(dst)) => dst.copy_from_slice(&recovered),
+                    Ok(dst) | Err(Ok(dst)) => output_ptrs.push((dst.as_mut_ptr(), dst.len())),
                     Err(Err(err)) => return Err(err),
                 }
             }
+            let mut outputs: SmallVec<[&mut [F::Elem]; 32]> = output_ptrs
+                .iter()
+                .map(|&(ptr, len)| {
+                    // SAFETY: each pointer/length pair came from a distinct
+                    // `get_or_initialize(shard_len)` call above after all
+                    // validation completed. Required missing indices are unique,
+                    // and this compute phase mutates only those output buffers.
+                    unsafe { core::slice::from_raw_parts_mut(ptr, len) }
+                })
+                .collect();
+            self.code_some_slices(&matrix_rows, &sub_shards, &mut outputs);
+            drop(outputs);
         } else {
             let mut working: Vec<Option<Vec<F::Elem>>> = shards
                 .iter_mut()

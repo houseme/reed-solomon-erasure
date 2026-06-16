@@ -28,6 +28,11 @@ Artifacts:
 - `target/benchmark-smoke/decode-idx-vs-reconstruct-some-32x16_1m.csv`
 - `target/benchmark-smoke/decode-idx-vs-reconstruct-some-32x16_4m.csv`
 
+Artifact retention note:
+
+- these benchmark-smoke artifacts now accumulate run history by appending new
+  records instead of overwriting the previous contents
+
 ## How Results Were Produced
 
 Command:
@@ -143,6 +148,32 @@ Additional observation after the reduced-column small-output optimization:
   did not produce a stable win on the measured shapes
 - a repeated-call full-row planning-cache attempt was also tested and reverted because it did not produce a stable
   benefit on the small and moderate fanout cases
+
+Runtime follow-up on 2026-06-16:
+
+- the reduced-row progressive path now writes directly into caller-owned `dst`
+  buffers and treats each call as an XOR-accumulate contribution
+- the row setup now builds only the coefficients needed by the present input
+  batch, using stack-backed `SmallVec` rows instead of full-width `Vec<u8>`
+  rows plus copy-back
+- on `4x2_64k`, the appended history moved from `1257.8806 MB/s`
+  (`1.3558x` vs `reconstruct_some`) to `1515.6384 MB/s` (`1.5721x`)
+- after reverting the evidence-weak lazy parity-row lookup candidate, the
+  same `4x2_64k` artifact still lands in the stable post-optimization band at
+  `1450.8987 MB/s` (`1.5140x`)
+- broader spot checks after the direct-accumulate change kept the larger
+  fanout cases well ahead of `reconstruct_some`: `10x4_1m` reached
+  `1533.2379 MB/s` (`4.1403x`) and `32x16_1m` reached `478.8273 MB/s`
+  (`4.7330x`)
+- the lazy parity-row lookup was not retained: it was plausible for data-only
+  output batches, but the reruns did not show a stable improvement over the
+  already-simpler eager parity-row setup
+- a follow-up fused `dst` scan candidate, combining output discovery with
+  pointer capture, was also not retained: the `4x2_64k` rerun dropped to
+  `1425.4517 MB/s` (`1.5978x`), below the current `1447` to `1454 MB/s`
+  stable band
+- this is a runtime-path win, not a policy-threshold change; it keeps
+  progressive correctness by accumulating into existing partial outputs
 
 ## Recommended Next Optimization Direction
 

@@ -161,6 +161,11 @@ cargo test --release --features "std simd-accel" \
   benchmark_small_file_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
 
+On the `AMD EPYC 9V45` `x86_64` validation host, one-shot full `extended` runs
+can overstate regressions for suspicious points. If the first full-matrix pass
+looks bad, prefer a filtered rerun with higher iterations before touching the
+kernel.
+
 ## 9. Automated Regression Checks
 
 Throughput-oriented comparison:

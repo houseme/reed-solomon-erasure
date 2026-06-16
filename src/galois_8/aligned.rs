@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use alloc::alloc::{alloc_zeroed, dealloc, handle_alloc_error};
+use alloc::vec;
 use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::fmt;
@@ -8,6 +9,8 @@ use core::iter::FromIterator;
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice;
+
+use crate::ShardSlot;
 
 pub const SHARD_ALIGNMENT: usize = 64;
 
@@ -146,8 +149,30 @@ pub fn alloc_aligned_shards(total_shards: usize, shard_len: usize) -> Vec<Aligne
         .collect()
 }
 
+pub fn alloc_shard_slots(total_shards: usize, shard_len: usize) -> Vec<ShardSlot<Vec<u8>>> {
+    (0..total_shards)
+        .map(|_| ShardSlot::new_missing(vec![0u8; shard_len]))
+        .collect()
+}
+
+pub fn shards_to_slots<T: Clone>(shards: &[T]) -> Vec<ShardSlot<T>> {
+    shards.iter().cloned().map(ShardSlot::new_present).collect()
+}
+
+pub fn mark_missing_slots<T>(slots: &mut [ShardSlot<T>], missing_indices: &[usize]) {
+    for &idx in missing_indices {
+        if let Some(slot) = slots.get_mut(idx) {
+            slot.mark_missing();
+        }
+    }
+}
+
 impl crate::ReedSolomon<super::Field> {
     pub fn alloc_aligned(&self, shard_len: usize) -> Vec<AlignedShard> {
         alloc_aligned_shards(self.total_shard_count(), shard_len)
+    }
+
+    pub fn alloc_shard_slots(&self, shard_len: usize) -> Vec<ShardSlot<Vec<u8>>> {
+        alloc_shard_slots(self.total_shard_count(), shard_len)
     }
 }

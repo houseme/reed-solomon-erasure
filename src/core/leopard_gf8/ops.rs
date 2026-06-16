@@ -150,7 +150,7 @@ fn fwht2_alt8(a: u8, b: u8) -> (u8, u8) {
 pub(super) fn slice_xor(input: &[u8], out: &mut [u8]) {
     debug_assert_eq!(input.len(), out.len());
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
             // SAFETY: runtime feature detection confirmed AVX2 is available.
@@ -288,7 +288,10 @@ fn lut_xor_prebuilt(dst: &mut [u8], src: &[u8], low: &[u8; 16], high: &[u8; 16],
 fn lut_xor_impl(dst: &mut [u8], src: &[u8], low: &[u8; 16], high: &[u8; 16], lut: &[u8; 256]) {
     debug_assert_eq!(dst.len(), src.len());
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(not(any(all(feature = "std", target_arch = "x86_64"), target_arch = "aarch64")))]
+    let _ = (low, high);
+
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if dst.len() >= 32 && is_x86_feature_detected!("avx2") {
             // SAFETY: runtime feature detection confirmed AVX2 is available, len >= 32.

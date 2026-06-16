@@ -55,14 +55,13 @@ impl crate::ReedSolomon<super::Field> {
     }
 
     #[cfg(feature = "std")]
-    fn decode_idx_execute_reduced_small_outputs(
+    fn decode_idx_accumulate_reduced_outputs(
         &self,
-        matrix_rows: &[Vec<u8>],
+        matrix_rows: &[smallvec::SmallVec<[u8; 32]>],
         inputs: &[&[u8]],
         outputs: &mut [&mut [u8]],
     ) {
         debug_assert!(!outputs.is_empty());
-        debug_assert!(outputs.len() <= 2);
 
         let shard_len = inputs.first().map(|input| input.len()).unwrap_or(0);
         if shard_len == 0 {
@@ -78,8 +77,7 @@ impl crate::ReedSolomon<super::Field> {
                 .for_each(|(chunk_idx, output_chunk)| {
                     let start = chunk_idx * chunk_len;
                     let end = start + output_chunk.len();
-                    super::mul_slice(matrix_row[0], &inputs[0][start..end], output_chunk);
-                    for i_input in 1..inputs.len() {
+                    for i_input in 0..inputs.len() {
                         super::mul_slice_xor(
                             matrix_row[i_input],
                             &inputs[i_input][start..end],
@@ -90,27 +88,43 @@ impl crate::ReedSolomon<super::Field> {
             return;
         }
 
-        let (first, second) = outputs.split_at_mut(1);
-        let output0 = &mut first[0];
-        let output1 = &mut second[0];
-        let row0 = matrix_rows[0].as_slice();
-        let row1 = matrix_rows[1].as_slice();
-        output0
-            .chunks_mut(chunk_len)
-            .zip(output1.chunks_mut(chunk_len))
-            .enumerate()
-            .for_each(|(chunk_idx, (output0_chunk, output1_chunk))| {
-                let start = chunk_idx * chunk_len;
-                let end = start + output0_chunk.len();
-                let input0 = &inputs[0][start..end];
-                super::mul_slice(row0[0], input0, output0_chunk);
-                super::mul_slice(row1[0], input0, output1_chunk);
-                for i_input in 1..inputs.len() {
-                    let input_chunk = &inputs[i_input][start..end];
-                    super::mul_slice_xor(row0[i_input], input_chunk, output0_chunk);
-                    super::mul_slice_xor(row1[i_input], input_chunk, output1_chunk);
-                }
-            });
+        if outputs.len() == 2 {
+            let (first, second) = outputs.split_at_mut(1);
+            let output0 = &mut first[0];
+            let output1 = &mut second[0];
+            let row0 = matrix_rows[0].as_slice();
+            let row1 = matrix_rows[1].as_slice();
+            output0
+                .chunks_mut(chunk_len)
+                .zip(output1.chunks_mut(chunk_len))
+                .enumerate()
+                .for_each(|(chunk_idx, (output0_chunk, output1_chunk))| {
+                    let start = chunk_idx * chunk_len;
+                    let end = start + output0_chunk.len();
+                    let input0 = &inputs[0][start..end];
+                    super::mul_slice_xor(row0[0], input0, output0_chunk);
+                    super::mul_slice_xor(row1[0], input0, output1_chunk);
+                    for i_input in 1..inputs.len() {
+                        let input_chunk = &inputs[i_input][start..end];
+                        super::mul_slice_xor(row0[i_input], input_chunk, output0_chunk);
+                        super::mul_slice_xor(row1[i_input], input_chunk, output1_chunk);
+                    }
+                });
+            return;
+        }
+
+        for (row, output) in matrix_rows.iter().zip(outputs.iter_mut()) {
+            output
+                .chunks_mut(chunk_len)
+                .enumerate()
+                .for_each(|(chunk_idx, output_chunk)| {
+                    let start = chunk_idx * chunk_len;
+                    let end = start + output_chunk.len();
+                    for (coefficient, input) in row.iter().copied().zip(inputs.iter().copied()) {
+                        super::mul_slice_xor(coefficient, &input[start..end], output_chunk);
+                    }
+                });
+        }
     }
 
     #[cfg(feature = "std")]
@@ -170,6 +184,107 @@ impl crate::ReedSolomon<super::Field> {
             .into_iter()
             .zip(recovered_data)
         {
+            shards[idx] = Some(recovered);
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    fn execute_option_vec_reconstruct_plan_serial(
+        &self,
+        shards: &mut [Option<Vec<u8>>],
+        plan: OptionVecReconstructPlan,
+        data_only: bool,
+    ) -> Result<(), crate::Error> {
+        let data_decode_matrix = plan
+            .data_decode_matrix
+            .as_ref()
+            .expect("non-empty reconstruct plan must include decode matrix");
+
+        let mut missing_data_indices: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+        let mut missing_parity_indices: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+        for &idx in &plan.invalid_indices {
+            if idx < self.data_shard_count() {
+                missing_data_indices.push(idx);
+            } else if !data_only {
+                missing_parity_indices.push(idx);
+            }
+        }
+
+        self.record_reconstruct_runtime(
+            data_only,
+            missing_data_indices.len(),
+            missing_parity_indices.len(),
+            false,
+        );
+
+        if !missing_data_indices.is_empty() {
+            self.record_reconstruct_data_stage_runtime(plan.shard_len, missing_data_indices.len());
+
+            let mut matrix_rows: smallvec::SmallVec<[&[u8]; 32]> =
+                smallvec::SmallVec::with_capacity(missing_data_indices.len());
+            for &idx in &missing_data_indices {
+                matrix_rows.push(data_decode_matrix.get_row(idx));
+            }
+
+            let mut recovered_data: Vec<Vec<u8>> = missing_data_indices
+                .iter()
+                .map(|_| vec![0u8; plan.shard_len])
+                .collect();
+            {
+                let sub_shards: smallvec::SmallVec<[&[u8]; 32]> = plan
+                    .valid_indices
+                    .iter()
+                    .map(|&idx| {
+                        shards[idx]
+                            .as_deref()
+                            .expect("valid shard index must be present")
+                    })
+                    .collect();
+                let mut outputs: smallvec::SmallVec<[&mut [u8]; 32]> = recovered_data
+                    .iter_mut()
+                    .map(|shard| shard.as_mut_slice())
+                    .collect();
+                self.code_some_slices_chunked(&matrix_rows, &sub_shards, &mut outputs);
+            }
+
+            for (idx, recovered) in missing_data_indices.into_iter().zip(recovered_data) {
+                shards[idx] = Some(recovered);
+            }
+        }
+
+        if data_only || missing_parity_indices.is_empty() {
+            return Ok(());
+        }
+
+        self.record_reconstruct_parity_stage_runtime(plan.shard_len, missing_parity_indices.len());
+
+        let parity_rows = self.get_parity_rows();
+        let mut matrix_rows: smallvec::SmallVec<[&[u8]; 32]> =
+            smallvec::SmallVec::with_capacity(missing_parity_indices.len());
+        for &idx in &missing_parity_indices {
+            matrix_rows.push(parity_rows[idx - self.data_shard_count()]);
+        }
+
+        let mut recovered_parity: Vec<Vec<u8>> = missing_parity_indices
+            .iter()
+            .map(|_| vec![0u8; plan.shard_len])
+            .collect();
+        {
+            let all_data: smallvec::SmallVec<[&[u8]; 32]> = shards
+                .iter()
+                .take(self.data_shard_count())
+                .map(|shard| shard.as_deref().expect("data shard must be present"))
+                .collect();
+            let mut outputs: smallvec::SmallVec<[&mut [u8]; 32]> = recovered_parity
+                .iter_mut()
+                .map(|shard| shard.as_mut_slice())
+                .collect();
+            self.code_some_slices_chunked(&matrix_rows, &all_data, &mut outputs);
+        }
+
+        for (idx, recovered) in missing_parity_indices.into_iter().zip(recovered_parity) {
             shards[idx] = Some(recovered);
         }
 
@@ -277,12 +392,12 @@ impl crate::ReedSolomon<super::Field> {
         data_only: bool,
         available_parallelism: usize,
     ) -> crate::ParallelDecision {
-        let tuned = self.policy_cache.reconstruct_policy(data_only);
         let output_shards = if data_only {
             missing_data
         } else {
             missing_total
         };
+        let tuned = self.policy_cache.reconstruct_policy(data_only);
         tuned.decide(
             shard_len,
             self.data_shard_count(),
@@ -318,14 +433,40 @@ impl crate::ReedSolomon<super::Field> {
         self.policy_cache.reconstruct_stage_policies(data_only)
     }
 
-    #[cfg(test)]
     #[cfg(feature = "std")]
-    pub(crate) fn reconstruct_stage_policies_for_test(
+    #[doc(hidden)]
+    pub fn reconstruct_stage_policies_for_bench(
         &self,
         data_only: bool,
     ) -> (crate::ParallelPolicy, crate::ParallelPolicy) {
         self.reconstruct_stage_policies(data_only)
     }
+
+    #[cfg(feature = "std")]
+    #[doc(hidden)]
+    pub fn reconstruct_execution_context_for_bench(
+        &self,
+        shard_len: usize,
+        missing_data: usize,
+        missing_total: usize,
+        data_only: bool,
+        available_parallelism: usize,
+    ) -> (
+        crate::ParallelDecision,
+        crate::ParallelPolicy,
+        crate::ParallelPolicy,
+    ) {
+        let decision = self.reconstruct_parallel_decision_with(
+            shard_len,
+            missing_data,
+            missing_total,
+            data_only,
+            available_parallelism,
+        );
+        let (data_policy, parity_policy) = self.reconstruct_stage_policies(data_only);
+        (decision, data_policy, parity_policy)
+    }
+
     #[cfg(feature = "std")]
     pub fn encode_opt<T, U>(&self, mut shards: T) -> Result<(), crate::Error>
     where
@@ -452,10 +593,10 @@ impl crate::ReedSolomon<super::Field> {
             .filter(|&&idx| idx < self.data_shard_count())
             .count();
         let missing = plan.invalid_indices.len();
-        if self
-            .reconstruct_parallel_decision(plan.shard_len, missing_data, missing, false)
-            .use_parallel
-        {
+        let decision =
+            self.reconstruct_parallel_decision(plan.shard_len, missing_data, missing, false);
+        self.record_reconstruct_entry_path(decision.use_parallel);
+        if decision.use_parallel {
             let (data_policy, parity_policy) = self.reconstruct_stage_policies(false);
             self.reconstruct_internal_option_vec_par_with_stage_policies(
                 shards,
@@ -464,7 +605,8 @@ impl crate::ReedSolomon<super::Field> {
                 parity_policy,
             )
         } else {
-            self.reconstruct(shards)
+            self.record_reconstruct_opt_fallback_serial_path();
+            self.execute_option_vec_reconstruct_plan_serial(shards, plan, false)
         }
     }
 
@@ -483,14 +625,15 @@ impl crate::ReedSolomon<super::Field> {
             .filter(|&&idx| idx < self.data_shard_count())
             .count();
         let missing = plan.invalid_indices.len();
-        if self
-            .reconstruct_parallel_decision(plan.shard_len, missing_data, missing, true)
-            .use_parallel
-        {
+        let decision =
+            self.reconstruct_parallel_decision(plan.shard_len, missing_data, missing, true);
+        self.record_reconstruct_entry_path(decision.use_parallel);
+        if decision.use_parallel {
             let (data_policy, _parity_policy) = self.reconstruct_stage_policies(true);
             self.reconstruct_internal_option_vec_par_with_policy(shards, true, data_policy)
         } else {
-            self.reconstruct_data(shards)
+            self.record_reconstruct_opt_fallback_serial_path();
+            self.execute_option_vec_reconstruct_plan_serial(shards, plan, true)
         }
     }
 
@@ -579,30 +722,13 @@ impl crate::ReedSolomon<super::Field> {
                 }
             }
 
-            let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
             let mut output_indices: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
-            let mut matrix_rows: smallvec::SmallVec<[Vec<u8>; 32]> = smallvec::SmallVec::new();
 
             for (idx, shard) in dst.iter().enumerate() {
                 let Some(_dst_shard) = shard.as_ref() else {
                     continue;
                 };
                 output_indices.push(idx);
-                if idx < self.data_shard_count() {
-                    matrix_rows.push(data_decode_matrix.get_row(idx).to_vec());
-                } else {
-                    let parity_rows = self.get_parity_rows();
-                    let parity_row = parity_rows[idx - self.data_shard_count()];
-                    let mut row = vec![0u8; self.data_shard_count()];
-                    for col in 0..self.data_shard_count() {
-                        let mut acc = 0u8;
-                        for i in 0..self.data_shard_count() {
-                            acc ^= super::mul(parity_row[i], data_decode_matrix.get(i, col));
-                        }
-                        row[col] = acc;
-                    }
-                    matrix_rows.push(row);
-                }
             }
 
             if output_indices.is_empty() {
@@ -626,41 +752,58 @@ impl crate::ReedSolomon<super::Field> {
                 return Ok(());
             }
 
-            let reduced_rows: smallvec::SmallVec<[Vec<u8>; 32]> = matrix_rows
-                .iter()
-                .map(|row| input_positions.iter().map(|&col| row[col]).collect())
-                .collect();
-
-            let mut recovered_data: Vec<Vec<u8>> = output_indices
-                .iter()
-                .map(|_| vec![0u8; shard_len])
-                .collect();
-            {
-                let mut output_refs: smallvec::SmallVec<[&mut [u8]; 32]> = recovered_data
-                    .iter_mut()
-                    .map(|shard| shard.as_mut_slice())
-                    .collect();
-
-                if output_refs.len() <= 2 {
-                    self.decode_idx_execute_reduced_small_outputs(
-                        &reduced_rows,
-                        &input_refs,
-                        &mut output_refs,
-                    );
+            let data_decode_matrix = self.get_data_decode_matrix(&valid_indices, &invalid_indices);
+            let parity_rows = self.get_parity_rows();
+            let mut reduced_rows: smallvec::SmallVec<[smallvec::SmallVec<[u8; 32]>; 32]> =
+                smallvec::SmallVec::with_capacity(output_indices.len());
+            for &idx in &output_indices {
+                let mut row = smallvec::SmallVec::<[u8; 32]>::with_capacity(input_positions.len());
+                if idx < self.data_shard_count() {
+                    for &col in &input_positions {
+                        row.push(data_decode_matrix.get(idx, col));
+                    }
                 } else {
-                    let reduced_row_refs: smallvec::SmallVec<[&[u8]; 32]> =
-                        reduced_rows.iter().map(|row| row.as_slice()).collect();
-                    self.code_some_slices_chunked(&reduced_row_refs, &input_refs, &mut output_refs);
+                    let parity_row = parity_rows[idx - self.data_shard_count()];
+                    for &col in &input_positions {
+                        let mut acc = 0u8;
+                        for i in 0..self.data_shard_count() {
+                            acc ^= super::mul(parity_row[i], data_decode_matrix.get(i, col));
+                        }
+                        row.push(acc);
+                    }
                 }
+                reduced_rows.push(row);
             }
 
-            for (&idx, recovered) in output_indices.iter().zip(recovered_data) {
+            let mut output_ptrs: smallvec::SmallVec<[(*mut u8, usize); 32]> =
+                smallvec::SmallVec::with_capacity(output_indices.len());
+            for &idx in &output_indices {
                 let dst_shard = dst[idx]
                     .as_deref_mut()
                     .expect("output index was collected only for present destinations");
-                for (dst_byte, recovered_byte) in dst_shard.iter_mut().zip(recovered.iter()) {
-                    *dst_byte ^= *recovered_byte;
+                if dst_shard.len() != shard_len {
+                    return Err(crate::Error::IncorrectShardSize);
                 }
+                output_ptrs.push((dst_shard.as_mut_ptr(), dst_shard.len()));
+            }
+
+            {
+                let mut output_refs: smallvec::SmallVec<[&mut [u8]; 32]> = output_ptrs
+                    .iter()
+                    .map(|&(ptr, len)| {
+                        // SAFETY: each pointer/length pair was captured from a distinct
+                        // destination shard collected in `output_indices`. Those shards
+                        // remain alive for this scope and are only mutated through these
+                        // temporary slices.
+                        unsafe { core::slice::from_raw_parts_mut(ptr, len) }
+                    })
+                    .collect();
+
+                self.decode_idx_accumulate_reduced_outputs(
+                    &reduced_rows,
+                    &input_refs,
+                    &mut output_refs,
+                );
             }
 
             return Ok(());

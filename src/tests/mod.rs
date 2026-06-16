@@ -6,7 +6,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
-use super::{CodecFamily, CodecOptions, Error, MatrixMode, SBSError, galois_8};
+use super::{CodecFamily, CodecOptions, Error, MatrixMode, SBSError, ShardSlot, galois_8};
 #[cfg(feature = "std")]
 use super::{ParallelDecision, ParallelPolicy};
 use rand::{self, RngExt, rng};
@@ -3264,6 +3264,40 @@ fn test_galois_8_reconstruct_opt_matches_reconstruct() {
     r.reconstruct_opt(&mut actual).unwrap();
 
     assert_eq!(expected, actual);
+}
+
+#[test]
+fn test_reconstruct_marks_shard_slot_present() {
+    let r = ReedSolomon::new(4, 2).unwrap();
+    let mut shards = make_random_shards!(64 * 1024, 6);
+    r.encode(&mut shards).unwrap();
+
+    let mut slots: Vec<ShardSlot<Vec<u8>>> =
+        shards.into_iter().map(ShardSlot::new_present).collect();
+    slots[0] = ShardSlot::new_missing(vec![0u8; 64 * 1024]);
+    slots[5] = ShardSlot::new_missing(vec![0u8; 64 * 1024]);
+
+    assert!(!slots[0].is_present());
+    assert!(!slots[5].is_present());
+
+    r.reconstruct(&mut slots).unwrap();
+
+    assert!(slots[0].is_present());
+    assert!(slots[5].is_present());
+}
+
+#[test]
+fn test_shards_to_slots_and_mark_missing_slots_helpers() {
+    let shards = vec![vec![1u8, 2], vec![3u8, 4], vec![5u8, 6]];
+    let mut slots = galois_8::shards_to_slots(&shards);
+
+    assert!(slots.iter().all(|slot| slot.is_present()));
+
+    galois_8::mark_missing_slots(&mut slots, &[0, 2]);
+
+    assert!(!slots[0].is_present());
+    assert!(slots[1].is_present());
+    assert!(!slots[2].is_present());
 }
 
 #[cfg(feature = "std")]

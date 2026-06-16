@@ -156,6 +156,70 @@ pub trait Field: Sized {
 pub type ReconstructInitResult<'a, F> =
     Result<&'a mut [<F as Field>::Elem], Result<&'a mut [<F as Field>::Elem], Error>>;
 
+/// A reusable shard container for reconstruction workflows.
+///
+/// Unlike `Option<Vec<_>>`, this keeps ownership of the backing buffer even when
+/// the shard is marked missing, which lets callers reuse preallocated storage
+/// across repeated reconstruct calls.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShardSlot<T> {
+    data: T,
+    present: bool,
+}
+
+impl<T> ShardSlot<T> {
+    /// Create a shard slot whose data is already present.
+    pub fn new_present(data: T) -> Self {
+        Self {
+            data,
+            present: true,
+        }
+    }
+
+    /// Create a shard slot whose buffer exists but is currently marked missing.
+    pub fn new_missing(data: T) -> Self {
+        Self {
+            data,
+            present: false,
+        }
+    }
+
+    /// Create a shard slot with an explicit presence flag.
+    pub fn with_present(data: T, present: bool) -> Self {
+        Self { data, present }
+    }
+
+    /// Returns whether the shard is currently marked present.
+    pub fn is_present(&self) -> bool {
+        self.present
+    }
+
+    /// Mark the shard as present.
+    pub fn mark_present(&mut self) {
+        self.present = true;
+    }
+
+    /// Mark the shard as missing while retaining ownership of its buffer.
+    pub fn mark_missing(&mut self) {
+        self.present = false;
+    }
+
+    /// Access the inner storage regardless of presence state.
+    pub fn as_inner(&self) -> &T {
+        &self.data
+    }
+
+    /// Mutably access the inner storage regardless of presence state.
+    pub fn as_inner_mut(&mut self) -> &mut T {
+        &mut self.data
+    }
+
+    /// Consume the slot and return the inner storage.
+    pub fn into_inner(self) -> T {
+        self.data
+    }
+}
+
 /// Something which might hold a shard.
 ///
 /// This trait is used in reconstruction, where some of the shards
@@ -213,7 +277,44 @@ impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]>> ReconstructShard<F> for (
     fn get_or_initialize(&mut self, len: usize) -> ReconstructInitResult<'_, F> {
         let x = self.0.as_mut();
         if x.len() == len {
-            if self.1 { Ok(x) } else { Err(Ok(x)) }
+            if self.1 {
+                Ok(x)
+            } else {
+                self.1 = true;
+                Err(Ok(x))
+            }
+        } else {
+            Err(Err(Error::IncorrectShardSize))
+        }
+    }
+}
+
+impl<F: Field, T: AsRef<[F::Elem]> + AsMut<[F::Elem]>> ReconstructShard<F> for ShardSlot<T> {
+    fn len(&self) -> Option<usize> {
+        if self.present {
+            Some(self.data.as_ref().len())
+        } else {
+            None
+        }
+    }
+
+    fn get(&mut self) -> Option<&mut [F::Elem]> {
+        if self.present {
+            Some(self.data.as_mut())
+        } else {
+            None
+        }
+    }
+
+    fn get_or_initialize(&mut self, len: usize) -> ReconstructInitResult<'_, F> {
+        let x = self.data.as_mut();
+        if x.len() == len {
+            if self.present {
+                Ok(x)
+            } else {
+                self.present = true;
+                Err(Ok(x))
+            }
         } else {
             Err(Err(Error::IncorrectShardSize))
         }

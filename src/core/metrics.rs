@@ -82,6 +82,9 @@ pub(crate) struct RuntimeProfileMetrics {
     parallel_policy_total_chunk_len: MetricCounter,
     reconstruct_calls: MetricCounter,
     reconstruct_data_only_calls: MetricCounter,
+    reconstruct_entry_parallel_calls: MetricCounter,
+    reconstruct_entry_serial_calls: MetricCounter,
+    reconstruct_opt_fallback_serial_calls: MetricCounter,
     reconstruct_total_missing_data: MetricCounter,
     reconstruct_total_missing_parity: MetricCounter,
     reconstruct_all_present_fast_path: MetricCounter,
@@ -89,6 +92,7 @@ pub(crate) struct RuntimeProfileMetrics {
     reconstruct_data_stage_bytes: MetricCounter,
     reconstruct_parity_stage_calls: MetricCounter,
     reconstruct_parity_stage_bytes: MetricCounter,
+    reconstruct_data_small_output_specialized_calls: MetricCounter,
 }
 
 #[cfg(feature = "std")]
@@ -130,6 +134,9 @@ pub struct RuntimeProfileStats {
     pub parallel_policy_total_chunk_len: usize,
     pub reconstruct_calls: usize,
     pub reconstruct_data_only_calls: usize,
+    pub reconstruct_entry_parallel_calls: usize,
+    pub reconstruct_entry_serial_calls: usize,
+    pub reconstruct_opt_fallback_serial_calls: usize,
     pub reconstruct_total_missing_data: usize,
     pub reconstruct_total_missing_parity: usize,
     pub reconstruct_all_present_fast_path: usize,
@@ -137,6 +144,7 @@ pub struct RuntimeProfileStats {
     pub reconstruct_data_stage_bytes: usize,
     pub reconstruct_parity_stage_calls: usize,
     pub reconstruct_parity_stage_bytes: usize,
+    pub reconstruct_data_small_output_specialized_calls: usize,
 }
 
 #[cfg(feature = "std")]
@@ -225,6 +233,15 @@ impl RuntimeProfileMetrics {
                 .load(Ordering::Relaxed),
             reconstruct_calls: self.reconstruct_calls.load(Ordering::Relaxed),
             reconstruct_data_only_calls: self.reconstruct_data_only_calls.load(Ordering::Relaxed),
+            reconstruct_entry_parallel_calls: self
+                .reconstruct_entry_parallel_calls
+                .load(Ordering::Relaxed),
+            reconstruct_entry_serial_calls: self
+                .reconstruct_entry_serial_calls
+                .load(Ordering::Relaxed),
+            reconstruct_opt_fallback_serial_calls: self
+                .reconstruct_opt_fallback_serial_calls
+                .load(Ordering::Relaxed),
             reconstruct_total_missing_data: self
                 .reconstruct_total_missing_data
                 .load(Ordering::Relaxed),
@@ -241,6 +258,9 @@ impl RuntimeProfileMetrics {
                 .load(Ordering::Relaxed),
             reconstruct_parity_stage_bytes: self
                 .reconstruct_parity_stage_bytes
+                .load(Ordering::Relaxed),
+            reconstruct_data_small_output_specialized_calls: self
+                .reconstruct_data_small_output_specialized_calls
                 .load(Ordering::Relaxed),
         }
     }
@@ -268,6 +288,12 @@ impl RuntimeProfileMetrics {
             .store(0, Ordering::Relaxed);
         self.reconstruct_calls.store(0, Ordering::Relaxed);
         self.reconstruct_data_only_calls.store(0, Ordering::Relaxed);
+        self.reconstruct_entry_parallel_calls
+            .store(0, Ordering::Relaxed);
+        self.reconstruct_entry_serial_calls
+            .store(0, Ordering::Relaxed);
+        self.reconstruct_opt_fallback_serial_calls
+            .store(0, Ordering::Relaxed);
         self.reconstruct_total_missing_data
             .store(0, Ordering::Relaxed);
         self.reconstruct_total_missing_parity
@@ -281,6 +307,8 @@ impl RuntimeProfileMetrics {
         self.reconstruct_parity_stage_calls
             .store(0, Ordering::Relaxed);
         self.reconstruct_parity_stage_bytes
+            .store(0, Ordering::Relaxed);
+        self.reconstruct_data_small_output_specialized_calls
             .store(0, Ordering::Relaxed);
     }
 
@@ -385,6 +413,21 @@ impl RuntimeProfileMetrics {
             .fetch_add(missing_parity_count, Ordering::Relaxed);
     }
 
+    pub(crate) fn record_reconstruct_entry(&self, parallel: bool) {
+        if parallel {
+            self.reconstruct_entry_parallel_calls
+                .fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.reconstruct_entry_serial_calls
+                .fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub(crate) fn record_reconstruct_opt_fallback_serial(&self) {
+        self.reconstruct_opt_fallback_serial_calls
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
     pub(crate) fn record_reconstruct_data_stage(&self, shard_len: usize, output_count: usize) {
         self.reconstruct_data_stage_calls
             .fetch_add(1, Ordering::Relaxed);
@@ -397,5 +440,10 @@ impl RuntimeProfileMetrics {
             .fetch_add(1, Ordering::Relaxed);
         self.reconstruct_parity_stage_bytes
             .fetch_add(shard_len.saturating_mul(output_count), Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_reconstruct_data_small_output_specialized(&self) {
+        self.reconstruct_data_small_output_specialized_calls
+            .fetch_add(1, Ordering::Relaxed);
     }
 }

@@ -3,10 +3,18 @@ mod bench_common;
 mod common;
 
 use std::fs;
+#[cfg(feature = "std")]
+use std::fs::OpenOptions;
+#[cfg(feature = "std")]
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
+#[cfg(feature = "std")]
+use reed_solomon_erasure::ShardSlot;
 use reed_solomon_erasure::galois_8::ReedSolomon;
+#[cfg(feature = "std")]
+use reed_solomon_erasure::galois_8::{mark_missing_slots, shards_to_slots};
 use reed_solomon_erasure::{CodecFamily, CodecOptions};
 
 use self::bench_common::{
@@ -40,6 +48,79 @@ struct DecodeIdxCompareResult {
     throughput_mb_s: f64,
     ns_per_iter: f64,
     speedup_vs_reconstruct_some: f64,
+}
+
+#[cfg(feature = "std")]
+struct ReconstructPolicyCompareResult {
+    variant: &'static str,
+    measurement_strategy: &'static str,
+    measurement_order: usize,
+    measurement_iterations: usize,
+    warmup_rounds: usize,
+    entry_path: &'static str,
+    data_only: bool,
+    missing_data: usize,
+    missing_total: usize,
+    missing_pattern: &'static str,
+    available_parallelism: usize,
+    throughput_mb_s: f64,
+    ns_per_iter: f64,
+    speedup_vs_serial: f64,
+    effective_min_parallel_shard_bytes: usize,
+    effective_min_bytes_per_job: usize,
+    effective_max_jobs: usize,
+    reconstruct_data_min_parallel_shard_bytes: usize,
+    reconstruct_data_min_bytes_per_job: usize,
+    reconstruct_data_max_jobs: usize,
+    reconstruct_parity_min_parallel_shard_bytes: usize,
+    reconstruct_parity_min_bytes_per_job: usize,
+    reconstruct_parity_max_jobs: usize,
+    decision_use_parallel: bool,
+    decision_jobs: usize,
+    decision_chunk_len: usize,
+    runtime_parallel_policy_calls: usize,
+    runtime_parallel_policy_parallel: usize,
+    runtime_parallel_policy_serial: usize,
+    runtime_code_some_parallel_calls: usize,
+    runtime_code_some_serial_calls: usize,
+    runtime_reconstruct_entry_parallel_calls: usize,
+    runtime_reconstruct_entry_serial_calls: usize,
+    runtime_reconstruct_opt_fallback_serial_calls: usize,
+    runtime_reconstruct_data_stage_calls: usize,
+    runtime_reconstruct_parity_stage_calls: usize,
+    runtime_reconstruct_data_small_output_specialized_calls: usize,
+}
+
+#[cfg(feature = "std")]
+struct ReconstructContainerCompareResult {
+    operation: &'static str,
+    variant: &'static str,
+    missing_pattern: &'static str,
+    measurement_iterations: usize,
+    throughput_mb_s: f64,
+    ns_per_iter: f64,
+    speedup_vs_option_vec: f64,
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone, Copy)]
+enum ReconstructBenchKind {
+    DirectSerial,
+    ReconstructOpt,
+    ReconstructDataOpt,
+}
+
+#[cfg(feature = "std")]
+struct ReconstructVariantRunner {
+    variant: &'static str,
+    measurement_order: usize,
+    missing_pattern: &'static str,
+    data_only: bool,
+    missing_data: usize,
+    missing_total: usize,
+    kind: ReconstructBenchKind,
+    rs: ReedSolomon,
+    elapsed_ns: u128,
 }
 
 struct LeopardSetupResult {
@@ -220,6 +301,64 @@ fn smoke_iterations() -> usize {
             "fast" => 1,
             _ => 1,
         })
+}
+
+#[cfg(feature = "std")]
+fn append_json_array_entries(path: &std::path::Path, entries: &[String]) {
+    if entries.is_empty() {
+        return;
+    }
+
+    let existing = fs::read_to_string(path).unwrap_or_default();
+    let trimmed = existing.trim_end();
+
+    if trimmed.is_empty() {
+        let mut content = String::from("[\n");
+        content.push_str(&entries.join(",\n"));
+        content.push('\n');
+        content.push(']');
+        fs::write(path, content).unwrap();
+        return;
+    }
+
+    let closing_idx = trimmed
+        .rfind(']')
+        .expect("json artifact history must end with ]");
+    let prefix = &trimmed[..closing_idx];
+    let has_entries = prefix.chars().any(|ch| !ch.is_whitespace() && ch != '[');
+
+    let mut content = String::from(prefix);
+    if has_entries {
+        content.push_str(",\n");
+    } else if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(&entries.join(",\n"));
+    content.push('\n');
+    content.push(']');
+    fs::write(path, content).unwrap();
+}
+
+#[cfg(feature = "std")]
+fn append_csv_rows(path: &std::path::Path, header: &str, rows: &[String]) {
+    if rows.is_empty() {
+        return;
+    }
+
+    let file_exists = path.exists();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap();
+
+    if !file_exists {
+        file.write_all(header.as_bytes()).unwrap();
+    }
+
+    for row in rows {
+        file.write_all(row.as_bytes()).unwrap();
+    }
 }
 
 fn write_results(results: &[SmokeResult]) {
@@ -499,9 +638,9 @@ fn write_decode_idx_compare_results(case: BenchCase, result: &DecodeIdxCompareRe
     let json_path = dir.join(format!("{stem}.json"));
     let csv_path = dir.join(format!("{stem}.csv"));
 
-    let json = format!(
+    let json_entry = format!(
         concat!(
-            "{{\"schema_version\":{},\"artifact_kind\":\"decode-idx-vs-reconstruct-some\",\"case\":\"{}\",",
+            "  {{\"schema_version\":{},\"artifact_kind\":\"decode-idx-vs-reconstruct-some\",\"case\":\"{}\",",
             "\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"operation\":\"{}\",",
             "\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2},\"speedup_vs_reconstruct_some\":{:.4}}}"
         ),
@@ -515,13 +654,11 @@ fn write_decode_idx_compare_results(case: BenchCase, result: &DecodeIdxCompareRe
         result.ns_per_iter,
         result.speedup_vs_reconstruct_some
     );
-    fs::write(&json_path, json).unwrap();
+    append_json_array_entries(&json_path, &[json_entry]);
 
-    let csv = format!(
-        concat!(
-            "schema_version,artifact_kind,case,data_shards,parity_shards,shard_size,operation,throughput_mb_s,ns_per_iter,speedup_vs_reconstruct_some\n",
-            "{},decode-idx-vs-reconstruct-some,{},{},{},{},{},{:.4},{:.2},{:.4}\n"
-        ),
+    let csv_header = "schema_version,artifact_kind,case,data_shards,parity_shards,shard_size,operation,throughput_mb_s,ns_per_iter,speedup_vs_reconstruct_some\n";
+    let csv_row = format!(
+        concat!("{},decode-idx-vs-reconstruct-some,{},{},{},{},{},{:.4},{:.2},{:.4}\n"),
         ARTIFACT_SCHEMA_VERSION,
         case.label,
         case.data_shards,
@@ -532,7 +669,555 @@ fn write_decode_idx_compare_results(case: BenchCase, result: &DecodeIdxCompareRe
         result.ns_per_iter,
         result.speedup_vs_reconstruct_some
     );
-    fs::write(&csv_path, csv).unwrap();
+    append_csv_rows(&csv_path, csv_header, &[csv_row]);
+
+    assert!(json_path.exists());
+    assert!(csv_path.exists());
+}
+
+#[cfg(feature = "std")]
+fn run_reconstruct_container_compare(
+    case: BenchCase,
+    iterations: usize,
+) -> Vec<ReconstructContainerCompareResult> {
+    let seed = derived_seed(Operation::Reconstruct, case) ^ 0x7Cu64;
+    let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
+    let bytes = (case.shard_size * case.data_shards) as f64;
+
+    let mut original =
+        make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+    rs.encode(&mut original).unwrap();
+
+    let option_start = Instant::now();
+    for _ in 0..iterations {
+        let mut shards: Vec<Option<Vec<u8>>> = original.iter().cloned().map(Some).collect();
+        shards[0] = None;
+        shards[case.data_shards] = None;
+        rs.reconstruct(&mut shards).unwrap();
+    }
+    let option_elapsed = option_start.elapsed();
+    let option_ns_per_iter = option_elapsed.as_nanos() as f64 / iterations as f64;
+    let option_throughput_mb_s = bytes / (1024.0 * 1024.0) / (option_ns_per_iter / 1_000_000_000.0);
+
+    let tuple_start = Instant::now();
+    for _ in 0..iterations {
+        let mut shards: Vec<ShardSlot<Vec<u8>>> = shards_to_slots(&original);
+        mark_missing_slots(&mut shards, &[0, case.data_shards]);
+        rs.reconstruct(&mut shards).unwrap();
+    }
+    let tuple_elapsed = tuple_start.elapsed();
+    let tuple_ns_per_iter = tuple_elapsed.as_nanos() as f64 / iterations as f64;
+    let tuple_throughput_mb_s = bytes / (1024.0 * 1024.0) / (tuple_ns_per_iter / 1_000_000_000.0);
+
+    let option_result = ReconstructContainerCompareResult {
+        operation: "reconstruct",
+        variant: "option_vec_missing_none",
+        missing_pattern: "d0|p0",
+        measurement_iterations: iterations,
+        throughput_mb_s: option_throughput_mb_s,
+        ns_per_iter: option_ns_per_iter,
+        speedup_vs_option_vec: 1.0,
+    };
+    let tuple_result = ReconstructContainerCompareResult {
+        operation: "reconstruct",
+        variant: "shard_slot_preallocated_missing",
+        missing_pattern: "d0|p0",
+        measurement_iterations: iterations,
+        throughput_mb_s: tuple_throughput_mb_s,
+        ns_per_iter: tuple_ns_per_iter,
+        speedup_vs_option_vec: option_ns_per_iter / tuple_ns_per_iter,
+    };
+
+    vec![option_result, tuple_result]
+}
+
+#[cfg(feature = "std")]
+fn run_reconstruct_some_container_compare(
+    case: BenchCase,
+    iterations: usize,
+) -> Vec<ReconstructContainerCompareResult> {
+    let seed = derived_seed(Operation::ReconstructData, case) ^ 0x6Bu64;
+    let rs = ReedSolomon::new(case.data_shards, case.parity_shards).unwrap();
+    let required_bytes = (2 * case.shard_size) as f64;
+
+    let mut original =
+        make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+    rs.encode(&mut original).unwrap();
+
+    let missing_indices = [0usize, 2usize];
+    let mut required = vec![false; case.data_shards + case.parity_shards];
+    required[0] = true;
+    required[2] = true;
+
+    let option_start = Instant::now();
+    for _ in 0..iterations {
+        let mut shards: Vec<Option<Vec<u8>>> = original.iter().cloned().map(Some).collect();
+        shards[missing_indices[0]] = None;
+        shards[missing_indices[1]] = None;
+        rs.reconstruct_some(&mut shards, &required).unwrap();
+    }
+    let option_elapsed = option_start.elapsed();
+    let option_ns_per_iter = option_elapsed.as_nanos() as f64 / iterations as f64;
+    let option_throughput_mb_s =
+        required_bytes / (1024.0 * 1024.0) / (option_ns_per_iter / 1_000_000_000.0);
+
+    let slot_start = Instant::now();
+    for _ in 0..iterations {
+        let mut shards: Vec<ShardSlot<Vec<u8>>> = shards_to_slots(&original);
+        mark_missing_slots(&mut shards, &missing_indices);
+        rs.reconstruct_some(&mut shards, &required).unwrap();
+    }
+    let slot_elapsed = slot_start.elapsed();
+    let slot_ns_per_iter = slot_elapsed.as_nanos() as f64 / iterations as f64;
+    let slot_throughput_mb_s =
+        required_bytes / (1024.0 * 1024.0) / (slot_ns_per_iter / 1_000_000_000.0);
+
+    vec![
+        ReconstructContainerCompareResult {
+            operation: "reconstruct_some_required_data_only",
+            variant: "option_vec_missing_none",
+            missing_pattern: "d0|d2",
+            measurement_iterations: iterations,
+            throughput_mb_s: option_throughput_mb_s,
+            ns_per_iter: option_ns_per_iter,
+            speedup_vs_option_vec: 1.0,
+        },
+        ReconstructContainerCompareResult {
+            operation: "reconstruct_some_required_data_only",
+            variant: "shard_slot_preallocated_missing",
+            missing_pattern: "d0|d2",
+            measurement_iterations: iterations,
+            throughput_mb_s: slot_throughput_mb_s,
+            ns_per_iter: slot_ns_per_iter,
+            speedup_vs_option_vec: option_ns_per_iter / slot_ns_per_iter,
+        },
+    ]
+}
+
+#[cfg(feature = "std")]
+fn write_reconstruct_container_compare_results(
+    case: BenchCase,
+    results: &[ReconstructContainerCompareResult],
+) {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
+    fs::create_dir_all(&dir).unwrap();
+
+    let stem = format!("reconstruct-container-compare-{}", case.label);
+    let json_path = dir.join(format!("{stem}.json"));
+    let csv_path = dir.join(format!("{stem}.csv"));
+
+    let json_entries: Vec<String> = results
+        .iter()
+        .map(|result| {
+            format!(
+            "  {{\"schema_version\":{},\"artifact_kind\":\"reconstruct-container-compare\",\"case\":\"{}\",\"operation\":\"{}\",\"variant\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"missing_pattern\":\"{}\",\"measurement_iterations\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2},\"speedup_vs_option_vec\":{:.4}}}{}",
+            ARTIFACT_SCHEMA_VERSION,
+            case.label,
+            result.operation,
+            result.variant,
+            case.data_shards,
+            case.parity_shards,
+            case.shard_size,
+            result.missing_pattern,
+            result.measurement_iterations,
+            result.throughput_mb_s,
+            result.ns_per_iter,
+            result.speedup_vs_option_vec,
+            ""
+        )
+        })
+        .collect();
+    append_json_array_entries(&json_path, &json_entries);
+
+    let csv_header = "schema_version,artifact_kind,case,operation,variant,data_shards,parity_shards,shard_size,missing_pattern,measurement_iterations,throughput_mb_s,ns_per_iter,speedup_vs_option_vec\n";
+    let csv_rows: Vec<String> = results
+        .iter()
+        .map(|result| {
+            format!(
+                "{},reconstruct-container-compare,{},{},{},{},{},{},{},{},{:.4},{:.2},{:.4}\n",
+                ARTIFACT_SCHEMA_VERSION,
+                case.label,
+                result.operation,
+                result.variant,
+                case.data_shards,
+                case.parity_shards,
+                case.shard_size,
+                result.missing_pattern,
+                result.measurement_iterations,
+                result.throughput_mb_s,
+                result.ns_per_iter,
+                result.speedup_vs_option_vec
+            )
+        })
+        .collect();
+    append_csv_rows(&csv_path, csv_header, &csv_rows);
+
+    assert!(json_path.exists());
+    assert!(csv_path.exists());
+}
+
+#[cfg(feature = "std")]
+fn with_env_var<R>(key: &str, value: &str, f: impl FnOnce() -> R) -> R {
+    // SAFETY: benchmark tests in this file set process-global env vars in a scoped
+    // manner and restore them immediately after the benchmarked call finishes.
+    unsafe {
+        std::env::set_var(key, value);
+    }
+    let result = f();
+    // SAFETY: paired cleanup for the scoped override above.
+    unsafe {
+        std::env::remove_var(key);
+    }
+    result
+}
+
+#[cfg(feature = "std")]
+fn build_reconstruct_variant_result(
+    runner: &ReconstructVariantRunner,
+    case: BenchCase,
+    ns_per_iter: f64,
+    measurement_strategy: &'static str,
+    measurement_iterations: usize,
+    warmup_rounds: usize,
+) -> ReconstructPolicyCompareResult {
+    let bytes = (case.shard_size * case.data_shards) as f64;
+    let throughput_mb_s = bytes / (1024.0 * 1024.0) / (ns_per_iter / 1_000_000_000.0);
+    let available_parallelism = std::thread::available_parallelism()
+        .map(|parallelism| parallelism.get())
+        .unwrap_or(1);
+    let effective = runner.rs.effective_parallel_policy();
+    let (decision, reconstruct_data_policy, reconstruct_parity_policy) =
+        runner.rs.reconstruct_execution_context_for_bench(
+            case.shard_size,
+            runner.missing_data,
+            runner.missing_total,
+            runner.data_only,
+            available_parallelism,
+        );
+    let entry_path = if matches!(runner.kind, ReconstructBenchKind::DirectSerial) {
+        "reconstruct_direct_serial"
+    } else if runner.data_only {
+        if decision.use_parallel {
+            "reconstruct_data_opt_parallel"
+        } else {
+            "reconstruct_data_opt_fallback_serial"
+        }
+    } else if decision.use_parallel {
+        "reconstruct_opt_parallel"
+    } else {
+        "reconstruct_opt_fallback_serial"
+    };
+    let stats = runner.rs.runtime_profile_stats();
+
+    ReconstructPolicyCompareResult {
+        variant: runner.variant,
+        measurement_strategy,
+        measurement_order: runner.measurement_order,
+        measurement_iterations,
+        warmup_rounds,
+        entry_path,
+        data_only: runner.data_only,
+        missing_data: runner.missing_data,
+        missing_total: runner.missing_total,
+        missing_pattern: runner.missing_pattern,
+        available_parallelism,
+        throughput_mb_s,
+        ns_per_iter,
+        speedup_vs_serial: 0.0,
+        effective_min_parallel_shard_bytes: effective.min_parallel_shard_bytes,
+        effective_min_bytes_per_job: effective.min_bytes_per_job,
+        effective_max_jobs: effective.max_jobs,
+        reconstruct_data_min_parallel_shard_bytes: reconstruct_data_policy.min_parallel_shard_bytes,
+        reconstruct_data_min_bytes_per_job: reconstruct_data_policy.min_bytes_per_job,
+        reconstruct_data_max_jobs: reconstruct_data_policy.max_jobs,
+        reconstruct_parity_min_parallel_shard_bytes: reconstruct_parity_policy
+            .min_parallel_shard_bytes,
+        reconstruct_parity_min_bytes_per_job: reconstruct_parity_policy.min_bytes_per_job,
+        reconstruct_parity_max_jobs: reconstruct_parity_policy.max_jobs,
+        decision_use_parallel: decision.use_parallel,
+        decision_jobs: decision.jobs,
+        decision_chunk_len: decision.chunk_len,
+        runtime_parallel_policy_calls: stats.parallel_policy_calls,
+        runtime_parallel_policy_parallel: stats.parallel_policy_parallel,
+        runtime_parallel_policy_serial: stats.parallel_policy_serial,
+        runtime_code_some_parallel_calls: stats.code_some_parallel_calls,
+        runtime_code_some_serial_calls: stats.code_some_serial_calls,
+        runtime_reconstruct_entry_parallel_calls: stats.reconstruct_entry_parallel_calls,
+        runtime_reconstruct_entry_serial_calls: stats.reconstruct_entry_serial_calls,
+        runtime_reconstruct_opt_fallback_serial_calls: stats.reconstruct_opt_fallback_serial_calls,
+        runtime_reconstruct_data_stage_calls: stats.reconstruct_data_stage_calls,
+        runtime_reconstruct_parity_stage_calls: stats.reconstruct_parity_stage_calls,
+        runtime_reconstruct_data_small_output_specialized_calls: stats
+            .reconstruct_data_small_output_specialized_calls,
+    }
+}
+
+#[cfg(feature = "std")]
+fn measure_reconstruct_variant_once(
+    runner: &mut ReconstructVariantRunner,
+    original: &[Vec<u8>],
+) -> Result<(), reed_solomon_erasure::Error> {
+    let mut shards: Vec<Option<Vec<u8>>> = original.iter().cloned().map(Some).collect();
+    match runner.kind {
+        ReconstructBenchKind::DirectSerial => {
+            shards[0] = None;
+            shards[runner.rs.data_shard_count()] = None;
+            runner.rs.reconstruct(&mut shards)
+        }
+        ReconstructBenchKind::ReconstructOpt => {
+            shards[0] = None;
+            shards[runner.rs.data_shard_count()] = None;
+            runner.rs.reconstruct_opt(&mut shards)
+        }
+        ReconstructBenchKind::ReconstructDataOpt => {
+            shards[0] = None;
+            shards[1] = None;
+            runner.rs.reconstruct_data_opt(&mut shards)
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+fn run_reconstruct_policy_compare(
+    case: BenchCase,
+    iterations: usize,
+) -> Vec<ReconstructPolicyCompareResult> {
+    let seed = derived_seed(Operation::Reconstruct, case) ^ 0xA4u64;
+    let warmup_rounds = 1usize;
+    let measurement_strategy = "round_robin_rotating_start";
+
+    let mut original =
+        make_full_shards(seed, case.data_shards, case.parity_shards, case.shard_size);
+    ReedSolomon::new(case.data_shards, case.parity_shards)
+        .unwrap()
+        .encode(&mut original)
+        .unwrap();
+
+    let mut runners = vec![
+        ReconstructVariantRunner {
+            variant: "reconstruct_serial",
+            measurement_order: 0,
+            missing_pattern: "d0|p0",
+            data_only: false,
+            missing_data: 1,
+            missing_total: 2,
+            kind: ReconstructBenchKind::DirectSerial,
+            rs: ReedSolomon::new(case.data_shards, case.parity_shards).unwrap(),
+            elapsed_ns: 0,
+        },
+        ReconstructVariantRunner {
+            variant: "reconstruct_opt_default",
+            measurement_order: 1,
+            missing_pattern: "d0|p0",
+            data_only: false,
+            missing_data: 1,
+            missing_total: 2,
+            kind: ReconstructBenchKind::ReconstructOpt,
+            rs: ReedSolomon::new(case.data_shards, case.parity_shards).unwrap(),
+            elapsed_ns: 0,
+        },
+        with_env_var(
+            "RS_RECONSTRUCT_FULL_MIN_PARALLEL_SHARD_BYTES",
+            "65536",
+            || {
+                with_env_var("RS_RECONSTRUCT_MIN_BYTES_PER_JOB", "65536", || {
+                    ReconstructVariantRunner {
+                        variant: "reconstruct_opt_minparallel64k_minjob64k",
+                        measurement_order: 2,
+                        missing_pattern: "d0|p0",
+                        data_only: false,
+                        missing_data: 1,
+                        missing_total: 2,
+                        kind: ReconstructBenchKind::ReconstructOpt,
+                        rs: ReedSolomon::new(case.data_shards, case.parity_shards).unwrap(),
+                        elapsed_ns: 0,
+                    }
+                })
+            },
+        ),
+        ReconstructVariantRunner {
+            variant: "reconstruct_data_opt_two_data_missing",
+            measurement_order: 3,
+            missing_pattern: "d0|d1",
+            data_only: true,
+            missing_data: 2,
+            missing_total: 2,
+            kind: ReconstructBenchKind::ReconstructDataOpt,
+            rs: ReedSolomon::new(case.data_shards, case.parity_shards).unwrap(),
+            elapsed_ns: 0,
+        },
+    ];
+
+    for _ in 0..warmup_rounds {
+        for runner in &mut runners {
+            measure_reconstruct_variant_once(runner, &original).unwrap();
+        }
+    }
+
+    for runner in &mut runners {
+        runner.rs.reset_runtime_profile_stats();
+        runner.elapsed_ns = 0;
+    }
+
+    let runner_count = runners.len();
+    for round in 0..iterations {
+        for offset in 0..runner_count {
+            let idx = (round + offset) % runner_count;
+            let start = Instant::now();
+            measure_reconstruct_variant_once(&mut runners[idx], &original).unwrap();
+            runners[idx].elapsed_ns += start.elapsed().as_nanos();
+        }
+    }
+
+    let mut results: Vec<ReconstructPolicyCompareResult> = runners
+        .iter()
+        .map(|runner| {
+            build_reconstruct_variant_result(
+                runner,
+                case,
+                runner.elapsed_ns as f64 / iterations as f64,
+                measurement_strategy,
+                iterations,
+                warmup_rounds,
+            )
+        })
+        .collect();
+
+    let serial_ns = results
+        .iter()
+        .find(|result| result.variant == "reconstruct_serial")
+        .map(|result| result.ns_per_iter)
+        .expect("serial result must exist");
+    for result in &mut results {
+        result.speedup_vs_serial = serial_ns / result.ns_per_iter;
+    }
+    results
+}
+
+#[cfg(feature = "std")]
+fn write_reconstruct_policy_compare_results(
+    case: BenchCase,
+    results: &[ReconstructPolicyCompareResult],
+) {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/benchmark-smoke");
+    fs::create_dir_all(&dir).unwrap();
+
+    let stem = format!("reconstruct-policy-{}", case.label);
+    let json_path = dir.join(format!("{stem}.json"));
+    let csv_path = dir.join(format!("{stem}.csv"));
+
+    let json_entries: Vec<String> = results
+        .iter()
+        .map(|result| {
+            format!(
+            "  {{\"schema_version\":{},\"artifact_kind\":\"reconstruct-policy-compare\",\"case\":\"{}\",\"data_shards\":{},\"parity_shards\":{},\"shard_size\":{},\"variant\":\"{}\",\"measurement_strategy\":\"{}\",\"measurement_order\":{},\"measurement_iterations\":{},\"warmup_rounds\":{},\"entry_path\":\"{}\",\"data_only\":{},\"missing_data\":{},\"missing_total\":{},\"missing_pattern\":\"{}\",\"available_parallelism\":{},\"throughput_mb_s\":{:.4},\"ns_per_iter\":{:.2},\"speedup_vs_serial\":{:.4},\"effective_min_parallel_shard_bytes\":{},\"effective_min_bytes_per_job\":{},\"effective_max_jobs\":{},\"reconstruct_data_min_parallel_shard_bytes\":{},\"reconstruct_data_min_bytes_per_job\":{},\"reconstruct_data_max_jobs\":{},\"reconstruct_parity_min_parallel_shard_bytes\":{},\"reconstruct_parity_min_bytes_per_job\":{},\"reconstruct_parity_max_jobs\":{},\"decision_use_parallel\":{},\"decision_jobs\":{},\"decision_chunk_len\":{},\"runtime_parallel_policy_calls\":{},\"runtime_parallel_policy_parallel\":{},\"runtime_parallel_policy_serial\":{},\"runtime_code_some_parallel_calls\":{},\"runtime_code_some_serial_calls\":{},\"runtime_reconstruct_entry_parallel_calls\":{},\"runtime_reconstruct_entry_serial_calls\":{},\"runtime_reconstruct_opt_fallback_serial_calls\":{},\"runtime_reconstruct_data_stage_calls\":{},\"runtime_reconstruct_parity_stage_calls\":{},\"runtime_reconstruct_data_small_output_specialized_calls\":{}}}{}",
+            ARTIFACT_SCHEMA_VERSION,
+            case.label,
+            case.data_shards,
+            case.parity_shards,
+            case.shard_size,
+            result.variant,
+            result.measurement_strategy,
+            result.measurement_order,
+            result.measurement_iterations,
+            result.warmup_rounds,
+            result.entry_path,
+            result.data_only,
+            result.missing_data,
+            result.missing_total,
+            result.missing_pattern,
+            result.available_parallelism,
+            result.throughput_mb_s,
+            result.ns_per_iter,
+            result.speedup_vs_serial,
+            result.effective_min_parallel_shard_bytes,
+            result.effective_min_bytes_per_job,
+            result.effective_max_jobs,
+            result.reconstruct_data_min_parallel_shard_bytes,
+            result.reconstruct_data_min_bytes_per_job,
+            result.reconstruct_data_max_jobs,
+            result.reconstruct_parity_min_parallel_shard_bytes,
+            result.reconstruct_parity_min_bytes_per_job,
+            result.reconstruct_parity_max_jobs,
+            result.decision_use_parallel,
+            result.decision_jobs,
+            result.decision_chunk_len,
+            result.runtime_parallel_policy_calls,
+            result.runtime_parallel_policy_parallel,
+            result.runtime_parallel_policy_serial,
+            result.runtime_code_some_parallel_calls,
+            result.runtime_code_some_serial_calls,
+            result.runtime_reconstruct_entry_parallel_calls,
+            result.runtime_reconstruct_entry_serial_calls,
+            result.runtime_reconstruct_opt_fallback_serial_calls,
+            result.runtime_reconstruct_data_stage_calls,
+            result.runtime_reconstruct_parity_stage_calls,
+            result.runtime_reconstruct_data_small_output_specialized_calls,
+            ""
+        )
+        })
+        .collect();
+    append_json_array_entries(&json_path, &json_entries);
+
+    let csv_header = "schema_version,artifact_kind,case,data_shards,parity_shards,shard_size,variant,measurement_strategy,measurement_order,measurement_iterations,warmup_rounds,entry_path,data_only,missing_data,missing_total,missing_pattern,available_parallelism,throughput_mb_s,ns_per_iter,speedup_vs_serial,effective_min_parallel_shard_bytes,effective_min_bytes_per_job,effective_max_jobs,reconstruct_data_min_parallel_shard_bytes,reconstruct_data_min_bytes_per_job,reconstruct_data_max_jobs,reconstruct_parity_min_parallel_shard_bytes,reconstruct_parity_min_bytes_per_job,reconstruct_parity_max_jobs,decision_use_parallel,decision_jobs,decision_chunk_len,runtime_parallel_policy_calls,runtime_parallel_policy_parallel,runtime_parallel_policy_serial,runtime_code_some_parallel_calls,runtime_code_some_serial_calls,runtime_reconstruct_entry_parallel_calls,runtime_reconstruct_entry_serial_calls,runtime_reconstruct_opt_fallback_serial_calls,runtime_reconstruct_data_stage_calls,runtime_reconstruct_parity_stage_calls,runtime_reconstruct_data_small_output_specialized_calls\n";
+    let csv_rows: Vec<String> = results
+        .iter()
+        .map(|result| {
+            let row = [
+                ARTIFACT_SCHEMA_VERSION.to_string(),
+                "reconstruct-policy-compare".to_string(),
+                case.label.to_string(),
+                case.data_shards.to_string(),
+                case.parity_shards.to_string(),
+                case.shard_size.to_string(),
+                result.variant.to_string(),
+                result.measurement_strategy.to_string(),
+                result.measurement_order.to_string(),
+                result.measurement_iterations.to_string(),
+                result.warmup_rounds.to_string(),
+                result.entry_path.to_string(),
+                result.data_only.to_string(),
+                result.missing_data.to_string(),
+                result.missing_total.to_string(),
+                result.missing_pattern.to_string(),
+                result.available_parallelism.to_string(),
+                format!("{:.4}", result.throughput_mb_s),
+                format!("{:.2}", result.ns_per_iter),
+                format!("{:.4}", result.speedup_vs_serial),
+                result.effective_min_parallel_shard_bytes.to_string(),
+                result.effective_min_bytes_per_job.to_string(),
+                result.effective_max_jobs.to_string(),
+                result.reconstruct_data_min_parallel_shard_bytes.to_string(),
+                result.reconstruct_data_min_bytes_per_job.to_string(),
+                result.reconstruct_data_max_jobs.to_string(),
+                result
+                    .reconstruct_parity_min_parallel_shard_bytes
+                    .to_string(),
+                result.reconstruct_parity_min_bytes_per_job.to_string(),
+                result.reconstruct_parity_max_jobs.to_string(),
+                result.decision_use_parallel.to_string(),
+                result.decision_jobs.to_string(),
+                result.decision_chunk_len.to_string(),
+                result.runtime_parallel_policy_calls.to_string(),
+                result.runtime_parallel_policy_parallel.to_string(),
+                result.runtime_parallel_policy_serial.to_string(),
+                result.runtime_code_some_parallel_calls.to_string(),
+                result.runtime_code_some_serial_calls.to_string(),
+                result.runtime_reconstruct_entry_parallel_calls.to_string(),
+                result.runtime_reconstruct_entry_serial_calls.to_string(),
+                result
+                    .runtime_reconstruct_opt_fallback_serial_calls
+                    .to_string(),
+                result.runtime_reconstruct_data_stage_calls.to_string(),
+                result.runtime_reconstruct_parity_stage_calls.to_string(),
+                result
+                    .runtime_reconstruct_data_small_output_specialized_calls
+                    .to_string(),
+            ];
+            format!("{}\n", row.join(","))
+        })
+        .collect();
+    append_csv_rows(&csv_path, csv_header, &csv_rows);
 
     assert!(json_path.exists());
     assert!(csv_path.exists());
@@ -1240,6 +1925,150 @@ fn benchmark_decode_idx_vs_reconstruct_some_32x16_4m_exports_results() {
     assert!(result.throughput_mb_s.is_finite());
     assert!(result.speedup_vs_reconstruct_some.is_finite());
     write_decode_idx_compare_results(case, &result);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
+fn benchmark_reconstruct_policy_4x2_64k_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "4x2_64k")
+        .expect("4x2_64k full case must exist");
+    let iterations = smoke_iterations().max(6);
+    let results = run_reconstruct_policy_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_serial.is_finite())
+    );
+    write_reconstruct_policy_compare_results(case, &results);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
+fn benchmark_reconstruct_policy_10x4_64k_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "10x4_64k")
+        .expect("10x4_64k full case must exist");
+    let iterations = smoke_iterations().max(6);
+    let results = run_reconstruct_policy_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_serial.is_finite())
+    );
+    write_reconstruct_policy_compare_results(case, &results);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
+fn benchmark_reconstruct_policy_16x8_64k_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "16x8_64k")
+        .expect("16x8_64k full case must exist");
+    let iterations = smoke_iterations().max(6);
+    let results = run_reconstruct_policy_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_serial.is_finite())
+    );
+    write_reconstruct_policy_compare_results(case, &results);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
+fn benchmark_reconstruct_policy_32x16_64k_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "32x16_64k")
+        .expect("32x16_64k full case must exist");
+    let iterations = smoke_iterations().max(6);
+    let results = run_reconstruct_policy_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_serial.is_finite())
+    );
+    write_reconstruct_policy_compare_results(case, &results);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
+fn benchmark_reconstruct_container_compare_10x4_64k_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "10x4_64k")
+        .expect("10x4_64k full case must exist");
+    let iterations = smoke_iterations().max(6);
+    let results = run_reconstruct_container_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_option_vec.is_finite())
+    );
+    write_reconstruct_container_compare_results(case, &results);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
+fn benchmark_reconstruct_some_container_compare_10x4_64k_exports_results() {
+    let case = bench_common::FULL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "10x4_64k")
+        .expect("10x4_64k full case must exist");
+    let iterations = smoke_iterations().max(6);
+    let results = run_reconstruct_some_container_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_option_vec.is_finite())
+    );
+    write_reconstruct_container_compare_results(case, &results);
 }
 
 #[test]

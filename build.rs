@@ -401,6 +401,7 @@ fn generate_encode_fn_avx2(f: &mut File, d: usize, p: usize) {
     writeln!(f, "        parity: &mut [&mut [u8]],").unwrap();
     writeln!(f, "        shard_len: usize,").unwrap();
     writeln!(f, "    ) {{").unwrap();
+    writeln!(f, "        unsafe {{").unwrap();
 
     writeln!(
         f,
@@ -546,6 +547,7 @@ fn generate_encode_fn_avx2(f: &mut File, d: usize, p: usize) {
     }
     writeln!(f, "        }}").unwrap();
 
+    writeln!(f, "        }}").unwrap();
     writeln!(f, "    }}").unwrap();
     writeln!(f).unwrap();
 }
