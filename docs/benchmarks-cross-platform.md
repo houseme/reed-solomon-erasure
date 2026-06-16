@@ -50,17 +50,28 @@ RSE_WRITE_PROFILE_REPORT=1 cargo bench
 
 ### aarch64 (Apple Silicon)
 
-**Hardware**: Apple M-series (aarch64)
+**Hardware**: Apple Silicon (`aarch64-macos-unknown`)
 **Backend**: `rust-neon` (auto-selected)
 **Feature**: `simd-neon`
+**Artifact source**: `benchmarks/small-file/2026-05-27-aarch64-apple-silicon-extended.{json,csv}`
+**Profile**: `extended` (`iterations = 5`)
 
 | Config | Shard Size | Encode (GiB/s) | Reconstruct (GiB/s) |
 |--------|------------|----------------|---------------------|
-| 10×4 | 4 KiB | — | — |
-| 10×4 | 64 KiB | — | — |
-| 10×4 | 1 MiB | — | — |
+| 10×4 | 4 KiB | 3.30 | 3.02 |
+| 10×4 | 64 KiB | 3.62 | 3.52 |
+| 10×4 | 1 MiB | 4.38 | 4.34 |
 
-> **Status**: Benchmark data pending. Run `cargo bench --features simd-neon` on Apple Silicon to populate.
+Supplementary observations from the same artifact set:
+
+- `verify` on `10x4_4k` reached `3135.4851 MB/s` (`3.06 GiB/s`)
+- `verify` on `10x4_64k` reached `3275.6813 MB/s` (`3.20 GiB/s`)
+- `verify` on `10x4_1m` reached `4029.8207 MB/s` (`3.94 GiB/s`)
+- `reconstruct_data` on `10x4_1m` reached `4590.9467 MB/s` (`4.48 GiB/s`)
+
+The aarch64 curve is encouraging: throughput climbs steadily as shard size increases, and the
+`1 MiB` case shows `reconstruct` staying close to `encode`, which matches the current NEON path's
+large-block behavior.
 
 ### x86_64 (AMD EPYC)
 
@@ -148,7 +159,7 @@ go test -bench=BenchmarkReconstruct -benchtime=5s -cpu=1
 
 ## Action Items
 
-1. **Run benchmarks on Apple Silicon** to get NEON numbers
+1. **Extend Apple Silicon coverage** with Criterion `bandwidth` / `throughput_matrix` outputs in addition to small-file smoke artifacts
 2. **Run benchmarks on Intel Ice Lake** to get GFNI numbers
 3. **Run Go benchmarks on same hardware** for direct comparison
 4. **Create comparison table** with normalized throughput (GiB/s per core)
