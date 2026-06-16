@@ -1776,7 +1776,7 @@ fn test_aarch64_reconstruct_stage_policies_allow_data_parity_split() {
         std::env::set_var("RS_AARCH64_RECONSTRUCT_PARITY_MIN_BYTES_PER_JOB", "262144");
     }
     let r = ReedSolomon::new(10, 4).unwrap();
-    let (data_policy, parity_policy) = r.reconstruct_stage_policies_for_test(false);
+    let (data_policy, parity_policy) = r.reconstruct_stage_policies_for_bench(false);
     // SAFETY: cleanup for process-global env vars set above.
     unsafe {
         std::env::remove_var("RS_AARCH64_RECONSTRUCT_MIN_BYTES_PER_JOB");
@@ -4550,7 +4550,7 @@ quickcheck! {
             }
         }
 
-        return true;
+        true
     }
 
     fn qc_shardbyshard_encode_same_as_encode_shards(data: usize,
@@ -4584,7 +4584,7 @@ quickcheck! {
             }
         }
 
-        return true;
+        true
     }
 }
 
@@ -4710,7 +4710,7 @@ quickcheck! {
             }
         }
 
-        return true;
+        true
     }
 
     fn qc_shardbyshard_encode_sep_same_as_encode_shards(data: usize,
@@ -4754,7 +4754,7 @@ quickcheck! {
             }
         }
 
-        return true;
+        true
     }
 }
 
