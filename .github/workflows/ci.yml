@@ -35,10 +35,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Run typos
-        uses: crate-ci/typos@aca895bf05aec0cb7dffa6f94495e923224d9f17 # v1.46.2
+        uses: crate-ci/typos@v1.46.2 # v1.46.2
 
   security:
     name: Security (cargo-audit)
@@ -46,13 +46,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable # v1
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
@@ -70,7 +70,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -78,7 +78,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Build all crates
         run: cargo build --verbose --workspace --exclude rustfs-erasure-codec-fuzz
@@ -93,7 +93,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -101,7 +101,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Build all crates
         run: cargo build --verbose --workspace --exclude rustfs-erasure-codec-fuzz
@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust with target
         uses: dtolnay/rust-toolchain@master # v1
@@ -131,7 +131,7 @@ jobs:
           sudo apt-get install -y gcc-mingw-w64 g++-mingw-w64
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Check target build (default features)
         run: cargo check --verbose --workspace --exclude rustfs-erasure-codec-fuzz --target ${{ matrix.target }}
@@ -156,7 +156,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -164,7 +164,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Test no_std
         run: cargo test --verbose --workspace --exclude rustfs-erasure-codec-fuzz --no-default-features
@@ -186,7 +186,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -194,7 +194,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Test no_std
         run: cargo test --verbose --workspace --exclude rustfs-erasure-codec-fuzz --no-default-features
@@ -216,7 +216,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -224,7 +224,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Test all crates
         run: cargo test --verbose --workspace --exclude rustfs-erasure-codec-fuzz
@@ -243,7 +243,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -251,7 +251,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Test no_std
         run: cargo test --verbose --workspace --exclude rustfs-erasure-codec-fuzz --no-default-features
@@ -276,7 +276,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6 # v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -284,7 +284,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
 
       - name: Verify package
         run: cargo package --allow-dirty --no-verify
@@ -292,4 +292,4 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish
+        run: cargo publish --registry crates-io --package rustfs-erasure-codec --allow-dirty

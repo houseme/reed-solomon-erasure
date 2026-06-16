@@ -6,31 +6,32 @@
 [![dependency status](https://deps.rs/repo/github/houseme/reed-solomon-erasure/status.svg)](https://deps.rs/repo/github/houseme/reed-solomon-erasure)
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
 [![Crates.io License](https://img.shields.io/crates/l/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
-[![Crates.io Version](https://img.shields.io/crates/v/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
 
-English | [Chinese](README_CN.md)
+English | [中文](README_CN.md)
 
-Rust implementation of Reed-Solomon erasure coding.
+`rustfs-erasure-codec` is a modern Rust implementation of Reed-Solomon erasure coding for
+memory-resident, progressive, and block-streaming workloads.
 
-This repository currently contains the modernized Rust 2024 codebase with:
+The current `7.0.0` line provides:
 
 - classic Reed-Solomon over `GF(2^8)` and `GF(2^16)`
 - runtime-dispatched SIMD backends for `galois_8`
-- multiple classic matrix modes
-- Leopard codec families for high shard-count workflows
-- low-allocation verification and reconstruction helpers
-- streaming APIs, benchmarks, and release-validation scripts
+- Leopard GF8 and Leopard GF16 codec families
+- incremental and targeted recovery APIs
+- reusable verification and reconstruction buffers
+- block-based streaming encode, verify, and reconstruct APIs
+- `no_std` support and a WASM companion crate
 
-WASM bindings are available under [wasm/README.md](wasm/README.md).
+WASM bindings live in [wasm/README.md](wasm/README.md).
 
 ## Highlights
 
-- `galois_8::ReedSolomon` is the main optimized path and supports runtime backend selection.
+- `galois_8::ReedSolomon` is the main optimized path for general-purpose use.
 - `galois_16::ReedSolomon` remains available for classic `GF(2^16)` workflows.
-- `CodecOptions` lets you choose codec family, matrix mode, cache behavior, and parallel policy.
-- `VerifyWorkspace` and `ShardSlot<T>` help reduce repeated allocation in hot paths.
-- `decode_idx(...)` and `reconstruct_some(...)` support incremental or targeted recovery for classic codecs.
-- `stream::StreamOptions` enables block-based encode, verify, and reconstruct for large files.
+- `CodecOptions` controls codec family, matrix mode, inversion-cache behavior, and parallel policy.
+- `VerifyWorkspace`, `ShardSlot<T>`, and aligned-shard helpers reduce hot-path allocation churn.
+- `decode_idx(...)`, `reconstruct_some(...)`, and `ShardByShard` cover progressive and selective workflows.
+- `stream::StreamOptions` provides block-based streaming on the classic `galois_8` path.
 
 ## Install
 
@@ -41,14 +42,14 @@ Add the crate:
 rustfs-erasure-codec = "7.0.0"
 ```
 
-Enable SIMD acceleration when you care about throughput:
+Enable SIMD acceleration when throughput matters:
 
 ```toml
 [dependencies]
 rustfs-erasure-codec = { version = "7.0.0", features = ["simd-accel"] }
 ```
 
-You can also enable only the backend family you need:
+Or enable a narrower backend set:
 
 ```toml
 [dependencies]
@@ -62,9 +63,9 @@ rustfs-erasure-codec = { version = "7.0.0", features = ["simd-neon"] }   # aarch
 
 Notes:
 
-- `simd-accel` is an umbrella feature that enables all Rust/C SIMD backends.
+- `std` is enabled by default.
+- `simd-accel` is the umbrella feature that enables all supported SIMD backends.
 - Runtime dispatch is safe: unsupported ISAs fall back to scalar execution.
-- `std` is enabled by default. Disable default features for `no_std` usage.
 
 ## Quick Start
 
@@ -93,25 +94,26 @@ fn main() {
     rs.reconstruct(&mut missing).unwrap();
 
     let rebuilt: Vec<Vec<u8>> = missing.into_iter().map(|shard| shard.unwrap()).collect();
-    let mut verify_workspace = VerifyWorkspace::new(&rs, rebuilt[0].len());
+    let mut workspace = VerifyWorkspace::new(&rs, rebuilt[0].len());
 
-    assert!(rs.verify_with_workspace(&rebuilt, &mut verify_workspace).unwrap());
+    assert!(rs.verify_with_workspace(&rebuilt, &mut workspace).unwrap());
     assert_eq!(rebuilt, original);
 }
 ```
 
-For repeated `verify(...)` calls, prefer `verify_with_workspace(...)` or
-`verify_with_buffer(...)` to reuse parity scratch space.
+For repeated verification calls, prefer `verify_with_workspace(...)` or
+`verify_with_buffer(...)` over plain `verify(...)`.
 
-## Low-Allocation Helpers
+## Memory Reuse Helpers
 
-For repeated reconstruct flows, `ShardSlot<T>` avoids reallocating missing shard buffers:
+For repeated reconstruct flows, `ShardSlot<T>` lets you keep ownership of missing-shard buffers:
 
 ```rust
 use rustfs_erasure_codec::galois_8::{ReedSolomon, mark_missing_slots, shards_to_slots};
 
 fn main() {
     let rs = ReedSolomon::new(4, 2).unwrap();
+
     let mut shards = vec![
         vec![0, 1, 2, 3],
         vec![4, 5, 6, 7],
@@ -120,7 +122,6 @@ fn main() {
         vec![0, 0, 0, 0],
         vec![0, 0, 0, 0],
     ];
-
     rs.encode(&mut shards).unwrap();
 
     let mut slots = shards_to_slots(&shards);
@@ -132,7 +133,7 @@ fn main() {
 }
 ```
 
-For SIMD-sensitive workloads on `galois_8`, you can allocate 64-byte aligned shards with:
+For SIMD-sensitive `galois_8` workloads, aligned shard helpers are available:
 
 - `rustfs_erasure_codec::galois_8::alloc_aligned_shards(...)`
 - `galois_8::ReedSolomon::alloc_aligned(...)`
@@ -141,11 +142,11 @@ For SIMD-sensitive workloads on `galois_8`, you can allocate 64-byte aligned sha
 
 `CodecOptions::codec_family` selects the algorithm family:
 
-| Family        | Status                                   | Notes                                                                                                                                                                                                                |
-|---------------|------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Classic`     | fully supported                          | Default family. Supports `update`, `encode_single`, `decode_idx`, `reconstruct_some`, and matrix-mode selection.                                                                                                     |
-| `LeopardGF8`  | supported for `galois_8` workloads       | FFT-based codec over `GF(2^8)`. Requires shard lengths that are multiples of 64 bytes and supports up to 256 total shards. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported. |
-| `LeopardGF16` | supported for high shard-count workflows | FFT-based codec family for large total shard counts. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported.                                                                       |
+| Family | Status | Notes |
+|---|---|---|
+| `Classic` | fully supported | Default family. Supports `update`, `encode_single*`, `decode_idx`, `reconstruct_some`, and matrix-mode selection. |
+| `LeopardGF8` | supported on the `galois_8` path | FFT-based codec over `GF(2^8)`. Requires shard lengths that are multiples of 64 bytes and supports up to 256 total shards. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported. |
+| `LeopardGF16` | supported for high shard-count workflows | FFT-based codec over `GF(2^16)` for larger total shard counts. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported. |
 
 Example:
 
@@ -154,25 +155,32 @@ use rustfs_erasure_codec::galois_8::ReedSolomon;
 use rustfs_erasure_codec::{CodecFamily, CodecOptions};
 
 let rs = ReedSolomon::with_options(
-32,
-16,
-CodecOptions {
-codec_family: CodecFamily::LeopardGF8,
-..CodecOptions::default ()
-},
-).unwrap();
+    32,
+    16,
+    CodecOptions {
+        codec_family: CodecFamily::LeopardGF8,
+        ..CodecOptions::default()
+    },
+)
+.unwrap();
 ```
+
+Important Leopard-family notes:
+
+- shard lengths must be multiples of 64 bytes
+- all shard buffers must be the same length
+- `decode_idx(...)`, `update(...)`, and `encode_single*` remain Classic-only
 
 ## Matrix Modes
 
 `CodecOptions::matrix_mode` applies to `CodecFamily::Classic`:
 
-- `Vandermonde`: default classic behavior
-- `Cauchy`: alternative coding matrix
-- `JerasureLike`: Jerasure-style matrix layout
-- `Custom`: explicit matrix rows via `ReedSolomon::with_custom_matrix(...)`
+- `Vandermonde`
+- `Cauchy`
+- `JerasureLike`
+- `Custom`
 
-If you need compatibility with existing classic payload expectations, stay on
+If you need compatibility with established classic payload layouts, stay on
 `MatrixMode::Vandermonde`.
 
 Minimal custom-matrix example:
@@ -182,43 +190,51 @@ use rustfs_erasure_codec::galois_8::ReedSolomon;
 use rustfs_erasure_codec::CodecOptions;
 
 let custom_rows = vec![vec![1u8, 1, 1], vec![1u8, 2, 4]];
-let rs = ReedSolomon::with_custom_matrix(3, 2, & custom_rows, CodecOptions::default ()).unwrap();
+let rs = ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default()).unwrap();
 ```
 
-## Advanced APIs
+## Progressive And Targeted APIs
 
-### Incremental Recovery
+### Progressive Recovery
 
-`decode_idx(...)` is available on classic `galois_8::ReedSolomon` and is useful
-when inputs arrive over multiple steps instead of in one full reconstruct call.
+`decode_idx(...)` is available on classic `galois_8::ReedSolomon` and is useful when input shards arrive in phases instead of a single reconstruct call.
 
 ### Targeted Recovery
 
-`reconstruct_some(...)` reconstructs only the shards you mark as required, which
-can reduce unnecessary work when you do not need the full stripe restored.
+`reconstruct_some(...)` reconstructs only the shards you mark as required.
 
-### Streaming
+### Shard-By-Shard Encoding
 
-The streaming API lives under `rustfs_erasure_codec::stream` and is available
-with the default `std` feature:
+`ShardByShard` provides a stateful progressive encoder for workflows that feed data shards incrementally.
+
+## Streaming API
+
+The streaming API lives under `rustfs_erasure_codec::stream` and is available with the default `std` feature.
+
+Main entry points:
 
 - `encode_stream(...)`
 - `verify_stream(...)`
 - `reconstruct_stream(...)`
 
-Use it when your data is too large to hold in memory as a full shard matrix.
-`StreamOptions` defaults to 4 MiB blocks and lets you tune block size.
+Current scope and limitations:
+
+- implemented on the classic `galois_8` path
+- tuned for block-based processing via `StreamOptions`
+- `reconstruct_stream(...)` currently uses `Cursor<Vec<u8>>`
+- Leopard-family streaming reconstruction is not supported
+
+Use this path when your data should be processed in bounded blocks instead of holding the full shard matrix in memory.
 
 ## Runtime Backend Control
 
-The main `galois_8` path supports runtime backend inspection and overrides.
+The `galois_8` path exposes runtime backend inspection and override hooks.
 
 Environment variables:
 
-- `RSE_BACKEND_OVERRIDE`: force a backend such as `scalar`, `rust-neon`, `rust-avx2`, `rust-avx512`, `rust-gfni-avx2`,
-  `rust-gfni-avx512`, `rust-ssse3`, `rust-vsx`, or `simd-c`
-- `RSE_STRICT_BACKEND_OVERRIDE=1`: fail validation if the requested backend cannot be honored
-- `RUST_REED_SOLOMON_ERASURE_ARCH`: tune the legacy C backend build target
+- `RSE_BACKEND_OVERRIDE`
+- `RSE_STRICT_BACKEND_OVERRIDE=1`
+- `RUST_REED_SOLOMON_ERASURE_ARCH`
 
 Public helpers:
 
@@ -226,36 +242,44 @@ Public helpers:
 - `galois_8::active_backend_kind()`
 - `galois_8::active_backend_id()`
 
-## Tuning Options
+## Tuning And Profiling
 
-`CodecOptions` exposes several useful knobs:
+Useful `CodecOptions` knobs:
 
-- `fast_one_parity`: enables XOR-only fast path when `parity_shards == 1`
-- `inversion_cache`: enables/disables cached decode matrices
-- `inversion_cache_capacity`: controls cache sizing explicitly
-- `max_parallel_jobs`: caps parallel work for a codec instance
+- `fast_one_parity`
+- `inversion_cache`
+- `inversion_cache_capacity`
+- `max_parallel_jobs`
 
-You can also tune parallel policy through environment variables:
+Parallel-policy environment variables:
 
 - `RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES`
 - `RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB`
 - `RS_PARALLEL_POLICY_MAX_JOBS`
+- `RS_PARALLEL_POLICY_L2_CACHE_BYTES`
+- `RS_PARALLEL_POLICY_DEBUG`
 
-## Benchmarks And Validation
+Optional metrics/profile surfaces:
+
+- `benchmark-metrics` feature
+- `leopard_gf8_profile_stats()`
+- `reset_leopard_gf8_profile_stats()`
+
+## Validation And Benchmarks
 
 Common workflows:
 
 ```bash
 # Run tests
-cargo test
+cargo test --workspace
 
-# Run benches
+# Run benchmarks
 cargo bench --features simd-accel
 
-# Run the release validation profile
+# Run release validation
 bash scripts/release-check.sh
 
-# Run the extended validation profile
+# Run extended validation
 VALIDATION_PROFILE=extended bash scripts/release-check.sh
 
 # Collect x86_64 SIMD benchmark artifacts
@@ -266,26 +290,27 @@ Useful references:
 
 - [docs/benchmark-methodology.md](docs/benchmark-methodology.md)
 - [docs/README-performance-index.md](docs/README-performance-index.md)
-- [scripts/README.md](scripts/README.md)
 - [docs/README.md](docs/README.md)
+- [scripts/README.md](scripts/README.md)
 
 ## Provenance
 
 Versions `0.9.0` through `6.0.0` were originally created by
 [Darren Ldl](https://github.com/darrenldl) and later maintained by the
-[rust-rse](https://github.com/rust-rse) community. The current codebase in this
-repository includes the Rust 2024 rewrite and the newer SIMD/Leopard work
-maintained by [houseme](https://github.com/houseme).
+[rust-rse](https://github.com/rust-rse) community.
+
+The current `7.0.0` line in this repository is maintained under
+[houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
+and reflects the Rust 2024 rewrite, runtime SIMD architecture, and Leopard work.
 
 ## Contributing
 
-Contributions are welcome. Please include focused validation for the area you
-touch, especially for backend-specific or benchmark-sensitive changes.
+Contributions are welcome. For backend-sensitive, benchmark-sensitive, or codec-family work, include focused validation where possible.
 
 ## License
 
 This project is released under the MIT License. See [LICENSE](LICENSE).
 
-The bundled `simd_c` sources are derived from
+The bundled `simd_c` sources derive from
 [Nicolas Trangez's Haskell implementation](https://github.com/NicolasT/reedsolomon)
 and remain under the MIT License as well.
