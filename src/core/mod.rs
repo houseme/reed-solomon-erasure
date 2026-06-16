@@ -111,7 +111,10 @@ impl<F: Field> Clone for ReedSolomon<F> {
                         super::CodecFamily::Classic => FamilyState::Classic,
                         super::CodecFamily::LeopardGF16 => FamilyState::LeopardGF16,
                         super::CodecFamily::LeopardGF8 => {
-                            debug_assert!(false, "LeopardGF8 should have a recoverable family state");
+                            debug_assert!(
+                                false,
+                                "LeopardGF8 should have a recoverable family state"
+                            );
                             FamilyState::Classic
                         }
                     }
@@ -131,9 +134,9 @@ impl<F: Field> Clone for ReedSolomon<F> {
                     options,
                     #[cfg(feature = "std")]
                     policy_cache,
-                    data_decode_matrix_cache: Mutex::new(
-                        LruCache::new(options.inversion_cache_capacity),
-                    ),
+                    data_decode_matrix_cache: Mutex::new(LruCache::new(
+                        options.inversion_cache_capacity,
+                    )),
                     #[cfg(feature = "std")]
                     reconstruction_cache_metrics: ReconstructionCacheMetrics::default(),
                     #[cfg(feature = "std")]

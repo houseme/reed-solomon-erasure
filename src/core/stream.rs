@@ -317,7 +317,10 @@ fn read_block_par<R: std::io::Read + Send>(
             Ok(())
         })
         .map_err(|()| {
-            take_stream_error(&first_error, "parallel stream reader error was not reported")
+            take_stream_error(
+                &first_error,
+                "parallel stream reader error was not reported",
+            )
         })?;
 
     Ok((
@@ -383,7 +386,10 @@ fn write_block_par<W: std::io::Write + Send>(
             Ok(())
         })
         .map_err(|()| {
-            take_stream_error(&first_error, "parallel stream writer error was not reported")
+            take_stream_error(
+                &first_error,
+                "parallel stream writer error was not reported",
+            )
         })
 }
 
@@ -579,7 +585,10 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                     Ok(())
                 })
                 .map_err(|()| {
-                    take_stream_error(&first_error, "parallel stream reader error was not reported")
+                    take_stream_error(
+                        &first_error,
+                        "parallel stream reader error was not reported",
+                    )
                 })?;
 
             if !any_data.load(Ordering::Relaxed) {
