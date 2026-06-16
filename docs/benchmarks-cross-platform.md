@@ -50,23 +50,33 @@ RSE_WRITE_PROFILE_REPORT=1 cargo bench
 
 ### aarch64 (Apple Silicon)
 
-**Hardware**: Apple Silicon MacBook Pro
+**Hardware**: Apple M5 Max MacBook Pro
 **Backend**: `rust-neon` (auto-selected)
 **Feature**: `simd-neon`
 **Artifact source**: `benchmarks/small-file/2026-05-27-aarch64-apple-silicon-extended.{json,csv}`
 **Profile**: `extended` (`iterations = 5`)
 
 **Benchmark Environment**
+- OS: `macOS 26.5.1`
+- Kernel: `Darwin 25.5.0`
+- Hostname: `zhi-mbp.local`
 - Target triple: `aarch64-macos-unknown`
+- Architecture: `aarch64`
 - Features: `std|simd-accel`
 - Backend kind: `RustSimd`
 - Backend override: `auto` (`override_honored = true`)
 - Benchmark metrics feature: disabled
-- Machine note: Apple Silicon MacBook Pro
-- CPU / SoC exact model: not recorded in the benchmark artifact
-- Memory size: not recorded in the benchmark artifact
-- Rust toolchain version: not recorded in the benchmark artifact
-- Power / thermal state: not recorded in the benchmark artifact
+- CPU / SoC: `Apple M5 Max`
+- Logical CPU parallelism: `18`
+- Reported CPU frequency: `4608 MHz`
+- Memory: `128 GB total`, `74.26 GB used`, `121.22 GB available`
+- Swap: `0 B`
+- Root disk: `1.81 TB APFS`, `390.05 GB used`, `1.43 TB available`
+- Rust toolchain: `rustc 1.96.0 (ac68faa20 2026-05-25)`
+- Build profile of the system info collector: `debug`
+- Collector git branch / commit: `main` / `c405470f7350e0bbc01a6e2c25ab03ac2789c648`
+- Runtime parallelism: `18`
+- Power / thermal state during benchmark: not recorded
 
 | Config | Shard Size | Encode (GiB/s) | Reconstruct (GiB/s) |
 |--------|------------|----------------|---------------------|
