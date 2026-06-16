@@ -123,7 +123,15 @@ pub(crate) fn build_family_state<F: Field>(
         CodecFamily::LeopardGF8 => Ok(FamilyState::LeopardGF8(LeopardGF8Codec::new(
             data_shards,
             parity_shards,
-            Matrix::new(setup_matrix.row_count(), setup_matrix.col_count()),
+            {
+                let mut matrix = Matrix::new(setup_matrix.row_count(), setup_matrix.col_count());
+                for row in 0..setup_matrix.row_count() {
+                    for col in 0..setup_matrix.col_count() {
+                        matrix.set(row, col, setup_matrix.get(row, col));
+                    }
+                }
+                matrix
+            },
         )?)),
         CodecFamily::LeopardGF16 => Ok(FamilyState::LeopardGF16),
     }

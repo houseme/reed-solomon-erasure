@@ -96,7 +96,7 @@ impl<F: Field> Clone for ReedSolomon<F> {
                     }
                 }
 
-                let family_state = super::leopard::build_family_state(
+                let family_state = crate::core::leopard::build_family_state(
                     self.codec_family,
                     self.data_shard_count,
                     self.parity_shard_count,

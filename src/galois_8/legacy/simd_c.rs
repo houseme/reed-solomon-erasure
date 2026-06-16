@@ -53,10 +53,15 @@ pub(crate) fn simd_c_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     let out_ptr: *mut u8 = &mut out[0];
     let size: libc::size_t = input.len();
 
-    let bytes_done: usize =
-        unsafe { reedsolomon_gal_mul(low, high, input_ptr, out_ptr, size) as usize };
+    let bytes_done: usize = unsafe { reedsolomon_gal_mul(low, high, input_ptr, out_ptr, size) as usize };
 
-    super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    if bytes_done == 0 {
+        super::super::scalar::mul_slice_pure_rust(c, input, out);
+    } else if bytes_done < size {
+        super::super::scalar::mul_slice_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    } else if bytes_done > size {
+        super::super::scalar::mul_slice_pure_rust(c, input, out);
+    }
 }
 
 #[cfg(all(
@@ -87,5 +92,11 @@ pub(crate) fn simd_c_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     let bytes_done: usize =
         unsafe { reedsolomon_gal_mul_xor(low, high, input_ptr, out_ptr, size) as usize };
 
-    super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    if bytes_done == 0 {
+        super::super::scalar::mul_slice_xor_pure_rust(c, input, out);
+    } else if bytes_done < size {
+        super::super::scalar::mul_slice_xor_pure_rust(c, &input[bytes_done..], &mut out[bytes_done..]);
+    } else if bytes_done > size {
+        super::super::scalar::mul_slice_xor_pure_rust(c, input, out);
+    }
 }

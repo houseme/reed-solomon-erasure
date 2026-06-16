@@ -27,7 +27,8 @@
 //! rs.encode_stream(&mut data_readers, &mut parity_writers, &opts).unwrap();
 //! ```
 
-use std::io::Read;
+use std::io::{Error, Read};
+use std::mem;
 
 // ---------------------------------------------------------------------------
 // StreamOptions
@@ -59,7 +60,9 @@ impl StreamOptions {
 
     /// Set the block size (minimum 1 KiB).
     pub fn with_block_size(mut self, size: usize) -> Self {
-        self.block_size = size.max(1024);
+        const MIN_BLOCK_SIZE_BYTES: usize = 1024;
+        const MAX_BLOCK_SIZE_BYTES: usize = 16 * 1024 * 1024;
+        self.block_size = size.clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
         self
     }
 }
@@ -133,6 +136,23 @@ impl StreamError {
         Self {
             shard_index,
             kind: StreamErrorKind::Codec(e),
+        }
+    }
+}
+
+fn take_stream_error(
+    first_error: &std::sync::Mutex<Option<StreamError>>,
+    fallback_message: &'static str,
+) -> StreamError {
+    match first_error.lock() {
+        Ok(mut guard) => guard
+            .take()
+            .unwrap_or_else(|| StreamError::read(0, Error::other(fallback_message))),
+        Err(poisoned) => {
+            let mut guard = poisoned.into_inner();
+            guard
+                .take()
+                .unwrap_or_else(|| StreamError::read(0, Error::other(fallback_message)))
         }
     }
 }
@@ -297,10 +317,7 @@ fn read_block_par<R: std::io::Read + Send>(
             Ok(())
         })
         .map_err(|()| {
-            first_error
-                .into_inner()
-                .expect("parallel reader panicked")
-                .expect("error not set")
+            take_stream_error(&first_error, "parallel stream reader error was not reported")
         })?;
 
     Ok((
@@ -366,10 +383,7 @@ fn write_block_par<W: std::io::Write + Send>(
             Ok(())
         })
         .map_err(|()| {
-            first_error
-                .into_inner()
-                .expect("parallel reader panicked")
-                .expect("error not set")
+            take_stream_error(&first_error, "parallel stream writer error was not reported")
         })
 }
 
@@ -565,10 +579,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                     Ok(())
                 })
                 .map_err(|()| {
-                    first_error
-                        .into_inner()
-                        .expect("parallel reader panicked")
-                        .expect("error not set")
+                    take_stream_error(&first_error, "parallel stream reader error was not reported")
                 })?;
 
             if !any_data.load(Ordering::Relaxed) {
@@ -594,7 +605,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             let mut reconstruct_bufs: Vec<Option<Vec<u8>>> = (0..total)
                 .map(|i| {
                     if present[i] {
-                        Some(bufs[i].clone())
+                        Some(mem::take(&mut bufs[i]))
                     } else {
                         None
                     }

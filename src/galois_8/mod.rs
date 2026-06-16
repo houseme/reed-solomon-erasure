@@ -96,16 +96,15 @@ pub fn mul(a: u8, b: u8) -> u8 {
 /// Divide one element by another. If `b` is `0`, this returns `0` instead of panicking.
 pub fn div(a: u8, b: u8) -> u8 {
     if a == 0 || b == 0 {
-        0
-    } else {
-        let log_a = LOG_TABLE[a as usize];
-        let log_b = LOG_TABLE[b as usize];
-        let mut log_result = log_a as isize - log_b as isize;
-        if log_result < 0 {
-            log_result += 255;
-        }
-        EXP_TABLE[log_result as usize]
+        return 0;
     }
+    let log_a = LOG_TABLE[a as usize];
+    let log_b = LOG_TABLE[b as usize];
+    let mut log_result = log_a as isize - log_b as isize;
+    if log_result < 0 {
+        log_result += 255;
+    }
+    EXP_TABLE[log_result as usize]
 }
 
 /// Compute a^n.
