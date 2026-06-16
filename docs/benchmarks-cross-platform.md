@@ -65,14 +65,20 @@ RSE_WRITE_PROFILE_REPORT=1 cargo bench
 ### x86_64 (AMD EPYC)
 
 **Hardware**: AMD EPYC 9V45 (96-core)
-**Backend**: `rust-avx2` (auto-selected; GFNI not available on AMD)
+**Backend**: `rust-avx2` (auto-selected in the archived cross-platform sample)
 **Feature**: `simd-avx2`
 
-Benchmark data available in `benchmarks/x86_64-simd/`:
-- `comprehensive-x86_64-benchmark.json` — full matrix
-- `2026-05-30-small-file-gfni-auto.json` — small file perf
+| Config | Shard Size | Encode (GiB/s) | Reconstruct (GiB/s) |
+|--------|------------|----------------|---------------------|
+| 10×4 | 4 KiB | 3.56 | 3.33 |
+| 10×4 | 64 KiB | 3.10 | 2.90 |
+| 10×4 | 1 MiB | 3.13 | 2.23 |
 
-> **Note**: AMD EPYC does not support GFNI. See [GFNI results doc](benchmarks-gfni-results.md) for details.
+Data sources:
+- `benchmarks/small-file/2026-05-27-x86_64-linux-extended.csv` — archived `10x4` small-file auto results used for the cross-platform table
+- `benchmarks/x86_64-simd/comprehensive-x86_64-benchmark.json` — broader x86_64 encode-only matrix for deeper drill-down
+
+> **Note**: This table uses the archived auto-path sample from `2026-05-27`. For newer x86 backend-policy and host-specific validation context, see [GFNI results doc](benchmarks-gfni-results.md) and the newer x86_64 benchmark artifacts under `benchmarks/x86_64-simd/`.
 
 ### x86_64 (Intel with GFNI)
 
