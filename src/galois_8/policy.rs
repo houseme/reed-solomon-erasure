@@ -748,7 +748,8 @@ impl crate::ReedSolomon<super::Field> {
         if self.is_leopard_gf8_family() {
             return self.reconstruct(shards);
         }
-        let (shard_len, missing_data, missing) = self.summarize_option_vec_reconstruct_shape(shards)?;
+        let (shard_len, missing_data, missing) =
+            self.summarize_option_vec_reconstruct_shape(shards)?;
         if missing == 0 {
             return Ok(());
         }
@@ -773,7 +774,8 @@ impl crate::ReedSolomon<super::Field> {
         if self.is_leopard_gf8_family() {
             return self.reconstruct_data(shards);
         }
-        let (shard_len, missing_data, missing) = self.summarize_option_vec_reconstruct_shape(shards)?;
+        let (shard_len, missing_data, missing) =
+            self.summarize_option_vec_reconstruct_shape(shards)?;
         if missing == 0 {
             return Ok(());
         }
