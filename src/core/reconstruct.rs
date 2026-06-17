@@ -79,9 +79,7 @@ impl<F: Field> ReedSolomon<F> {
             shard_len,
             self.data_shard_count,
             outputs.len(),
-            std::thread::available_parallelism()
-                .map(|parallelism| parallelism.get())
-                .unwrap_or(1),
+            self.policy_cache.available_parallelism,
         );
         self.runtime_profile_metrics
             .record_parallel_policy(decision);

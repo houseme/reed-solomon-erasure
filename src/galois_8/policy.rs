@@ -417,6 +417,46 @@ impl crate::ReedSolomon<super::Field> {
     }
 
     #[cfg(feature = "std")]
+    fn summarize_option_vec_reconstruct_shape(
+        &self,
+        shards: &[Option<Vec<u8>>],
+    ) -> Result<(usize, usize, usize), crate::Error> {
+        let mut number_present = 0usize;
+        let mut shard_len = None;
+        let mut missing_total = 0usize;
+        let mut missing_data = 0usize;
+
+        for (idx, shard) in shards.iter().enumerate() {
+            if let Some(shard) = shard.as_ref() {
+                if shard.is_empty() {
+                    return Err(crate::Error::EmptyShard);
+                }
+                number_present += 1;
+                if let Some(old_len) = shard_len
+                    && shard.len() != old_len
+                {
+                    return Err(crate::Error::IncorrectShardSize);
+                }
+                shard_len = Some(shard.len());
+            } else {
+                missing_total += 1;
+                if idx < self.data_shard_count() {
+                    missing_data += 1;
+                }
+            }
+        }
+
+        if missing_total == 0 {
+            return Ok((0, 0, 0));
+        }
+        if number_present < self.data_shard_count() {
+            return Err(crate::Error::TooFewShardsPresent);
+        }
+
+        Ok((shard_len.unwrap_or(0), missing_data, missing_total))
+    }
+
+    #[cfg(feature = "std")]
     fn should_parallel_data_path(&self, shard_len: usize, output_shards: usize) -> bool {
         self.parallel_policy(shard_len, output_shards).use_parallel
     }
@@ -457,9 +497,7 @@ impl crate::ReedSolomon<super::Field> {
             missing_data,
             missing_total,
             data_only,
-            std::thread::available_parallelism()
-                .map(|parallelism| parallelism.get())
-                .unwrap_or(1),
+            self.policy_cache.available_parallelism,
         )
     }
 
@@ -710,19 +748,11 @@ impl crate::ReedSolomon<super::Field> {
         if self.is_leopard_gf8_family() {
             return self.reconstruct(shards);
         }
-        let workspace = self.prepare_reconstruct_opt_workspace(shards)?;
-        if workspace.0.shard_len == 0 {
+        let (shard_len, missing_data, missing) = self.summarize_option_vec_reconstruct_shape(shards)?;
+        if missing == 0 {
             return Ok(());
         }
-        let missing_data = workspace
-            .0
-            .invalid_indices
-            .iter()
-            .filter(|&&idx| idx < self.data_shard_count())
-            .count();
-        let missing = workspace.0.invalid_indices.len();
-        let decision =
-            self.reconstruct_parallel_decision(workspace.0.shard_len, missing_data, missing, false);
+        let decision = self.reconstruct_parallel_decision(shard_len, missing_data, missing, false);
         self.record_reconstruct_entry_path(decision.use_parallel);
         if decision.use_parallel {
             let (data_policy, parity_policy) = self.reconstruct_stage_policies(false);
@@ -734,7 +764,7 @@ impl crate::ReedSolomon<super::Field> {
             )
         } else {
             self.record_reconstruct_opt_fallback_serial_path();
-            self.reconstruct_opt_with_workspace(shards, &workspace)
+            self.reconstruct(shards)
         }
     }
 
@@ -743,24 +773,16 @@ impl crate::ReedSolomon<super::Field> {
         if self.is_leopard_gf8_family() {
             return self.reconstruct_data(shards);
         }
-        let plan = self.plan_option_vec_reconstruct(shards, None)?;
-        if plan.shard_len == 0 {
+        let (shard_len, missing_data, missing) = self.summarize_option_vec_reconstruct_shape(shards)?;
+        if missing == 0 {
             return Ok(());
         }
-        let missing_data = plan
-            .invalid_indices
-            .iter()
-            .filter(|&&idx| idx < self.data_shard_count())
-            .count();
-        let missing = plan.invalid_indices.len();
-        let decision =
-            self.reconstruct_parallel_decision(plan.shard_len, missing_data, missing, true);
+        let decision = self.reconstruct_parallel_decision(shard_len, missing_data, missing, true);
         self.record_reconstruct_entry_path(decision.use_parallel);
         if decision.use_parallel {
             let (data_policy, _parity_policy) = self.reconstruct_stage_policies(true);
             self.reconstruct_internal_option_vec_par_with_policy(shards, true, data_policy)
         } else {
-            drop(plan);
             self.reconstruct_data(shards)
         }
     }
@@ -1029,6 +1051,9 @@ fn reconstruct_policy_cache_aarch64(base: crate::ParallelPolicy) -> RuntimeParal
     }
 
     RuntimeParallelPolicyCache {
+        available_parallelism: std::thread::available_parallelism()
+            .map(|parallelism| parallelism.get())
+            .unwrap_or(1),
         data: base,
         reconstruct_data,
         reconstruct_full_data,
@@ -1043,6 +1068,9 @@ pub(crate) fn resolve_runtime_parallel_policy_cache(
     let reconstruct_data = reconstruct_parallel_policy_default(base, true);
     let reconstruct_full = reconstruct_parallel_policy_default(base, false);
     RuntimeParallelPolicyCache {
+        available_parallelism: std::thread::available_parallelism()
+            .map(|parallelism| parallelism.get())
+            .unwrap_or(1),
         data: base,
         reconstruct_data,
         reconstruct_full_data: reconstruct_full,

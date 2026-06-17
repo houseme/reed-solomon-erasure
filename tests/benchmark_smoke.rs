@@ -1930,6 +1930,31 @@ fn benchmark_decode_idx_vs_reconstruct_some_32x16_4m_exports_results() {
 #[test]
 #[ignore]
 #[cfg(feature = "std")]
+fn benchmark_reconstruct_policy_4x2_1k_exports_results() {
+    let case = BenchCase {
+        data_shards: 4,
+        parity_shards: 2,
+        shard_size: 1024,
+        label: "4x2_1k",
+    };
+    let iterations = smoke_iterations().max(12);
+    let results = run_reconstruct_policy_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_serial.is_finite())
+    );
+    write_reconstruct_policy_compare_results(case, &results);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
 fn benchmark_reconstruct_policy_4x2_64k_exports_results() {
     let case = bench_common::FULL_CASES
         .iter()
@@ -1937,6 +1962,31 @@ fn benchmark_reconstruct_policy_4x2_64k_exports_results() {
         .find(|case| case.label == "4x2_64k")
         .expect("4x2_64k full case must exist");
     let iterations = smoke_iterations().max(6);
+    let results = run_reconstruct_policy_compare(case, iterations);
+    assert!(
+        results
+            .iter()
+            .all(|result| result.throughput_mb_s.is_finite())
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result.speedup_vs_serial.is_finite())
+    );
+    write_reconstruct_policy_compare_results(case, &results);
+}
+
+#[test]
+#[ignore]
+#[cfg(feature = "std")]
+fn benchmark_reconstruct_policy_10x4_1k_exports_results() {
+    let case = BenchCase {
+        data_shards: 10,
+        parity_shards: 4,
+        shard_size: 1024,
+        label: "10x4_1k",
+    };
+    let iterations = smoke_iterations().max(12);
     let results = run_reconstruct_policy_compare(case, iterations);
     assert!(
         results

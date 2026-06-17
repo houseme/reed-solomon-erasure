@@ -1,3 +1,5 @@
+#![cfg(feature = "std")]
+
 #[path = "../benches/common/mod.rs"]
 mod bench_common;
 mod common;

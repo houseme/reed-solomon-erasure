@@ -39,6 +39,7 @@ pub struct ParallelDecision {
 #[cfg(feature = "std")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RuntimeParallelPolicyCache {
+    pub available_parallelism: usize,
     pub data: ParallelPolicy,
     pub reconstruct_data: ParallelPolicy,
     pub reconstruct_full_data: ParallelPolicy,
@@ -172,6 +173,7 @@ impl ParallelPolicy {
 impl RuntimeParallelPolicyCache {
     pub(crate) fn new(data: ParallelPolicy) -> Self {
         Self {
+            available_parallelism: detect_available_parallelism(),
             data,
             reconstruct_data: data,
             reconstruct_full_data: data,
@@ -206,6 +208,13 @@ fn parse_env_usize(name: &str) -> Option<usize> {
         .and_then(|value| value.parse::<usize>().ok())
 }
 
+#[cfg(feature = "std")]
+fn detect_available_parallelism() -> usize {
+    std::thread::available_parallelism()
+        .map(|parallelism| parallelism.get())
+        .unwrap_or(1)
+}
+
 impl<F: Field> ReedSolomon<F> {
     /// Compute the parallel execution decision for the current codec and shard size.
     #[cfg(feature = "std")]
@@ -213,9 +222,7 @@ impl<F: Field> ReedSolomon<F> {
         let decision = self.parallel_policy_with(
             shard_len,
             output_shards,
-            std::thread::available_parallelism()
-                .map(|parallelism| parallelism.get())
-                .unwrap_or(1),
+            self.policy_cache.available_parallelism,
         );
 
         #[cfg(debug_assertions)]
