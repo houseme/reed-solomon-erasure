@@ -1,0 +1,38 @@
+=== Hardware Environment ===
+Timestamp: 2026-06-17T15:30:00Z
+Git revision: 654c548
+Architecture: arm64
+
+=== CPU (macOS) ===
+Apple M5 Max
+CPU count: 16
+
+=== SIMD Flags ===
+NEON: yes
+ARM64: yes
+
+=== Memory ===
+64 GiB
+
+=== Kernel ===
+Darwin 25.5.0
+
+=== OS ===
+macOS Tahoe 15.5
+
+=== Rust ===
+rustc 1.96.0 (ac68faa20 2026-05-25)
+cargo 1.96.0 (30a34c682 2026-05-25)
+
+=== Compiler ===
+Apple clang version 17.0.0
+
+=== System Load ===
+load averages: 1.52 1.89 2.01
+
+=== Benchmark Config ===
+Profile: extended
+Iterations: 5
+Features: std simd-accel
+Cooldown: 15s
+Phase: all
