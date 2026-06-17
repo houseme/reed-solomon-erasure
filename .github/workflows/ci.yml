@@ -333,5 +333,5 @@ jobs:
 
       - name: Publish
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: cargo publish --registry crates-io --package rustfs-erasure-codec --allow-dirty
