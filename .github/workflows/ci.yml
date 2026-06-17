@@ -4,15 +4,20 @@ on:
   push:
     branches:
       - main
-      - master
+      - 'feature/**'
+      - 'refactor/**'
+      - 'fix/**'
       - beta
     tags:
       - "v*"
       - "[0-9]*"
+      - "*"
   pull_request:
     branches:
       - main
-      - master
+      - 'feature/**'
+      - 'refactor/**'
+      - 'fix/**'
       - beta
   schedule:
     - cron: "0 3 * * 1"
