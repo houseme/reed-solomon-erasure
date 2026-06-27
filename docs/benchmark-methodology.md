@@ -8,6 +8,7 @@ Targets:
 
 - smoke regression (`tests/benchmark_smoke.rs`)
 - small-file matrix (`tests/benchmark_small_files.rs`)
+- stream path matrix (`tests/benchmark_stream_paths.rs`)
 - throughput matrix (`benches/throughput_matrix.rs`)
 - backend kernel benchmarks (`benches/galois_backend.rs`)
 
@@ -50,6 +51,32 @@ Small-file helper script:
 
 ```bash
 bash scripts/run_small_file_benchmark_matrix.sh
+```
+
+Stream path matrix:
+
+```bash
+RSE_STREAM_PROFILE=fast \
+cargo test --release --features "std simd-accel" \
+  --test benchmark_stream_paths \
+  benchmark_stream_path_matrix_runs_and_exports_results -- --ignored --nocapture
+```
+
+Stream path profiles:
+
+- `RSE_STREAM_PROFILE=quick`: `4+2 / 64 KiB` Memory backend smoke for `encode_stream` and `verify_stream`
+- `RSE_STREAM_PROFILE=fast`: `4+2` and `10+4` Memory backend coverage for `encode_stream`, `verify_stream`, and `reconstruct_stream`
+- `RSE_STREAM_PROFILE=extended`: broader Memory backend coverage through larger shard counts for stream path regression analysis
+
+Filtered stream path drill-down:
+
+```bash
+RSE_STREAM_PROFILE=fast \
+RSE_STREAM_CASE_FILTER=10x4_64k \
+RSE_STREAM_ITERATIONS=10 \
+cargo test --release --features "std simd-accel" \
+  --test benchmark_stream_paths \
+  benchmark_stream_path_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
 
 Repeated reconstruct planning reuse:
@@ -101,6 +128,11 @@ Small-file outputs:
 
 - `target/benchmark-smoke/small-file-results.json`
 - `target/benchmark-smoke/small-file-results.csv`
+
+Stream path outputs:
+
+- `target/benchmark-smoke/stream-path-results.json`
+- `target/benchmark-smoke/stream-path-results.csv`
 
 Cache analysis outputs (tests):
 
@@ -182,6 +214,7 @@ Current artifact mapping:
 
 - `smoke-results`: regression-oriented throughput snapshot
 - `small-file-results`: small-shard latency/throughput snapshot
+- `stream-path-results`: stream encode/verify/reconstruct latency and throughput snapshot
 - `parallel-helper-results`: serial vs optimized helper comparison
 - `reconstruction-hotspot-results`: reconstruct workload comparison
 - `reconstruction-cache-stats`: cache observability snapshot
