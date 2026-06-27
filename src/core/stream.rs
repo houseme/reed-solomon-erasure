@@ -171,73 +171,61 @@ fn read_block<R: std::io::Read>(
     buffers: &mut [Vec<u8>],
     max_len: usize,
 ) -> Result<(bool, usize), StreamError> {
-    let mut any_data = false;
-    let mut actual_len = 0;
+    let mut read_lengths = Vec::with_capacity(readers.len());
 
     for (i, (reader, buf)) in readers.iter_mut().zip(buffers.iter_mut()).enumerate() {
-        buf.resize(max_len, 0);
-        let mut total = 0;
-
-        while total < max_len {
-            match reader.read(&mut buf[total..]) {
-                Ok(0) => break,
-                Ok(n) => {
-                    total += n;
-                    any_data = true;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(StreamError::read(i, e)),
-            }
-        }
-
-        if total > actual_len {
-            actual_len = total;
-        }
-
-        // Zero-fill remainder so all buffers have identical length.
-        for byte in &mut buf[total..] {
-            *byte = 0;
-        }
+        let total = read_one_stream(reader, buf, max_len).map_err(|e| StreamError::read(i, e))?;
+        read_lengths.push((i, total));
     }
 
-    Ok((!any_data, actual_len))
+    let actual_len = read_lengths
+        .iter()
+        .map(|(_, total)| *total)
+        .max()
+        .unwrap_or(0);
+    zero_pad_short_buffers(buffers, &read_lengths, actual_len);
+
+    Ok((actual_len == 0, actual_len))
 }
 
-/// Read from all shard readers (data + parity) for verify_stream.
-fn read_block_all<R: std::io::Read>(
-    readers: &mut [R],
-    buffers: &mut [Vec<u8>],
+fn prepare_read_buffer(buf: &mut Vec<u8>, max_len: usize) {
+    match buf.len().cmp(&max_len) {
+        core::cmp::Ordering::Less => buf.resize(max_len, 0),
+        core::cmp::Ordering::Greater => buf.truncate(max_len),
+        core::cmp::Ordering::Equal => {}
+    }
+}
+
+fn read_one_stream<R: std::io::Read>(
+    reader: &mut R,
+    buf: &mut Vec<u8>,
     max_len: usize,
-) -> Result<(bool, usize), StreamError> {
-    let mut any_data = false;
-    let mut actual_len = 0;
+) -> Result<usize, std::io::Error> {
+    prepare_read_buffer(buf, max_len);
+    let mut total = 0;
 
-    for (i, (reader, buf)) in readers.iter_mut().zip(buffers.iter_mut()).enumerate() {
-        buf.resize(max_len, 0);
-        let mut total = 0;
-
-        while total < max_len {
-            match reader.read(&mut buf[total..]) {
-                Ok(0) => break,
-                Ok(n) => {
-                    total += n;
-                    any_data = true;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(StreamError::read(i, e)),
-            }
-        }
-
-        if total > actual_len {
-            actual_len = total;
-        }
-
-        for byte in &mut buf[total..] {
-            *byte = 0;
+    while total < max_len {
+        match reader.read(&mut buf[total..]) {
+            Ok(0) => break,
+            Ok(n) => total += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
         }
     }
 
-    Ok((!any_data, actual_len))
+    Ok(total)
+}
+
+fn zero_pad_short_buffers(
+    buffers: &mut [Vec<u8>],
+    read_lengths: &[(usize, usize)],
+    actual_len: usize,
+) {
+    for &(i, total) in read_lengths {
+        if total < actual_len {
+            buffers[i][total..actual_len].fill(0);
+        }
+    }
 }
 
 /// Write `len` bytes from each buffer to the corresponding writer.
@@ -277,65 +265,26 @@ fn read_block_par<R: std::io::Read + Send>(
     max_len: usize,
 ) -> Result<(bool, usize), StreamError> {
     use rayon::prelude::*;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    let any_data = AtomicBool::new(false);
-    let actual_len = AtomicUsize::new(0);
-    let first_error: std::sync::Mutex<Option<StreamError>> = std::sync::Mutex::new(None);
-
-    readers
+    let read_lengths: Vec<(usize, usize)> = readers
         .par_iter_mut()
         .zip(buffers.par_iter_mut())
         .enumerate()
-        .try_for_each(|(i, (reader, buf))| {
-            buf.resize(max_len, 0);
-            let mut total = 0;
-
-            while total < max_len {
-                match reader.read(&mut buf[total..]) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        total += n;
-                        any_data.store(true, Ordering::Relaxed);
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                    Err(e) => {
-                        if let Ok(mut guard) = first_error.lock()
-                            && guard.is_none()
-                        {
-                            *guard = Some(StreamError::read(i, e));
-                        }
-                        return Err(());
-                    }
-                }
-            }
-
-            actual_len.fetch_max(total, Ordering::Relaxed);
-            for byte in &mut buf[total..] {
-                *byte = 0;
-            }
-            Ok(())
+        .map(|(i, (reader, buf))| {
+            read_one_stream(reader, buf, max_len)
+                .map(|total| (i, total))
+                .map_err(|e| StreamError::read(i, e))
         })
-        .map_err(|()| {
-            take_stream_error(
-                &first_error,
-                "parallel stream reader error was not reported",
-            )
-        })?;
+        .collect::<Result<Vec<_>, _>>()?;
 
-    Ok((
-        !any_data.load(Ordering::Relaxed),
-        actual_len.load(Ordering::Relaxed),
-    ))
-}
+    let actual_len = read_lengths
+        .iter()
+        .map(|(_, total)| *total)
+        .max()
+        .unwrap_or(0);
+    zero_pad_short_buffers(buffers, &read_lengths, actual_len);
 
-/// Parallel version of `read_block_all` — reads all shards concurrently.
-fn read_block_all_par<R: std::io::Read + Send>(
-    readers: &mut [R],
-    buffers: &mut [Vec<u8>],
-    max_len: usize,
-) -> Result<(bool, usize), StreamError> {
-    read_block_par(readers, buffers, max_len)
+    Ok((actual_len == 0, actual_len))
 }
 
 /// Parallel version of `write_block` — writes all shards concurrently.
@@ -473,7 +422,7 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let mut bufs: Vec<Vec<u8>> = (0..total).map(|_| Vec::with_capacity(block_size)).collect();
 
         loop {
-            let (all_eof, actual_len) = read_block_all_par(shards, &mut bufs, block_size)?;
+            let (all_eof, actual_len) = read_block_par(shards, &mut bufs, block_size)?;
             if all_eof {
                 break;
             }
