@@ -1,6 +1,7 @@
 # P0-2: 流式 API (Read/Write) — 子任务详细文档
 
 > **状态: ✅ 已完成 (2026-06-04)** — 14/14 子任务全部完成，并发 I/O + 并行 codec 已集成
+> **当前实现校准 (2026-06-28)** — `StreamOptions` 使用 `StreamIoMode::{Auto, Serial, Parallel}`；旧版 `concurrent_streams: bool` 仅作为历史设计记录，不再对应公开 API。
 > 文档日期: 2026-05-31
 > 预估总工作量: 2-3 周
 > 前置依赖: 无
@@ -41,18 +42,25 @@ pub struct StreamOptions {
     /// 推荐范围: 256KB ~ 16MB。
     pub block_size: usize,
 
-    /// 是否并发读写各分片流。默认 false。
+    /// 流式读写调度模式。默认 Auto。
     ///
-    /// 启用后，各分片的读取和写入使用 rayon 并发执行。
-    /// 适用于 I/O 带宽是瓶颈的场景。
-    pub concurrent_streams: bool,
+    /// Auto 使用保守阈值选择串行或 rayon 并行 I/O；
+    /// Serial 强制串行读写；Parallel 强制 rayon 并行读写。
+    pub io_mode: StreamIoMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamIoMode {
+    Auto,
+    Serial,
+    Parallel,
 }
 
 impl Default for StreamOptions {
     fn default() -> Self {
         Self {
             block_size: 4 * 1024 * 1024, // 4MB
-            concurrent_streams: false,
+            io_mode: StreamIoMode::Auto,
         }
     }
 }
@@ -67,8 +75,8 @@ impl StreamOptions {
         self
     }
 
-    pub fn with_concurrent_streams(mut self, enabled: bool) -> Self {
-        self.concurrent_streams = enabled;
+    pub fn with_io_mode(mut self, mode: StreamIoMode) -> Self {
+        self.io_mode = mode;
         self
     }
 }
@@ -76,7 +84,7 @@ impl StreamOptions {
 
 **设计决策**:
 - `block_size` 最小 1KB，避免过小块导致过多系统调用
-- `concurrent_streams` 默认 false，避免不必要的并发开销
+- `io_mode` 默认 `Auto`，避免小块场景不必要的并发开销，同时允许 benchmark 显式固定 `Serial` 或 `Parallel`
 - 提供 builder 方法
 
 **预估**: 0.5 天
@@ -141,7 +149,7 @@ impl std::error::Error for StreamError {
 **检查项**:
 - [ ] `impl Read` vs `&mut dyn Read` vs `Box<dyn Read>` — 选择 `impl Read` (零开销)
 - [ ] 是否需要 `async` 版本 — 初始版本仅支持同步
-- [ ] 是否需要 `Send` bound — 仅在 `concurrent_streams` 时需要
+- [x] 是否需要 `Send` bound — 当前 stream I/O helper 在可能并行读写的路径上要求 `Read + Send` / `Write + Send`
 - [ ] 错误传播语义 — 某个流出错时是否中止所有流
 - [ ] 最后一个块的不等长处理 — 使用实际读取长度
 
@@ -552,7 +560,8 @@ fn write_block_par<W: Write + Send>(
 对于大文件，可以使用流式 API 避免将整个文件加载到内存:
 
 ```rust
-use rustfs_erasure_codec::{ReedSolomon, StreamOptions};
+use rustfs_erasure_codec::ReedSolomon;
+use rustfs_erasure_codec::stream::{StreamIoMode, StreamOptions};
 use std::fs::File;
 use std::io::BufReader;
 
@@ -569,7 +578,8 @@ let mut parity_writers: Vec<File> = (0..4)
     .collect();
 
 let opts = StreamOptions::new()
-    .with_block_size(4 * 1024 * 1024); // 4MB blocks
+    .with_block_size(4 * 1024 * 1024) // 4MB blocks
+    .with_io_mode(StreamIoMode::Auto);
 
 rs.encode_stream(
     &mut data_readers,

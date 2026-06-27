@@ -10,3 +10,9 @@
   - implementation status and benchmark summary for `update`
 - `docs/task-12-reconstruct-plan-unification.md`
   - specialized reconstruct planner consolidation status
+- `docs/stream-path-performance-optimization-v2-plan-2026-06-28.md`
+  - stream path v2 analysis, implementation phases, and risk controls
+- `benchmarks/stream-path/2026-06-28-cooldown/README.md`
+  - archived stream path baseline/current artifacts and cooldown validation summary
+- `docs/benchmark-methodology.md`
+  - stream benchmark commands, artifact schema, cooldown protocol, and optional release gate

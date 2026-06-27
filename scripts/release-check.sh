@@ -11,6 +11,7 @@ if [[ "${VALIDATION_PROFILE}" == "release" ]]; then
   RUN_BACKEND_CONSISTENCY=1
   RUN_SMALL_FILE_GATE=1
   RUN_RECONSTRUCTION_HOTSPOT_GATE=1
+  RUN_STREAM_PATH_GATE=1
   RUN_SIMD_ACCEL_TESTS=1
 fi
 
@@ -131,6 +132,38 @@ run_small_file_gate() {
   fi
 }
 
+run_stream_path_gate() {
+  if [[ "${RUN_STREAM_PATH_GATE:-0}" != "1" ]]; then
+    echo
+    echo "[release-check] skipping stream path gate (set RUN_STREAM_PATH_GATE=1)"
+    return
+  fi
+
+  run env RSE_STREAM_PROFILE="${RSE_STREAM_PROFILE:-fast}" \
+    RSE_STREAM_IO_MODE="${RSE_STREAM_IO_MODE:-auto}" \
+    cargo test --release --features "std simd-accel" \
+    --test benchmark_stream_paths \
+    benchmark_stream_path_matrix_runs_and_exports_results -- --ignored --nocapture
+
+  if [[ -n "${RSE_STREAM_PATH_BASELINE:-}" ]]; then
+    run python3 scripts/check_benchmark_regression.py \
+      --baseline "${RSE_STREAM_PATH_BASELINE}" \
+      --current target/benchmark-smoke/stream-path-results.json \
+      --metric "${RSE_STREAM_PATH_METRIC:-ns_per_block}" \
+      --threshold encode_stream=0.15 \
+      --threshold verify_stream=0.15 \
+      --threshold reconstruct_stream=0.18 \
+      --require-case encode_stream:4:2:65536:65536 \
+      --require-case verify_stream:4:2:65536:65536 \
+      --require-case reconstruct_stream:10:4:1048576:1048576
+  elif ! require_strict_baseline "RSE_STREAM_PATH_BASELINE" "stream path gate"; then
+    return 1
+  else
+    echo
+    echo "[release-check] stream path results generated without baseline compare (set RSE_STREAM_PATH_BASELINE=/path/to/stream-path-results.json)"
+  fi
+}
+
 run_fast_checks() {
   run cargo check --tests
   run cargo test --test selftest
@@ -168,6 +201,7 @@ run_extended_checks() {
     run_backend_override_matrix
     run_small_file_gate
     run_reconstruction_hotspot_gate
+    run_stream_path_gate
   else
     echo
     echo "[release-check] skipping simd-accel tests (RUN_SIMD_ACCEL_TESTS=0)"

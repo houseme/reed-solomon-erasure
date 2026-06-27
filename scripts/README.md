@@ -80,11 +80,16 @@ bash scripts/verify-x86_64.sh
 | `RSE_SMALL_FILE_BASELINE` | `release-check.sh` | Path to baseline small-file results |
 | `RSE_SMALL_FILE_METRIC` | `release-check.sh` | Metric for small-file gate: `throughput_mb_s` or `ns_per_iter` (default) |
 | `RSE_RECONSTRUCTION_HOTSPOT_BASELINE` | `release-check.sh` | Path to baseline reconstruction hotspot results |
+| `RSE_STREAM_PATH_BASELINE` | `release-check.sh` | Path to baseline stream path results |
+| `RSE_STREAM_PATH_METRIC` | `release-check.sh` | Metric for stream path gate: `ns_per_block` (default), `ns_per_iter`, or `throughput_mb_s` |
 | `RUN_BACKEND_CONSISTENCY` | `release-check.sh` | Set to `1` to enable backend consistency sweep |
 | `RUN_SIMD_ACCEL_TESTS` | `release-check.sh` | Set to `0` to skip SIMD tests |
 | `RUN_SMALL_FILE_GATE` | `release-check.sh` | Set to `1` to enable small-file regression gate |
 | `RUN_RECONSTRUCTION_HOTSPOT_GATE` | `release-check.sh` | Set to `1` to enable reconstruction hotspot gate |
+| `RUN_STREAM_PATH_GATE` | `release-check.sh` | Set to `1` to enable stream path regression gate |
 | `RSE_BACKEND_OVERRIDE` | Various | Force a specific SIMD backend at runtime |
 | `RSE_STRICT_BACKEND_OVERRIDE` | Various | Set to `1` to fail if override is not honored |
 | `SMOKE_PROFILE` | `serial-test-check.sh` | Smoke profile for serial tests (default: `quick`) |
 | `RSE_SMALL_FILE_PROFILE` | `run_small_file_benchmark_matrix.sh` | Small-file benchmark profile (default: `fast`) |
+| `RSE_STREAM_PROFILE` | `release-check.sh`, `benchmark_stream_paths` | Stream benchmark profile (`quick`, `fast`, or `extended`) |
+| `RSE_STREAM_IO_MODE` | `release-check.sh`, `benchmark_stream_paths` | Stream I/O mode (`auto`, `serial`, or `parallel`) |

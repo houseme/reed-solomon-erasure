@@ -20,14 +20,16 @@
   - `RUN_BACKEND_CONSISTENCY=1`
   - `RUN_SMALL_FILE_GATE=1`
   - `RUN_RECONSTRUCTION_HOTSPOT_GATE=1`
+  - `RUN_STREAM_PATH_GATE=1`
   - `RUN_SIMD_ACCEL_TESTS=1`
 - 在 `release` 模式下，相关基线文件缺失会直接失败（避免“只跑到结果但不比对”）。
 - CI 中的 `release-preflight` 在标签推送时会先读取仓库变量：
   - `RSE_SMOKE_BASELINE`
   - `RSE_SMALL_FILE_BASELINE`
   - `RSE_RECONSTRUCTION_HOTSPOT_BASELINE`
+  - `RSE_STREAM_PATH_BASELINE`
 
-  如果三项变量都已配置则以 `release` 模式运行；若任一缺失则自动降级为 `extended`。
+  如果四项变量都已配置则以 `release` 模式运行；若任一缺失则自动降级为 `extended`。
 
 ### 2.1 GitHub 仓库变量说明
 
@@ -35,11 +37,13 @@
   - `RSE_SMOKE_BASELINE`
   - `RSE_SMALL_FILE_BASELINE`
   - `RSE_RECONSTRUCTION_HOTSPOT_BASELINE`
+  - `RSE_STREAM_PATH_BASELINE`
 
 示例值：
 - `RSE_SMOKE_BASELINE=artifacts/benchmarks/7.0.0/smoke-results.json`
 - `RSE_SMALL_FILE_BASELINE=artifacts/benchmarks/7.0.0/small-file-results.json`
 - `RSE_RECONSTRUCTION_HOTSPOT_BASELINE=artifacts/benchmarks/7.0.0/reconstruction-hotspot-results.json`
+- `RSE_STREAM_PATH_BASELINE=artifacts/benchmarks/7.0.0/stream-path-results.json`
 
 ### 2.2 变量初始化（GitHub CLI）
 
@@ -53,6 +57,7 @@ VER=7.0.0
 gh variable set RSE_SMOKE_BASELINE "artifacts/benchmarks/${VER}/smoke-results.json" --repo ${OWNER}/${REPO}
 gh variable set RSE_SMALL_FILE_BASELINE "artifacts/benchmarks/${VER}/small-file-results.json" --repo ${OWNER}/${REPO}
 gh variable set RSE_RECONSTRUCTION_HOTSPOT_BASELINE "artifacts/benchmarks/${VER}/reconstruction-hotspot-results.json" --repo ${OWNER}/${REPO}
+gh variable set RSE_STREAM_PATH_BASELINE "artifacts/benchmarks/${VER}/stream-path-results.json" --repo ${OWNER}/${REPO}
 ```
 
 如需更新现有变量直接复用同一命令（同名变量会被覆盖）。若环境未登录 gh，可改为直接在仓库 Settings 页面手工维护变量。
@@ -77,6 +82,7 @@ export VALIDATION_PROFILE=release
 export RSE_SMOKE_BASELINE=/path/to/smoke-results.json
 export RSE_SMALL_FILE_BASELINE=/path/to/small-file-results.json
 export RSE_RECONSTRUCTION_HOTSPOT_BASELINE=/path/to/reconstruction-hotspot-results.json
+export RSE_STREAM_PATH_BASELINE=/path/to/stream-path-results.json
 bash scripts/release-check.sh
 ```
 
@@ -97,6 +103,7 @@ bash scripts/release-check.sh
   - Smoke: <path/artifact>
   - Small-file: <path/artifact>
   - Reconstruction hotspot: <path/artifact>
+  - Stream path: <path/artifact>
 - Release-preflight: PASS
 - Publish: PASS
 - Publish time: <YYYY-MM-DD HH:MM:SS UTC>
@@ -113,6 +120,7 @@ bash scripts/release-check.sh
   - Smoke: missing
   - Small-file: missing
   - Reconstruction hotspot: missing
+  - Stream path: missing
 - Release-preflight: PASS (degraded)
 - Publish: PASS
 - Publish time: <YYYY-MM-DD HH:MM:SS UTC>
@@ -145,6 +153,7 @@ bash scripts/release-check.sh
 - RSE_SMOKE_BASELINE: <artifacts/benchmarks/7.0.0/smoke-results.json>
 - RSE_SMALL_FILE_BASELINE: <artifacts/benchmarks/7.0.0/small-file-results.json>
 - RSE_RECONSTRUCTION_HOTSPOT_BASELINE: <artifacts/benchmarks/7.0.0/reconstruction-hotspot-results.json>
+- RSE_STREAM_PATH_BASELINE: <artifacts/benchmarks/7.0.0/stream-path-results.json>
 
 ### 发布自检
 - CHANGELOG: 7.0.0 已从 Unreleased 固定为正式日期
@@ -158,6 +167,7 @@ bash scripts/release-check.sh
   - Smoke: <path-or-url>
   - Small-file: <path-or-url>
   - Reconstruction hotspot: <path-or-url>
+  - Stream path: <path-or-url>
 - 备注: <如果有例外、补充说明写在这里>
 ```
 
@@ -165,7 +175,7 @@ bash scripts/release-check.sh
 - `<release-preflight-action-url>`：对应 CI 上 `release-preflight` 任务页面链接
 - `<publish-action-url>`：对应 CI 上 `publish` 任务页面链接
 - `<release-note-checklist-url>`：可放 release note 中 3.1~3.5 的记录位置
-- `mode`：若三项基线变量完整，填 `release`；否则填 `extended` 并保持降级说明
+- `mode`：若四项基线变量完整，填 `release`；否则填 `extended` 并保持降级说明
 
 ### 5.1 可直接发布（请替换方括号内字段）
 
@@ -189,6 +199,7 @@ bash scripts/release-check.sh
 - RSE_SMOKE_BASELINE: [artifacts/benchmarks/7.0.0/smoke-results.json]
 - RSE_SMALL_FILE_BASELINE: [artifacts/benchmarks/7.0.0/small-file-results.json]
 - RSE_RECONSTRUCTION_HOTSPOT_BASELINE: [artifacts/benchmarks/7.0.0/reconstruction-hotspot-results.json]
+- RSE_STREAM_PATH_BASELINE: [artifacts/benchmarks/7.0.0/stream-path-results.json]
 
 ### 发布自检
 - CHANGELOG: 7.0.0 已从 Unreleased 固定为正式日期
@@ -201,6 +212,7 @@ bash scripts/release-check.sh
 - 小文件基线: [PATH_OR_URL]
 - Hotspot 基线: [PATH_OR_URL]
 - Smoke 基线: [PATH_OR_URL]
+- Stream path 基线: [PATH_OR_URL]
 - 备注: [如有降级/例外，在此说明]
 ```
 

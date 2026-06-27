@@ -11,14 +11,21 @@ OPERATIONS = (
     "verify_with_buffer",
     "reconstruct",
     "reconstruct_data",
+    "encode_stream",
+    "verify_stream",
+    "reconstruct_stream",
 )
 CASE_KEY = ("data_shards", "parity_shards", "shard_size")
+OPTIONAL_CASE_KEY = ("stream_block_size",)
 DEFAULT_THRESHOLDS = {
     "encode": 0.10,
     "verify": 0.12,
     "verify_with_buffer": 0.12,
     "reconstruct": 0.15,
     "reconstruct_data": 0.15,
+    "encode_stream": 0.12,
+    "verify_stream": 0.12,
+    "reconstruct_stream": 0.15,
 }
 
 
@@ -36,8 +43,12 @@ def normalize_record(record):
     normalized["operation"] = str(record["operation"])
     normalized["throughput_mb_s"] = float(record["throughput_mb_s"])
     normalized["ns_per_iter"] = float(record["ns_per_iter"])
+    if "ns_per_block" in record:
+        normalized["ns_per_block"] = float(record["ns_per_block"])
     for key in CASE_KEY:
         normalized[key] = str(record[key])
+    for key in OPTIONAL_CASE_KEY:
+        normalized[key] = str(record.get(key, ""))
     return normalized
 
 
@@ -50,6 +61,7 @@ def index_records(rows):
             record["data_shards"],
             record["parity_shards"],
             record["shard_size"],
+            record["stream_block_size"],
         )
         indexed[key] = record
     return indexed
@@ -62,8 +74,6 @@ def parse_threshold_overrides(values):
             raise SystemExit(f"invalid threshold override '{value}', expected op=value")
         op, raw = value.split("=", 1)
         op = op.strip()
-        if op not in OPERATIONS:
-            raise SystemExit(f"unsupported operation in threshold override: {op}")
         thresholds[op] = float(raw)
     return thresholds
 
@@ -73,6 +83,10 @@ def metric_value(record, metric):
         return record["throughput_mb_s"]
     if metric == "ns_per_iter":
         return record["ns_per_iter"]
+    if metric == "ns_per_block":
+        if "ns_per_block" not in record:
+            raise SystemExit("metric ns_per_block requested but artifact does not contain ns_per_block")
+        return record["ns_per_block"]
     raise SystemExit(f"unsupported metric: {metric}")
 
 
@@ -82,6 +96,8 @@ def regression_ratio(baseline_value, current_value, metric):
     if metric == "throughput_mb_s":
         return max(0.0, (baseline_value - current_value) / baseline_value)
     if metric == "ns_per_iter":
+        return max(0.0, (current_value - baseline_value) / baseline_value)
+    if metric == "ns_per_block":
         return max(0.0, (current_value - baseline_value) / baseline_value)
     raise SystemExit(f"unsupported metric: {metric}")
 
@@ -98,7 +114,7 @@ def main():
     )
     parser.add_argument(
         "--metric",
-        choices=("throughput_mb_s", "ns_per_iter"),
+        choices=("throughput_mb_s", "ns_per_iter", "ns_per_block"),
         default="throughput_mb_s",
         help="Metric used for regression detection. Use ns_per_iter for latency-sensitive small-file checks.",
     )
@@ -136,6 +152,7 @@ def main():
                 "data_shards": key[1],
                 "parity_shards": key[2],
                 "shard_size": key[3],
+                "stream_block_size": key[4],
                 "metric": args.metric,
                 "baseline_metric_value": baseline_value,
                 "current_metric_value": current_value,
@@ -144,19 +161,19 @@ def main():
                 "baseline_ns_per_iter": baseline_record["ns_per_iter"],
                 "current_ns_per_iter": current_record["ns_per_iter"],
                 "regression_ratio": ratio,
-                "threshold": thresholds[op],
+                "threshold": thresholds.get(op, 0.15),
             }
         )
-        if ratio > thresholds[op]:
+        if ratio > thresholds.get(op, 0.15):
             failures.append(comparisons[-1])
 
     for required in args.require_case:
         parts = required.split(":")
-        if len(parts) != 4:
+        if len(parts) not in (4, 5):
             raise SystemExit(
-                f"invalid required case '{required}', expected operation:data:parity:shard_size"
+                f"invalid required case '{required}', expected operation:data:parity:shard_size[:stream_block_size]"
             )
-        key = tuple(parts)
+        key = tuple(parts) if len(parts) == 5 else (*parts, "")
         if key not in current:
             failures.append(
                 {

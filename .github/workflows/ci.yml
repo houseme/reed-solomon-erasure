@@ -286,6 +286,7 @@ jobs:
       RSE_SMOKE_BASELINE: ${{ vars.RSE_SMOKE_BASELINE }}
       RSE_SMALL_FILE_BASELINE: ${{ vars.RSE_SMALL_FILE_BASELINE }}
       RSE_RECONSTRUCTION_HOTSPOT_BASELINE: ${{ vars.RSE_RECONSTRUCTION_HOTSPOT_BASELINE }}
+      RSE_STREAM_PATH_BASELINE: ${{ vars.RSE_STREAM_PATH_BASELINE }}
 
     steps:
       - name: Checkout
@@ -301,7 +302,7 @@ jobs:
 
       - name: Release preflight checks
         run: |
-          if [[ -n "${RSE_SMOKE_BASELINE:-}" && -n "${RSE_SMALL_FILE_BASELINE:-}" && -n "${RSE_RECONSTRUCTION_HOTSPOT_BASELINE:-}" ]]; then
+          if [[ -n "${RSE_SMOKE_BASELINE:-}" && -n "${RSE_SMALL_FILE_BASELINE:-}" && -n "${RSE_RECONSTRUCTION_HOTSPOT_BASELINE:-}" && -n "${RSE_STREAM_PATH_BASELINE:-}" ]]; then
             export VALIDATION_PROFILE=release
           else
             echo "[ci] baseline files are not fully configured, run release preflight in extended profile"

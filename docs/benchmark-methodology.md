@@ -74,6 +74,16 @@ Stream path I/O modes:
 - `RSE_STREAM_IO_MODE=serial`: force serial stream reads and writes
 - `RSE_STREAM_IO_MODE=parallel`: force rayon-backed parallel stream reads and writes
 
+Stream path artifacts archived in this repository:
+
+- `benchmarks/stream-path/2026-06-28-cooldown/phase0-51e0b64-fast.csv`
+- `benchmarks/stream-path/2026-06-28-cooldown/phase4-baseline-f1ad373-fast-auto-selected-iter10.csv`
+- `benchmarks/stream-path/2026-06-28-cooldown/phase4-current-2a1aa88-fast-auto-selected-iter10.csv`
+- `benchmarks/stream-path/2026-06-28-cooldown/phase4-baseline-f1ad373-fast-serial-4x2_64k-iter20.csv`
+- `benchmarks/stream-path/2026-06-28-cooldown/phase4-current-2a1aa88-fast-serial-4x2_64k-iter20.csv`
+- `benchmarks/stream-path/2026-06-28-cooldown/phase4-baseline-f1ad373-extended-auto.csv`
+- `benchmarks/stream-path/2026-06-28-cooldown/phase4-current-2a1aa88-extended-auto.csv`
+
 Filtered stream path drill-down:
 
 ```bash
@@ -85,6 +95,21 @@ cargo test --release --features "std simd-accel" \
   --test benchmark_stream_paths \
   benchmark_stream_path_matrix_runs_and_exports_results -- --ignored --nocapture
 ```
+
+Stream path cooldown A/B protocol:
+
+1. Run baseline and current on the same machine, with the same feature set,
+   backend mode, `RSE_STREAM_PROFILE`, `RSE_STREAM_IO_MODE`, filter, and
+   iteration count.
+2. Insert at least a 20 second cooldown between every benchmark invocation.
+3. Treat full-matrix 3-iteration results as a screening pass only. If one case
+   looks suspicious, rerun that case in isolation with `RSE_STREAM_ITERATIONS=10`
+   or higher before treating it as a regression.
+4. Prefer `ns_per_block` for stream regression gates because it normalizes
+   multi-block cases better than whole-iteration latency.
+5. Archive the exact CSV/JSON artifacts before running the next mode, because
+   `target/benchmark-smoke/stream-path-results.*` is overwritten by each stream
+   benchmark invocation.
 
 Repeated reconstruct planning reuse:
 
@@ -150,11 +175,13 @@ Cache analysis outputs (tests):
 
 Artifact history rule:
 
-- benchmark-smoke JSON/CSV artifacts are append-history ledgers, not single-run
-  overwrite snapshots
-- repeated executions append new records to the existing file
-- when comparing one run to another, either filter by the newest appended rows
-  or archive/copy the file before the next run
+- artifact overwrite/append behavior is harness-specific
+- stream path JSON/CSV artifacts are single-run snapshots overwritten by each
+  stream benchmark invocation; copy them before running the next mode
+- for append-style artifacts, repeated executions append new records to the
+  existing file
+- when comparing one run to another, either filter by the intended records or
+  archive/copy the file before the next run
 
 These artifact-producing reconstruction benchmarks are marked `#[ignore]` on purpose.
 Run them explicitly so normal `cargo test` stays bounded and does not mix
@@ -296,6 +323,7 @@ This script runs test gates for:
 - benchmark smoke
 - smoke regression gate (when `RSE_SMOKE_BASELINE` is set)
 - small-file regression gate (when `RUN_SMALL_FILE_GATE=1` and `RSE_SMALL_FILE_BASELINE` is set)
+- stream path regression gate (when `RUN_STREAM_PATH_GATE=1` and `RSE_STREAM_PATH_BASELINE` is set)
 - backend/ISA consistency sweep (when `RUN_BACKEND_CONSISTENCY=1`)
 - `no_std` build path
 - `std` and optional `simd-accel` paths
@@ -364,7 +392,51 @@ Recommended defaults for small-file checks:
 - `RSE_SMALL_FILE_PROFILE=fast` for day-to-day validation
 - `RSE_SMALL_FILE_PROFILE=extended` when refreshing an archived baseline
 
-## 8.1 Baseline Update Governance
+## 8.1 Stream Path Regression Gate
+
+Generate the current stream path artifact:
+
+```bash
+RSE_STREAM_PROFILE=fast \
+RSE_STREAM_IO_MODE=auto \
+cargo test --release --features "std simd-accel" \
+  --test benchmark_stream_paths \
+  benchmark_stream_path_matrix_runs_and_exports_results -- --ignored --nocapture
+```
+
+Compare it against a saved stream baseline using per-block latency:
+
+```bash
+python3 scripts/check_benchmark_regression.py \
+  --baseline /path/to/stream-path-results.json \
+  --current target/benchmark-smoke/stream-path-results.json \
+  --metric ns_per_block \
+  --threshold encode_stream=0.15 \
+  --threshold verify_stream=0.15 \
+  --threshold reconstruct_stream=0.18 \
+  --require-case encode_stream:4:2:65536:65536 \
+  --require-case verify_stream:4:2:65536:65536 \
+  --require-case reconstruct_stream:10:4:1048576:1048576
+```
+
+Or drive it through the release workflow:
+
+```bash
+RUN_STREAM_PATH_GATE=1 \
+RSE_STREAM_PROFILE=fast \
+RSE_STREAM_IO_MODE=auto \
+RSE_STREAM_PATH_BASELINE=/path/to/stream-path-results.json \
+./scripts/release-check.sh
+```
+
+Recommended defaults:
+
+- `RSE_STREAM_PATH_METRIC=ns_per_block`
+- `RSE_STREAM_PROFILE=fast` for day-to-day validation
+- `RSE_STREAM_PROFILE=extended` only when refreshing an archived stream baseline
+- `RSE_STREAM_IO_MODE=auto` for release gates; use `serial` and `parallel` as drill-down modes
+
+## 8.2 Baseline Update Governance
 
 Updating a benchmark baseline is allowed only when the new baseline reflects an
 intentional and verified steady-state change.
