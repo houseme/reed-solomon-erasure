@@ -12,6 +12,7 @@ This directory contains development documentation, design documents, benchmark r
 | [ec-improvement-master-plan.md](ec-improvement-master-plan.md) | Master improvement plan (Chinese) |
 | [benchmark-methodology.md](benchmark-methodology.md) | How to run and interpret benchmarks |
 | [README-performance-index.md](README-performance-index.md) | Performance document index |
+| [release-7.0.1-checklist.md](release-7.0.1-checklist.md) | 7.0.1 release checklist |
 
 ---
 
@@ -52,6 +53,7 @@ This directory contains development documentation, design documents, benchmark r
 |---|---|
 | [benchmark-methodology.md](benchmark-methodology.md) | Benchmark methodology and interpretation guide |
 | [README-performance-index.md](README-performance-index.md) | Performance document index |
+| [release-7.0.1-checklist.md](release-7.0.1-checklist.md) | 7.0.1 release checklist |
 
 ### Small-File Benchmarks
 

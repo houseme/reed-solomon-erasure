@@ -19,7 +19,7 @@ parking_lot = "0.12.5"
 quickcheck = "1.1.0"
 rand = "0.10.1"
 rayon = "1.12"
-rustfs-erasure-codec = { version = "7.0.0", path = "." }
+rustfs-erasure-codec = { version = "7.0.1", path = "." }
 smallvec = "1.15"
 spin = { version = "0.12.0", default-features = false, features = ["once", "spin_mutex"] }
 wasm-bindgen = "0.2.125"
@@ -28,7 +28,7 @@ wee_alloc = "0.4"
 
 [package]
 name = "rustfs-erasure-codec"
-version = "7.0.0"
+version = "7.0.1"
 authors = ["Darren Ldl <darrenldldev@gmail.com>"]
 edition.workspace = true
 build = "build.rs"

@@ -8,6 +8,32 @@ All notable changes to this project are documented in this file.
 
 ---
 
+## 7.0.1 (2026-06-28)
+
+> Maintained in [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
+> Patch release: stream path benchmark governance and low-allocation hot-path tuning
+
+### Added
+- Stream-path benchmark harness covering `encode_stream`, `verify_stream`, and `reconstruct_stream`.
+- Structured stream benchmark artifacts at `target/benchmark-smoke/stream-path-results.{json,csv}` with quick / fast / extended profiles.
+- `StreamIoMode::{Auto, Serial, Parallel}` and `StreamOptions::with_io_mode(...)` for explicit stream I/O scheduling control.
+- Stream benchmark regression support in `scripts/check_benchmark_regression.py`, including `stream_block_size`, `ns_per_block`, and stream-operation thresholds.
+- Release-check stream path gate via `RUN_STREAM_PATH_GATE` and `RSE_STREAM_PATH_BASELINE`.
+- Archived stream-path before/after benchmark artifacts under `benchmarks/stream-path/2026-06-28-cooldown/`.
+
+### Changed
+- Reduced stream block read overhead by avoiding unconditional full-buffer padding and only zero-filling short-read ranges.
+- Reused stream read-length scratch state on serial read paths to reduce per-block temporary allocation churn.
+- Added Auto stream I/O selection that avoids rayon scheduling overhead for small-block / low-shard workloads while keeping parallel I/O available for larger cases.
+- Reworked `reconstruct_stream` to precompute present/missing metadata, reuse the outer reconstruction container, and retain present-shard buffer allocations across blocks.
+- Refined the reconstruct stream read hot path after review by removing the per-block `indexed` temporary vector while preserving the faster small-block serial path.
+- Updated benchmark methodology, streaming API docs, release checklist guidance, and performance index entries for stream path validation.
+
+### Fixed
+- Prevented broad stream fast-profile regressions through cooldown-based benchmark reruns and `ns_per_block` release gating.
+- Corrected stale streaming API documentation examples to use `StreamIoMode` / `with_io_mode(...)`.
+- Kept `verify_stream` workspace changes data-driven by documenting rejected variants where benchmark evidence did not justify extra complexity.
+
 ## 7.0.0 (2026-06-16)
 
 > Maintained in [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)

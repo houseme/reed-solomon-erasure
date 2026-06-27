@@ -16,3 +16,5 @@
   - archived stream path baseline/current artifacts and cooldown validation summary
 - `docs/benchmark-methodology.md`
   - stream benchmark commands, artifact schema, cooldown protocol, and optional release gate
+- `docs/release-7.0.1-checklist.md`
+  - 7.0.1 release checklist for stream path benchmark governance and release gates

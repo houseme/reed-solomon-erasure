@@ -1,7 +1,7 @@
 # Cross-Platform Benchmark Report
 
 > Date: 2026-06-01
-> Library: rustfs-erasure-codec v7.0.0
+> Library: rustfs-erasure-codec v7.0.1
 
 ---
 
