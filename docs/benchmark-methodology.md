@@ -68,10 +68,17 @@ Stream path profiles:
 - `RSE_STREAM_PROFILE=fast`: `4+2` and `10+4` Memory backend coverage for `encode_stream`, `verify_stream`, and `reconstruct_stream`
 - `RSE_STREAM_PROFILE=extended`: broader Memory backend coverage through larger shard counts for stream path regression analysis
 
+Stream path I/O modes:
+
+- `RSE_STREAM_IO_MODE=auto`: use the current `StreamOptions` automatic I/O scheduling policy
+- `RSE_STREAM_IO_MODE=serial`: force serial stream reads and writes
+- `RSE_STREAM_IO_MODE=parallel`: force rayon-backed parallel stream reads and writes
+
 Filtered stream path drill-down:
 
 ```bash
 RSE_STREAM_PROFILE=fast \
+RSE_STREAM_IO_MODE=serial \
 RSE_STREAM_CASE_FILTER=10x4_64k \
 RSE_STREAM_ITERATIONS=10 \
 cargo test --release --features "std simd-accel" \

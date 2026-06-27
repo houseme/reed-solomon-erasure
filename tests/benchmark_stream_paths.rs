@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::{fs, path::PathBuf};
 
 use rustfs_erasure_codec::galois_8::ReedSolomon;
-use rustfs_erasure_codec::stream::StreamOptions;
+use rustfs_erasure_codec::stream::{StreamIoMode, StreamOptions};
 
 use self::bench_common::{
     ARTIFACT_SCHEMA_VERSION, BenchCase, Operation, backend, backend_id, backend_kind,
@@ -233,6 +233,26 @@ fn stream_iterations() -> usize {
         })
 }
 
+fn stream_io_mode() -> StreamIoMode {
+    std::env::var("RSE_STREAM_IO_MODE")
+        .ok()
+        .as_deref()
+        .map(|value| match value {
+            "serial" => StreamIoMode::Serial,
+            "parallel" => StreamIoMode::Parallel,
+            _ => StreamIoMode::Auto,
+        })
+        .unwrap_or(StreamIoMode::Auto)
+}
+
+fn stream_io_mode_label(mode: StreamIoMode) -> &'static str {
+    match mode {
+        StreamIoMode::Auto => "auto",
+        StreamIoMode::Serial => "serial",
+        StreamIoMode::Parallel => "parallel",
+    }
+}
+
 fn selected_stream_cases() -> Vec<StreamCase> {
     let cases = stream_cases();
     let Some(raw_filter) = std::env::var("RSE_STREAM_CASE_FILTER").ok() else {
@@ -278,7 +298,10 @@ fn run_stream_operation(
         .with_block_size(stream_case.block_size)
         .block_size;
     let blocks_per_iter = case.shard_size.div_ceil(block_size).max(1);
-    let options = StreamOptions::new().with_block_size(stream_case.block_size);
+    let io_mode = stream_io_mode();
+    let options = StreamOptions::new()
+        .with_block_size(stream_case.block_size)
+        .with_io_mode(io_mode);
 
     let start = Instant::now();
     match operation {
@@ -329,7 +352,7 @@ fn run_stream_operation(
         seed,
         stream_block_size: block_size,
         stream_io_backend: "memory",
-        stream_io_mode: "current_parallel",
+        stream_io_mode: stream_io_mode_label(io_mode),
         blocks_per_iter,
         throughput_mb_s,
         ns_per_iter,

@@ -34,6 +34,17 @@ use std::mem;
 // StreamOptions
 // ---------------------------------------------------------------------------
 
+/// I/O scheduling mode for streaming operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamIoMode {
+    /// Choose serial or parallel I/O using conservative built-in thresholds.
+    Auto,
+    /// Read and write shard streams serially.
+    Serial,
+    /// Read and write shard streams with rayon parallel iterators.
+    Parallel,
+}
+
 /// Configuration for streaming encode/verify/reconstruct operations.
 #[derive(Debug, Clone)]
 pub struct StreamOptions {
@@ -42,12 +53,15 @@ pub struct StreamOptions {
     /// Larger blocks reduce syscall overhead but increase memory usage.
     /// Recommended range: 256 KiB – 16 MiB.
     pub block_size: usize,
+    /// I/O scheduling mode for stream reads and writes. Default: Auto.
+    pub io_mode: StreamIoMode,
 }
 
 impl Default for StreamOptions {
     fn default() -> Self {
         Self {
             block_size: 4 * 1024 * 1024,
+            io_mode: StreamIoMode::Auto,
         }
     }
 }
@@ -63,6 +77,12 @@ impl StreamOptions {
         const MIN_BLOCK_SIZE_BYTES: usize = 1024;
         const MAX_BLOCK_SIZE_BYTES: usize = 16 * 1024 * 1024;
         self.block_size = size.clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
+        self
+    }
+
+    /// Set the stream I/O scheduling mode.
+    pub fn with_io_mode(mut self, mode: StreamIoMode) -> Self {
+        self.io_mode = mode;
         self
     }
 }
@@ -160,6 +180,52 @@ fn take_stream_error(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn use_parallel_stream_io(options: &StreamOptions, stream_count: usize) -> bool {
+    match options.io_mode {
+        StreamIoMode::Serial => false,
+        StreamIoMode::Parallel => true,
+        StreamIoMode::Auto => use_parallel_stream_io_auto(options.block_size, stream_count),
+    }
+}
+
+fn use_parallel_stream_io_auto(block_size: usize, stream_count: usize) -> bool {
+    if stream_count < 2 || block_size < 256 * 1024 {
+        return false;
+    }
+    if stream_count <= 6 && block_size <= 1024 * 1024 {
+        return false;
+    }
+
+    block_size >= 4 * 1024 * 1024 && stream_count >= 10
+}
+
+fn read_block_with_mode<R: std::io::Read + Send>(
+    readers: &mut [R],
+    buffers: &mut [Vec<u8>],
+    max_len: usize,
+    use_parallel_io: bool,
+) -> Result<(bool, usize), StreamError> {
+    if use_parallel_io {
+        read_block_par(readers, buffers, max_len)
+    } else {
+        read_block(readers, buffers, max_len)
+    }
+}
+
+fn write_block_with_mode<W: std::io::Write + Send>(
+    writers: &mut [W],
+    buffers: &[Vec<u8>],
+    len: usize,
+    shard_offset: usize,
+    use_parallel_io: bool,
+) -> Result<(), StreamError> {
+    if use_parallel_io {
+        write_block_par(writers, buffers, len, shard_offset)
+    } else {
+        write_block(writers, buffers, len, shard_offset)
+    }
+}
 
 /// Read up to `max_len` bytes from each reader into the corresponding
 /// buffer, retrying on `Interrupted`.  Returns `Ok((all_eof, actual_len))`
@@ -365,6 +431,8 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let block_size = options.block_size;
         let data_count = self.data_shard_count;
         let parity_count = self.parity_shard_count;
+        let use_parallel_read = use_parallel_stream_io(options, data_count);
+        let use_parallel_write = use_parallel_stream_io(options, parity_count);
 
         debug_assert_eq!(data.len(), data_count);
         debug_assert_eq!(parity.len(), parity_count);
@@ -377,7 +445,8 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .collect();
 
         loop {
-            let (all_eof, actual_len) = read_block_par(data, &mut data_bufs, block_size)?;
+            let (all_eof, actual_len) =
+                read_block_with_mode(data, &mut data_bufs, block_size, use_parallel_read)?;
             if all_eof {
                 break;
             }
@@ -397,8 +466,14 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             self.encode_sep_par(&data_refs, &mut parity_refs)
                 .map_err(|e| StreamError::codec(0, e))?;
 
-            // Write parity (parallel I/O).
-            write_block_par(parity, &parity_bufs, actual_len, data_count)?;
+            // Write parity using the selected stream I/O mode.
+            write_block_with_mode(
+                parity,
+                &parity_bufs,
+                actual_len,
+                data_count,
+                use_parallel_write,
+            )?;
         }
 
         Ok(())
@@ -416,13 +491,15 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     ) -> Result<bool, StreamError> {
         let block_size = options.block_size;
         let total = self.total_shard_count;
+        let use_parallel_read = use_parallel_stream_io(options, total);
 
         debug_assert_eq!(shards.len(), total);
 
         let mut bufs: Vec<Vec<u8>> = (0..total).map(|_| Vec::with_capacity(block_size)).collect();
 
         loop {
-            let (all_eof, actual_len) = read_block_par(shards, &mut bufs, block_size)?;
+            let (all_eof, actual_len) =
+                read_block_with_mode(shards, &mut bufs, block_size, use_parallel_read)?;
             if all_eof {
                 break;
             }
@@ -475,6 +552,8 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         if missing_count > self.parity_shard_count {
             return Err(StreamError::codec(0, crate::Error::TooFewShardsPresent));
         }
+        let present_count = total - missing_count;
+        let use_parallel_read = use_parallel_stream_io(options, present_count);
 
         // Strategy: read present shards into buffers per block, reconstruct,
         // then write recovered data into missing shards' cursors.
@@ -491,13 +570,6 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .collect();
 
         loop {
-            // Pass 1: read from present shards into buffers (parallel).
-            use rayon::prelude::*;
-            use std::sync::atomic::{AtomicBool, Ordering};
-
-            let any_data = AtomicBool::new(false);
-            let first_error: std::sync::Mutex<Option<StreamError>> = std::sync::Mutex::new(None);
-
             #[allow(clippy::type_complexity)]
             let mut indexed: Vec<(usize, &mut std::io::Cursor<Vec<u8>>, &mut Vec<u8>)> = shards
                 .iter_mut()
@@ -507,40 +579,60 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                 .map(|(i, (s, b))| (i, s, b))
                 .collect();
 
-            indexed
-                .par_iter_mut()
-                .try_for_each(|(i, shard, buf)| {
-                    buf.resize(block_size, 0);
-                    let mut total_read = 0;
-                    while total_read < block_size {
-                        match shard.read(&mut buf[total_read..]) {
-                            Ok(0) => break,
-                            Ok(n) => {
-                                total_read += n;
-                                any_data.store(true, Ordering::Relaxed);
-                            }
-                            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                            Err(e) => {
-                                if let Ok(mut guard) = first_error.lock()
-                                    && guard.is_none()
-                                {
-                                    *guard = Some(StreamError::read(*i, e));
+            let any_data = if use_parallel_read {
+                use rayon::prelude::*;
+                use std::sync::atomic::{AtomicBool, Ordering};
+
+                let any_data = AtomicBool::new(false);
+                let first_error: std::sync::Mutex<Option<StreamError>> =
+                    std::sync::Mutex::new(None);
+
+                indexed
+                    .par_iter_mut()
+                    .try_for_each(|(i, shard, buf)| {
+                        buf.resize(block_size, 0);
+                        let mut total_read = 0;
+                        while total_read < block_size {
+                            match shard.read(&mut buf[total_read..]) {
+                                Ok(0) => break,
+                                Ok(n) => {
+                                    total_read += n;
+                                    any_data.store(true, Ordering::Relaxed);
                                 }
-                                return Err(());
+                                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                                Err(e) => {
+                                    if let Ok(mut guard) = first_error.lock()
+                                        && guard.is_none()
+                                    {
+                                        *guard = Some(StreamError::read(*i, e));
+                                    }
+                                    return Err(());
+                                }
                             }
                         }
-                    }
-                    buf.truncate(total_read);
-                    Ok(())
-                })
-                .map_err(|()| {
-                    take_stream_error(
-                        &first_error,
-                        "parallel stream reader error was not reported",
-                    )
-                })?;
+                        buf.truncate(total_read);
+                        Ok(())
+                    })
+                    .map_err(|()| {
+                        take_stream_error(
+                            &first_error,
+                            "parallel stream reader error was not reported",
+                        )
+                    })?;
 
-            if !any_data.load(Ordering::Relaxed) {
+                any_data.load(Ordering::Relaxed)
+            } else {
+                let mut any_data = false;
+                for (i, shard, buf) in indexed.iter_mut() {
+                    let total_read = read_one_stream(shard, buf, block_size)
+                        .map_err(|e| StreamError::read(*i, e))?;
+                    buf.truncate(total_read);
+                    any_data |= total_read > 0;
+                }
+                any_data
+            };
+
+            if !any_data {
                 break;
             }
 
@@ -865,10 +957,37 @@ mod tests {
     fn test_stream_options_builder() {
         let opts = StreamOptions::new().with_block_size(1024 * 1024);
         assert_eq!(opts.block_size, 1024 * 1024);
+        assert_eq!(opts.io_mode, StreamIoMode::Auto);
 
         // Minimum is 1 KiB.
         let opts = StreamOptions::new().with_block_size(100);
         assert_eq!(opts.block_size, 1024);
+
+        let opts = StreamOptions::new().with_io_mode(StreamIoMode::Serial);
+        assert_eq!(opts.io_mode, StreamIoMode::Serial);
+    }
+
+    #[test]
+    fn test_stream_io_auto_decision_thresholds() {
+        let opts = StreamOptions::new()
+            .with_block_size(64 * 1024)
+            .with_io_mode(StreamIoMode::Auto);
+        assert!(!use_parallel_stream_io(&opts, 14));
+
+        let opts = StreamOptions::new()
+            .with_block_size(1024 * 1024)
+            .with_io_mode(StreamIoMode::Auto);
+        assert!(!use_parallel_stream_io(&opts, 6));
+
+        let opts = StreamOptions::new()
+            .with_block_size(4 * 1024 * 1024)
+            .with_io_mode(StreamIoMode::Auto);
+        assert!(use_parallel_stream_io(&opts, 10));
+
+        let opts = StreamOptions::new()
+            .with_block_size(64 * 1024)
+            .with_io_mode(StreamIoMode::Parallel);
+        assert!(use_parallel_stream_io(&opts, 1));
     }
 
     #[test]
@@ -1036,6 +1155,40 @@ mod tests {
             all.push(w.as_slice());
         }
         assert!(rs.verify(&all).unwrap());
+    }
+
+    #[test]
+    fn test_stream_io_modes_encode_verify_match() {
+        let rs = ReedSolomon::new(4, 2).unwrap();
+        let shard_size = 32 * 1024;
+        let data: Vec<Vec<u8>> = (0..4).map(|_| random_data(shard_size)).collect();
+
+        let mut expected_parity = Vec::new();
+        for mode in [
+            StreamIoMode::Auto,
+            StreamIoMode::Serial,
+            StreamIoMode::Parallel,
+        ] {
+            let opts = StreamOptions::new()
+                .with_block_size(8 * 1024)
+                .with_io_mode(mode);
+            let mut readers: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+            let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+
+            rs.encode_stream(&mut readers, &mut writers, &opts).unwrap();
+            if expected_parity.is_empty() {
+                expected_parity = writers.clone();
+            } else {
+                assert_eq!(writers, expected_parity);
+            }
+
+            let mut all: Vec<&[u8]> = data.iter().map(|d| d.as_slice()).collect();
+            for parity in &writers {
+                all.push(parity.as_slice());
+            }
+            let mut verify_readers = all;
+            assert!(rs.verify_stream(&mut verify_readers, &opts).unwrap());
+        }
     }
 
     #[test]
