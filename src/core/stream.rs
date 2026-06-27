@@ -554,11 +554,23 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         }
         let present_count = total - missing_count;
         let use_parallel_read = use_parallel_stream_io(options, present_count);
+        let present_indices: Vec<usize> = present
+            .iter()
+            .enumerate()
+            .filter_map(|(i, is_present)| is_present.then_some(i))
+            .collect();
+        let missing_indices: Vec<usize> = present
+            .iter()
+            .enumerate()
+            .filter_map(|(i, is_present)| (!is_present).then_some(i))
+            .collect();
 
         // Strategy: read present shards into buffers per block, reconstruct,
         // then write recovered data into missing shards' cursors.
 
-        // Pre-allocate read buffers for present shards only.
+        // Pre-allocate read buffers and the reconstruct container once. Present
+        // shard buffers are moved into the reconstruct call and then moved back
+        // after each block so their allocations survive across iterations.
         let mut bufs: Vec<Vec<u8>> = (0..total)
             .map(|i| {
                 if present[i] {
@@ -568,68 +580,77 @@ impl super::ReedSolomon<crate::galois_8::Field> {
                 }
             })
             .collect();
+        let mut reconstruct_bufs: Vec<Option<Vec<u8>>> = (0..total).map(|_| None).collect();
 
         loop {
-            #[allow(clippy::type_complexity)]
-            let mut indexed: Vec<(usize, &mut std::io::Cursor<Vec<u8>>, &mut Vec<u8>)> = shards
-                .iter_mut()
-                .zip(bufs.iter_mut())
-                .enumerate()
-                .filter(|(i, _)| present[*i])
-                .map(|(i, (s, b))| (i, s, b))
-                .collect();
+            let any_data = {
+                #[allow(clippy::type_complexity)]
+                let mut indexed: Vec<(
+                    usize,
+                    &mut std::io::Cursor<Vec<u8>>,
+                    &mut Vec<u8>,
+                )> = shards
+                    .iter_mut()
+                    .zip(bufs.iter_mut())
+                    .enumerate()
+                    .filter(|(i, _)| present[*i])
+                    .map(|(i, (s, b))| (i, s, b))
+                    .collect();
 
-            let any_data = if use_parallel_read {
-                use rayon::prelude::*;
-                use std::sync::atomic::{AtomicBool, Ordering};
+                if use_parallel_read {
+                    use rayon::prelude::*;
+                    use std::sync::atomic::{AtomicBool, Ordering};
 
-                let any_data = AtomicBool::new(false);
-                let first_error: std::sync::Mutex<Option<StreamError>> =
-                    std::sync::Mutex::new(None);
+                    let any_data = AtomicBool::new(false);
+                    let first_error: std::sync::Mutex<Option<StreamError>> =
+                        std::sync::Mutex::new(None);
 
-                indexed
-                    .par_iter_mut()
-                    .try_for_each(|(i, shard, buf)| {
-                        buf.resize(block_size, 0);
-                        let mut total_read = 0;
-                        while total_read < block_size {
-                            match shard.read(&mut buf[total_read..]) {
-                                Ok(0) => break,
-                                Ok(n) => {
-                                    total_read += n;
-                                    any_data.store(true, Ordering::Relaxed);
-                                }
-                                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                                Err(e) => {
-                                    if let Ok(mut guard) = first_error.lock()
-                                        && guard.is_none()
-                                    {
-                                        *guard = Some(StreamError::read(*i, e));
+                    indexed
+                        .par_iter_mut()
+                        .try_for_each(|(i, shard, buf)| {
+                            buf.resize(block_size, 0);
+                            let mut total_read = 0;
+                            while total_read < block_size {
+                                match shard.read(&mut buf[total_read..]) {
+                                    Ok(0) => break,
+                                    Ok(n) => {
+                                        total_read += n;
+                                        any_data.store(true, Ordering::Relaxed);
                                     }
-                                    return Err(());
+                                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        if let Ok(mut guard) = first_error.lock()
+                                            && guard.is_none()
+                                        {
+                                            *guard = Some(StreamError::read(*i, e));
+                                        }
+                                        return Err(());
+                                    }
                                 }
                             }
-                        }
-                        buf.truncate(total_read);
-                        Ok(())
-                    })
-                    .map_err(|()| {
-                        take_stream_error(
-                            &first_error,
-                            "parallel stream reader error was not reported",
-                        )
-                    })?;
+                            buf.truncate(total_read);
+                            Ok(())
+                        })
+                        .map_err(|()| {
+                            take_stream_error(
+                                &first_error,
+                                "parallel stream reader error was not reported",
+                            )
+                        })?;
 
-                any_data.load(Ordering::Relaxed)
-            } else {
-                let mut any_data = false;
-                for (i, shard, buf) in indexed.iter_mut() {
-                    let total_read = read_one_stream(shard, buf, block_size)
-                        .map_err(|e| StreamError::read(*i, e))?;
-                    buf.truncate(total_read);
-                    any_data |= total_read > 0;
+                    any_data.load(Ordering::Relaxed)
+                } else {
+                    let mut any_data = false;
+                    for (i, shard, buf) in indexed.iter_mut() {
+                        let total_read = read_one_stream(shard, buf, block_size)
+                            .map_err(|e| StreamError::read(*i, e))?;
+                        buf.truncate(total_read);
+                        any_data |= total_read > 0;
+                    }
+                    any_data
                 }
-                any_data
             };
 
             if !any_data {
@@ -637,40 +658,48 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             }
 
             // Compute actual_len from present shards only.
-            let actual_len = bufs
+            let actual_len = present_indices
                 .iter()
-                .enumerate()
-                .filter(|(idx, _)| present[*idx])
-                .find_map(|(_, b)| if b.is_empty() { None } else { Some(b.len()) })
+                .find_map(|&idx| {
+                    let buf = &bufs[idx];
+                    if buf.is_empty() {
+                        None
+                    } else {
+                        Some(buf.len())
+                    }
+                })
                 .unwrap_or(0);
             if actual_len == 0 {
                 break;
             }
 
-            // Zero-pad present shards to actual_len, fill missing shards.
-            for buf in bufs.iter_mut() {
-                buf.resize(actual_len, 0);
+            // Zero-pad present shards to actual_len and reuse the outer
+            // Option<Vec<_>> container for reconstructing this block.
+            for &idx in &present_indices {
+                bufs[idx].resize(actual_len, 0);
+                reconstruct_bufs[idx] = Some(mem::take(&mut bufs[idx]));
             }
-
-            let mut reconstruct_bufs: Vec<Option<Vec<u8>>> = (0..total)
-                .map(|i| {
-                    if present[i] {
-                        Some(mem::take(&mut bufs[i]))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            for &idx in &missing_indices {
+                reconstruct_bufs[idx] = None;
+            }
 
             self.reconstruct(&mut reconstruct_bufs)
                 .map_err(|e| StreamError::codec(0, e))?;
 
             // Write recovered data into missing shards' cursors.
             // (reconstruct fills in all missing shards — data and parity)
-            for (i, shard) in shards.iter_mut().enumerate() {
-                if !present[i] {
-                    let recovered = reconstruct_bufs[i].as_ref().expect("missing shard buffer");
-                    shard.get_mut().extend_from_slice(&recovered[..actual_len]);
+            for &idx in &missing_indices {
+                let recovered = reconstruct_bufs[idx]
+                    .as_ref()
+                    .expect("missing shard buffer");
+                shards[idx]
+                    .get_mut()
+                    .extend_from_slice(&recovered[..actual_len]);
+            }
+
+            for idx in 0..total {
+                if let Some(buf) = reconstruct_bufs[idx].take() {
+                    bufs[idx] = buf;
                 }
             }
         }
