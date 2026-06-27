@@ -27,7 +27,7 @@
 //! rs.encode_stream(&mut data_readers, &mut parity_writers, &opts).unwrap();
 //! ```
 
-use std::io::{Error, Read};
+use std::io::Error;
 use std::mem;
 
 // ---------------------------------------------------------------------------
@@ -205,11 +205,12 @@ fn read_block_with_mode<R: std::io::Read + Send>(
     buffers: &mut [Vec<u8>],
     max_len: usize,
     use_parallel_io: bool,
+    read_lengths: &mut Vec<(usize, usize)>,
 ) -> Result<(bool, usize), StreamError> {
     if use_parallel_io {
         read_block_par(readers, buffers, max_len)
     } else {
-        read_block(readers, buffers, max_len)
+        read_block(readers, buffers, max_len, read_lengths)
     }
 }
 
@@ -236,8 +237,9 @@ fn read_block<R: std::io::Read>(
     readers: &mut [R],
     buffers: &mut [Vec<u8>],
     max_len: usize,
+    read_lengths: &mut Vec<(usize, usize)>,
 ) -> Result<(bool, usize), StreamError> {
-    let mut read_lengths = Vec::with_capacity(readers.len());
+    read_lengths.clear();
 
     for (i, (reader, buf)) in readers.iter_mut().zip(buffers.iter_mut()).enumerate() {
         let total = read_one_stream(reader, buf, max_len).map_err(|e| StreamError::read(i, e))?;
@@ -249,7 +251,7 @@ fn read_block<R: std::io::Read>(
         .map(|(_, total)| *total)
         .max()
         .unwrap_or(0);
-    zero_pad_short_buffers(buffers, &read_lengths, actual_len);
+    zero_pad_short_buffers(buffers, read_lengths, actual_len);
 
     Ok((actual_len == 0, actual_len))
 }
@@ -292,6 +294,55 @@ fn zero_pad_short_buffers(
             buffers[i][total..actual_len].fill(0);
         }
     }
+}
+
+fn read_present_cursors_with_mode(
+    shards: &mut [std::io::Cursor<Vec<u8>>],
+    buffers: &mut [Vec<u8>],
+    present: &[bool],
+    present_indices: &[usize],
+    max_len: usize,
+    use_parallel_io: bool,
+    read_lengths: &mut Vec<(usize, usize)>,
+) -> Result<(bool, usize), StreamError> {
+    read_lengths.clear();
+
+    if use_parallel_io {
+        use rayon::prelude::*;
+
+        *read_lengths = shards
+            .par_iter_mut()
+            .zip(buffers.par_iter_mut())
+            .enumerate()
+            .filter_map(|(i, item)| present[i].then_some((i, item)))
+            .map(|(i, (shard, buf))| {
+                let total =
+                    read_one_stream(shard, buf, max_len).map_err(|e| StreamError::read(i, e))?;
+                buf.truncate(total);
+                Ok::<_, StreamError>((i, total))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+    } else {
+        for &i in present_indices {
+            let total = read_one_stream(&mut shards[i], &mut buffers[i], max_len)
+                .map_err(|e| StreamError::read(i, e))?;
+            buffers[i].truncate(total);
+            read_lengths.push((i, total));
+        }
+    }
+
+    let actual_len = read_lengths
+        .iter()
+        .map(|(_, total)| *total)
+        .max()
+        .unwrap_or(0);
+    if actual_len != 0 {
+        for &idx in present_indices {
+            buffers[idx].resize(actual_len, 0);
+        }
+    }
+
+    Ok((actual_len == 0, actual_len))
 }
 
 /// Write `len` bytes from each buffer to the corresponding writer.
@@ -443,10 +494,16 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let mut parity_bufs: Vec<Vec<u8>> = (0..parity_count)
             .map(|_| Vec::with_capacity(block_size))
             .collect();
+        let mut read_lengths = Vec::with_capacity(data_count);
 
         loop {
-            let (all_eof, actual_len) =
-                read_block_with_mode(data, &mut data_bufs, block_size, use_parallel_read)?;
+            let (all_eof, actual_len) = read_block_with_mode(
+                data,
+                &mut data_bufs,
+                block_size,
+                use_parallel_read,
+                &mut read_lengths,
+            )?;
             if all_eof {
                 break;
             }
@@ -496,10 +553,16 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         debug_assert_eq!(shards.len(), total);
 
         let mut bufs: Vec<Vec<u8>> = (0..total).map(|_| Vec::with_capacity(block_size)).collect();
+        let mut read_lengths = Vec::with_capacity(total);
 
         loop {
-            let (all_eof, actual_len) =
-                read_block_with_mode(shards, &mut bufs, block_size, use_parallel_read)?;
+            let (all_eof, actual_len) = read_block_with_mode(
+                shards,
+                &mut bufs,
+                block_size,
+                use_parallel_read,
+                &mut read_lengths,
+            )?;
             if all_eof {
                 break;
             }
@@ -581,95 +644,19 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             })
             .collect();
         let mut reconstruct_bufs: Vec<Option<Vec<u8>>> = (0..total).map(|_| None).collect();
+        let mut read_lengths = Vec::with_capacity(total);
 
         loop {
-            let any_data = {
-                #[allow(clippy::type_complexity)]
-                let mut indexed: Vec<(
-                    usize,
-                    &mut std::io::Cursor<Vec<u8>>,
-                    &mut Vec<u8>,
-                )> = shards
-                    .iter_mut()
-                    .zip(bufs.iter_mut())
-                    .enumerate()
-                    .filter(|(i, _)| present[*i])
-                    .map(|(i, (s, b))| (i, s, b))
-                    .collect();
-
-                if use_parallel_read {
-                    use rayon::prelude::*;
-                    use std::sync::atomic::{AtomicBool, Ordering};
-
-                    let any_data = AtomicBool::new(false);
-                    let first_error: std::sync::Mutex<Option<StreamError>> =
-                        std::sync::Mutex::new(None);
-
-                    indexed
-                        .par_iter_mut()
-                        .try_for_each(|(i, shard, buf)| {
-                            buf.resize(block_size, 0);
-                            let mut total_read = 0;
-                            while total_read < block_size {
-                                match shard.read(&mut buf[total_read..]) {
-                                    Ok(0) => break,
-                                    Ok(n) => {
-                                        total_read += n;
-                                        any_data.store(true, Ordering::Relaxed);
-                                    }
-                                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
-                                        continue;
-                                    }
-                                    Err(e) => {
-                                        if let Ok(mut guard) = first_error.lock()
-                                            && guard.is_none()
-                                        {
-                                            *guard = Some(StreamError::read(*i, e));
-                                        }
-                                        return Err(());
-                                    }
-                                }
-                            }
-                            buf.truncate(total_read);
-                            Ok(())
-                        })
-                        .map_err(|()| {
-                            take_stream_error(
-                                &first_error,
-                                "parallel stream reader error was not reported",
-                            )
-                        })?;
-
-                    any_data.load(Ordering::Relaxed)
-                } else {
-                    let mut any_data = false;
-                    for (i, shard, buf) in indexed.iter_mut() {
-                        let total_read = read_one_stream(shard, buf, block_size)
-                            .map_err(|e| StreamError::read(*i, e))?;
-                        buf.truncate(total_read);
-                        any_data |= total_read > 0;
-                    }
-                    any_data
-                }
-            };
-
-            if !any_data {
-                break;
-            }
-
-            // Compute actual_len from present shards only.
-            let actual_len = present_indices
-                .iter()
-                .find_map(|&idx| {
-                    let buf = &bufs[idx];
-                    if buf.is_empty() {
-                        None
-                    } else {
-                        Some(buf.len())
-                    }
-                })
-                .unwrap_or(0);
-            if actual_len == 0 {
+            let (all_eof, actual_len) = read_present_cursors_with_mode(
+                shards,
+                &mut bufs,
+                &present,
+                &present_indices,
+                block_size,
+                use_parallel_read,
+                &mut read_lengths,
+            )?;
+            if all_eof {
                 break;
             }
 
