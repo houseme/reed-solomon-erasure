@@ -593,6 +593,10 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     /// (`Cursor::new(Vec::new())`).  Recovered data is written into the
     /// missing shards' cursors.
     ///
+    /// Present cursors are read from the beginning: their position is reset to
+    /// `0` before reading, so it is safe to pass cursors that were just written
+    /// to (whose position sits at the end).
+    ///
     /// The function reads blocks from present shards, reconstructs missing
     /// blocks, and writes recovered data into the missing cursors.  The set
     /// of missing shard indices must be consistent across all blocks.
@@ -633,6 +637,16 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .enumerate()
             .filter_map(|(i, is_present)| (!is_present).then_some(i))
             .collect();
+
+        // Presence is decided from whether the underlying Vec is empty, but
+        // reads go through the Cursor's Read impl (from the current position).
+        // A present cursor whose position is not 0 (e.g. just written to, with
+        // the position at the end) would be misread as empty, causing silent
+        // no-recovery or wrong recovery. Reset every present cursor's position
+        // to 0 before reading.
+        for &idx in &present_indices {
+            shards[idx].set_position(0);
+        }
 
         // Strategy: read present shards into buffers per block, reconstruct,
         // then write recovered data into missing shards' cursors.
