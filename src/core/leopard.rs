@@ -79,12 +79,6 @@ impl<F: Field> LeopardGF8Codec<F> {
         self.total_shards
     }
 
-    pub(crate) fn setup_matrix(&self) -> &Matrix<F> {
-        unreachable!(
-            "LeopardGF8 prototype only keeps setup metadata, not an executable matrix handle"
-        )
-    }
-
     pub(crate) fn setup_shape(&self) -> (usize, usize) {
         (self.setup_rows, self.setup_cols)
     }

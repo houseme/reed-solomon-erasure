@@ -271,6 +271,9 @@ impl<F: Field> ReedSolomon<F> {
             return Err(Error::TooFewShardsPresent);
         }
 
+        // invariant: reached only when number_present >= data_shard_count >= 1
+        // (see the TooFewDataShards guard in new()), so at least one present
+        // shard has set shard_len to Some.
         let shard_len = shard_len.expect("at least one shard present; qed");
 
         let mut valid_indices: SmallVec<[usize; 32]> = SmallVec::with_capacity(data_shard_count);
@@ -496,6 +499,9 @@ impl<F: Field> ReedSolomon<F> {
             return Err(Error::TooFewShardsPresent);
         }
 
+        // invariant: reached only when number_present >= data_shard_count >= 1
+        // (see the TooFewDataShards guard in new()), so at least one present
+        // shard has set shard_len to Some.
         let shard_len = shard_len.expect("at least one shard present; qed");
         let required_data_only = required
             .iter()
@@ -805,6 +811,9 @@ impl<F: Field> ReedSolomon<F> {
             return Err(Error::TooFewShardsPresent);
         }
 
+        // invariant: reached only when number_present >= data_shard_count >= 1
+        // (see the TooFewDataShards guard in new()), so at least one present
+        // shard has set shard_len to Some.
         let shard_len = shard_len.expect("at least one shard present; qed");
 
         let mut sub_shards: SmallVec<[&[F::Elem]; 32]> = SmallVec::with_capacity(data_shard_count);

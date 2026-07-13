@@ -48,7 +48,7 @@ pub fn encode(shards: &mut [u8], data_shards: usize, parity_shards: usize) -> u8
 
     let mut separate_slice_shards: Vec<_> = shards.chunks_exact_mut(shard_size).collect();
 
-    result_to_number(reed_solomon.encode((&mut separate_slice_shards).as_mut_slice()))
+    result_to_number(reed_solomon.encode(separate_slice_shards.as_mut_slice()))
 }
 
 #[wasm_bindgen]
