@@ -15,7 +15,9 @@ unsafe fn load_tables_avx512(
 ) -> (core::arch::x86_64::__m512i, core::arch::x86_64::__m512i) {
     use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm512_broadcast_i32x4};
 
+    // SAFETY: reads a 16-byte table half via an unaligned load; AVX512 is available in this `#[target_feature]` fn.
     let low128: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
+    // SAFETY: reads a 16-byte table half via an unaligned load; AVX512 is available in this `#[target_feature]` fn.
     let high128: __m128i = unsafe { _mm_loadu_si128(high.as_ptr().cast()) };
 
     (
@@ -43,6 +45,8 @@ pub(crate) fn rust_avx512_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
         out.copy_from_slice(input);
         return;
     }
+    // SAFETY: reached only after runtime `is_x86_feature_detected!` confirmed AVX512F and AVX512BW in the
+    // dispatcher, satisfying the callee's `#[target_feature(enable = "avx512f,avx512bw")]` requirement.
     unsafe { rust_avx512_mul_impl::<false>(c, input, out) }
 }
 
@@ -66,6 +70,8 @@ pub(crate) fn rust_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
         }
         return;
     }
+    // SAFETY: reached only after runtime `is_x86_feature_detected!` confirmed AVX512F and AVX512BW in the
+    // dispatcher, satisfying the callee's `#[target_feature(enable = "avx512f,avx512bw")]` requirement.
     unsafe { rust_avx512_mul_impl::<true>(c, input, out) }
 }
 
@@ -108,6 +114,7 @@ unsafe fn rust_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [
         if XOR {
             // SAFETY: `chunks_exact(64)` guarantees 64 valid bytes for load/store.
             let out_vec = unsafe { _mm512_loadu_si512(out_chunk.as_ptr().cast()) };
+            // SAFETY: `chunks_exact_mut(64)` guarantees 64 valid bytes for this unaligned store.
             unsafe {
                 _mm512_storeu_si512(
                     out_chunk.as_mut_ptr().cast(),

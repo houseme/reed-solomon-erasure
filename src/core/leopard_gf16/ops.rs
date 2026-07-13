@@ -111,13 +111,16 @@ pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
     // SAFETY: u16 XOR is identical to u8 XOR at the byte level (endian-independent).
     // Reinterpret as u8 slices to leverage SIMD byte-XOR implementations.
     let byte_len = dst.len() * 2;
+    // SAFETY: dst is a valid &mut [u16]; the u8 view spans exactly byte_len = dst.len()*2 in-bounds bytes and u16 alignment (>=2) satisfies u8.
     let dst_bytes =
         unsafe { core::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), byte_len) };
+    // SAFETY: src is a valid &[u16] of the same length as dst; the u8 view spans exactly byte_len in-bounds bytes with satisfied alignment.
     let src_bytes = unsafe { core::slice::from_raw_parts(src.as_ptr().cast::<u8>(), byte_len) };
 
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
+            // SAFETY: is_x86_feature_detected!("avx2") confirmed AVX2 at runtime, so calling the #[target_feature(enable="avx2")] fn is sound; both byte views are valid, equal-length slices.
             unsafe {
                 slice_xor_u16_avx2(dst_bytes, src_bytes);
             }
@@ -127,6 +130,7 @@ pub(super) fn slice_xor_u16(dst: &mut [u16], src: &[u16]) {
 
     #[cfg(target_arch = "aarch64")]
     {
+        // SAFETY: NEON is a mandatory baseline feature on aarch64, so calling the #[target_feature(enable="neon")] fn is always sound here; both byte views are valid, equal-length slices.
         unsafe {
             slice_xor_u16_neon(dst_bytes, src_bytes);
         }
@@ -147,6 +151,7 @@ unsafe fn slice_xor_u16_avx2(dst: &mut [u8], src: &[u8]) {
     let (src32, src_tail) = src.as_chunks::<32>();
 
     for (d, s) in dst32.iter_mut().zip(src32.iter()) {
+        // SAFETY: as_chunks::<32>() yields 32-byte src/dst arrays, so each unaligned 256-bit load/store touches exactly 32 valid in-bounds bytes.
         unsafe {
             let sv = _mm256_loadu_si256(s.as_ptr().cast());
             let dv = _mm256_loadu_si256(d.as_ptr().cast());
@@ -171,6 +176,7 @@ unsafe fn slice_xor_u16_neon(dst: &mut [u8], src: &[u8]) {
     let (src64, src_tail) = src.as_chunks::<64>();
 
     for (d, s) in dst64.iter_mut().zip(src64.iter()) {
+        // SAFETY: as_chunks::<64>() yields 64-byte src/dst arrays, so the four 128-bit loads/stores cover exactly 64 valid in-bounds bytes each.
         unsafe {
             let sv = vld1q_u8_x4(s.as_ptr());
             let dv = vld1q_u8_x4(d.as_ptr());
@@ -189,6 +195,7 @@ unsafe fn slice_xor_u16_neon(dst: &mut [u8], src: &[u8]) {
     let (dst16, dst_scalar) = dst_tail.as_chunks_mut::<16>();
     let (src16, src_scalar) = src_tail.as_chunks::<16>();
     for (d, s) in dst16.iter_mut().zip(src16.iter()) {
+        // SAFETY: as_chunks::<16>() yields 16-byte src/dst arrays, so each 128-bit load/store touches exactly 16 valid in-bounds bytes.
         unsafe {
             let sv = vld1q_u8(s.as_ptr());
             let dv = vld1q_u8(d.as_ptr());
@@ -209,8 +216,11 @@ fn slice_xor_u16_u64(dst: &mut [u8], src: &[u8]) {
     for (d, s) in dst64.iter_mut().zip(src64.iter()) {
         for i in 0..8 {
             let off = i * 8;
+            // SAFETY: off = i*8 with i in 0..8 inside a 64-byte chunk, so s[off..] holds >=8 in-bounds bytes; read_unaligned needs no alignment.
             let sv = unsafe { core::ptr::read_unaligned(s[off..].as_ptr().cast::<u64>()) };
+            // SAFETY: d[off..] holds >=8 in-bounds bytes of the 64-byte chunk; read_unaligned needs no alignment.
             let dv = unsafe { core::ptr::read_unaligned(d[off..].as_ptr().cast::<u64>()) };
+            // SAFETY: d[off..] holds >=8 in-bounds bytes and is uniquely borrowed; write_unaligned needs no alignment.
             unsafe {
                 core::ptr::write_unaligned(d[off..].as_mut_ptr().cast::<u64>(), dv ^ sv);
             }
@@ -500,6 +510,7 @@ pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
+            // SAFETY: is_x86_feature_detected!("avx2") implies SSSE3, so calling the #[target_feature(enable="ssse3")] fn is sound; src/dst are equal-length, 64-byte-multiple slices.
             unsafe {
                 user_bytes_to_work_bytes_avx2(src, dst);
                 return;
@@ -508,6 +519,7 @@ pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
     }
     #[cfg(target_arch = "aarch64")]
     {
+        // SAFETY: NEON is guaranteed on aarch64, so calling the #[target_feature(enable="neon")] fn is sound; src/dst are equal-length, 64-byte-multiple slices.
         unsafe {
             user_bytes_to_work_bytes_neon(src, dst);
             return;
@@ -536,6 +548,7 @@ unsafe fn user_bytes_to_work_bytes_avx2(src: &[u8], dst: &mut [u8]) {
     };
 
     for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
+        // SAFETY: each chunk is 64 bytes, so the 128-bit loads at 0/16/32/48 and stores at 0/16/32/48 are all in-bounds; SSSE3 confirmed by caller.
         unsafe {
             let lo = _mm_loadu_si128(s.as_ptr().cast());
             let hi = _mm_loadu_si128(s[32..].as_ptr().cast());
@@ -557,6 +570,7 @@ unsafe fn user_bytes_to_work_bytes_neon(src: &[u8], dst: &mut [u8]) {
     for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
         // Interleave: dst[2*i] = src[i], dst[2*i+1] = src[i+32] for i in 0..32.
         // Split the two 32-byte halves into 16-byte pieces and use vzip.
+        // SAFETY: each chunk is 64 bytes, so the 128-bit loads/stores at offsets 0/16/32/48 are all in-bounds; NEON is baseline on aarch64.
         unsafe {
             // First 16 pairs: interleave s[0..16] with s[32..48]
             let lo = vld1q_u8(s.as_ptr());
@@ -584,6 +598,7 @@ pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
+            // SAFETY: is_x86_feature_detected!("avx2") confirmed AVX2 at runtime, so calling the #[target_feature(enable="avx2")] fn is sound; src/dst are equal-length, 64-byte-multiple slices.
             unsafe {
                 work_bytes_to_user_bytes_avx2(src, dst);
                 return;
@@ -592,6 +607,7 @@ pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
     }
     #[cfg(target_arch = "aarch64")]
     {
+        // SAFETY: NEON is guaranteed on aarch64, so calling the #[target_feature(enable="neon")] fn is sound; src/dst are equal-length, 64-byte-multiple slices.
         unsafe {
             work_bytes_to_user_bytes_neon(src, dst);
             return;
@@ -615,35 +631,42 @@ fn work_bytes_to_user_bytes_scalar(src: &[u8], dst: &mut [u8]) {
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 unsafe fn work_bytes_to_user_bytes_avx2(src: &[u8], dst: &mut [u8]) {
-    use core::arch::x86_64::{_mm_loadu_si128, _mm_shuffle_epi8, _mm_storeu_si128};
+    use core::arch::x86_64::{_mm_loadu_si128, _mm_shuffle_epi8, _mm_storel_epi64};
 
     // Mask to extract even-indexed bytes: [0,2,4,6,8,10,12,14], rest zeroed (0x80).
     #[rustfmt::skip]
+    // SAFETY: the 16-byte array literal backs a valid 128-bit unaligned load of the shuffle mask.
     let even_mask = unsafe { _mm_loadu_si128([
         0u8, 2, 4, 6, 8, 10, 12, 14, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
     ].as_ptr().cast()) };
     // Mask to extract odd-indexed bytes: [1,3,5,7,9,11,13,15], rest zeroed (0x80).
     #[rustfmt::skip]
+    // SAFETY: the 16-byte array literal backs a valid 128-bit unaligned load of the shuffle mask.
     let odd_mask = unsafe { _mm_loadu_si128([
         1u8, 3, 5, 7, 9, 11, 13, 15, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
     ].as_ptr().cast()) };
 
     for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
+        // SAFETY: each chunk is 64 bytes, so the four 128-bit loads at 0/16/32/48
+        // are in-bounds and AVX2 is confirmed by the caller. Only the low 8 bytes
+        // of each shuffle are meaningful (the mask zeroes the rest), so the 8-byte
+        // `storel_epi64` stores at 0/8/…/56 tile the 64-byte chunk exactly, with
+        // no write past its end.
         unsafe {
             let p0 = _mm_loadu_si128(s.as_ptr().cast());
             let p1 = _mm_loadu_si128(s[16..].as_ptr().cast());
             let p2 = _mm_loadu_si128(s[32..].as_ptr().cast());
             let p3 = _mm_loadu_si128(s[48..].as_ptr().cast());
             // Even bytes (a_i) → dst[0..8], dst[8..16], dst[16..24], dst[24..32]
-            _mm_storeu_si128(d.as_mut_ptr().cast(), _mm_shuffle_epi8(p0, even_mask));
-            _mm_storeu_si128(d[8..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, even_mask));
-            _mm_storeu_si128(d[16..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, even_mask));
-            _mm_storeu_si128(d[24..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, even_mask));
+            _mm_storel_epi64(d.as_mut_ptr().cast(), _mm_shuffle_epi8(p0, even_mask));
+            _mm_storel_epi64(d[8..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, even_mask));
+            _mm_storel_epi64(d[16..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, even_mask));
+            _mm_storel_epi64(d[24..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, even_mask));
             // Odd bytes (b_i) → dst[32..40], dst[40..48], dst[48..56], dst[56..64]
-            _mm_storeu_si128(d[32..].as_mut_ptr().cast(), _mm_shuffle_epi8(p0, odd_mask));
-            _mm_storeu_si128(d[40..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, odd_mask));
-            _mm_storeu_si128(d[48..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, odd_mask));
-            _mm_storeu_si128(d[56..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, odd_mask));
+            _mm_storel_epi64(d[32..].as_mut_ptr().cast(), _mm_shuffle_epi8(p0, odd_mask));
+            _mm_storel_epi64(d[40..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, odd_mask));
+            _mm_storel_epi64(d[48..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, odd_mask));
+            _mm_storel_epi64(d[56..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, odd_mask));
         }
     }
 }
@@ -658,6 +681,7 @@ unsafe fn work_bytes_to_user_bytes_neon(src: &[u8], dst: &mut [u8]) {
         // vuzp1q extracts even bytes (a_i), vuzp2q extracts odd bytes (b_i).
         // p0 = s[0..16], p1 = s[16..32] → even/odd from first 32 interleaved bytes.
         // p2 = s[32..48], p3 = s[48..64] → even/odd from second 32 interleaved bytes.
+        // SAFETY: each chunk is 64 bytes, so the 128-bit loads at 0/16/32/48 and stores at 0/16/32/48 are in-bounds; NEON is baseline on aarch64.
         unsafe {
             let p0 = vld1q_u8(s.as_ptr());
             let p1 = vld1q_u8(s[16..].as_ptr());

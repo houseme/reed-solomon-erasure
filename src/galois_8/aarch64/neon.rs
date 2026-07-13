@@ -21,6 +21,8 @@ pub(crate) fn rust_neon_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
         return;
     }
 
+    // SAFETY: NEON is unconditionally available on aarch64, so the callee's
+    // `#[target_feature(enable = "neon")]` requirement is always satisfied.
     unsafe { rust_neon_mul_slice_impl(c, input, out) }
 }
 
@@ -39,10 +41,14 @@ pub(crate) fn rust_neon_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
         return;
     }
     if c == 1 {
+        // SAFETY: NEON is unconditionally available on aarch64, so the callee's
+        // `#[target_feature(enable = "neon")]` requirement is always satisfied.
         unsafe { rust_neon_mul_slice_xor_c1_impl(input, out) }
         return;
     }
 
+    // SAFETY: NEON is unconditionally available on aarch64, so the callee's
+    // `#[target_feature(enable = "neon")]` requirement is always satisfied.
     unsafe { rust_neon_mul_slice_xor_impl(c, input, out) }
 }
 
@@ -59,7 +65,11 @@ unsafe fn rust_neon_mul_slice_impl(c: u8, input: &[u8], out: &mut [u8]) {
         vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x4,
     };
 
+    // SAFETY: reads a 16-byte multiply-table row via an unaligned NEON load;
+    // NEON is available in this `#[target_feature]` fn.
     let low_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_LOW[c as usize].as_ptr()) };
+    // SAFETY: reads a 16-byte multiply-table row via an unaligned NEON load;
+    // NEON is available in this `#[target_feature]` fn.
     let high_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_HIGH[c as usize].as_ptr()) };
     let nibble_mask = vdupq_n_u8(0x0f);
     // `bytes_done` rounds down to the largest multiple of 16 (NEON register width),
@@ -150,7 +160,11 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         vqtbl1q_u8, vshrq_n_u8, vst1q_u8, vst1q_u8_x4,
     };
 
+    // SAFETY: reads a 16-byte multiply-table row via an unaligned NEON load;
+    // NEON is available in this `#[target_feature]` fn.
     let low_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_LOW[c as usize].as_ptr()) };
+    // SAFETY: reads a 16-byte multiply-table row via an unaligned NEON load;
+    // NEON is available in this `#[target_feature]` fn.
     let high_tbl = unsafe { vld1q_u8(super::super::MUL_TABLE_HIGH[c as usize].as_ptr()) };
     let nibble_mask = vdupq_n_u8(0x0f);
 
@@ -180,6 +194,7 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         .chunks_exact(64)
         .zip(unrolled_out.chunks_exact_mut(64))
     {
+        // SAFETY: `chunks_exact(64)` yields exactly 64 valid bytes for this unaligned NEON load.
         let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input_chunk.as_ptr()) };
         let input0 = inputs.0;
         let input1 = inputs.1;
@@ -200,7 +215,9 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         let product1: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low1), vqtbl1q_u8(high_tbl, high1));
         let product2: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low2), vqtbl1q_u8(high_tbl, high2));
         let product3: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low3), vqtbl1q_u8(high_tbl, high3));
+        // SAFETY: `chunks_exact_mut(64)` yields exactly 64 valid bytes for this unaligned load of the current output.
         let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out_chunk.as_ptr()) };
+        // SAFETY: `chunks_exact_mut(64)` yields exactly 64 valid bytes for this unaligned NEON store.
         unsafe {
             vst1q_u8_x4(
                 out_chunk.as_mut_ptr(),
@@ -218,11 +235,14 @@ unsafe fn rust_neon_mul_slice_xor_impl(c: u8, input: &[u8], out: &mut [u8]) {
         .chunks_exact(16)
         .zip(remainder_out.chunks_exact_mut(16))
     {
+        // SAFETY: `chunks_exact(16)` yields exactly 16 valid bytes for this unaligned NEON load.
         let input_vec = unsafe { vld1q_u8(input_chunk.as_ptr()) };
         let low = vandq_u8(input_vec, nibble_mask);
         let high = vshrq_n_u8::<4>(input_vec);
         let product: uint8x16_t = veorq_u8(vqtbl1q_u8(low_tbl, low), vqtbl1q_u8(high_tbl, high));
+        // SAFETY: `chunks_exact_mut(16)` yields exactly 16 valid bytes for this unaligned load of the current output.
         let out_vec = unsafe { vld1q_u8(out_chunk.as_ptr()) };
+        // SAFETY: `chunks_exact_mut(16)` yields exactly 16 valid bytes for this unaligned NEON store.
         unsafe { vst1q_u8(out_chunk.as_mut_ptr(), veorq_u8(out_vec, product)) };
     }
 
@@ -252,9 +272,12 @@ unsafe fn rust_neon_mul_slice_xor_c1_impl(input: &[u8], out: &mut [u8]) {
         .chunks_exact(64)
         .zip(unrolled_out.chunks_exact_mut(64))
     {
+        // SAFETY: `chunks_exact(64)` yields exactly 64 valid bytes for this unaligned NEON load.
         let inputs: uint8x16x4_t = unsafe { vld1q_u8_x4(input_chunk.as_ptr()) };
+        // SAFETY: `chunks_exact_mut(64)` yields exactly 64 valid bytes for this unaligned load of the current output.
         let outs: uint8x16x4_t = unsafe { vld1q_u8_x4(out_chunk.as_ptr()) };
 
+        // SAFETY: `chunks_exact_mut(64)` yields exactly 64 valid bytes for this unaligned NEON store.
         unsafe {
             vst1q_u8_x4(
                 out_chunk.as_mut_ptr(),
@@ -272,8 +295,11 @@ unsafe fn rust_neon_mul_slice_xor_c1_impl(input: &[u8], out: &mut [u8]) {
         .chunks_exact(16)
         .zip(remainder_out.chunks_exact_mut(16))
     {
+        // SAFETY: `chunks_exact(16)` yields exactly 16 valid bytes for this unaligned NEON load.
         let input_vec = unsafe { vld1q_u8(input_chunk.as_ptr()) };
+        // SAFETY: `chunks_exact_mut(16)` yields exactly 16 valid bytes for this unaligned load of the current output.
         let out_vec = unsafe { vld1q_u8(out_chunk.as_ptr()) };
+        // SAFETY: `chunks_exact_mut(16)` yields exactly 16 valid bytes for this unaligned NEON store.
         unsafe { vst1q_u8(out_chunk.as_mut_ptr(), veorq_u8(input_vec, out_vec)) };
     }
 

@@ -15,7 +15,9 @@ unsafe fn load_tables_avx2(
 ) -> (core::arch::x86_64::__m256i, core::arch::x86_64::__m256i) {
     use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
 
+    // SAFETY: reads a 16-byte table half via an unaligned load; AVX2 is available in this `#[target_feature]` fn.
     let low128: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
+    // SAFETY: reads a 16-byte table half via an unaligned load; AVX2 is available in this `#[target_feature]` fn.
     let high128: __m128i = unsafe { _mm_loadu_si128(high.as_ptr().cast()) };
 
     (
@@ -43,6 +45,8 @@ pub(crate) fn rust_avx2_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
         out.copy_from_slice(input);
         return;
     }
+    // SAFETY: reached only after a runtime `is_x86_feature_detected!("avx2")` check in the
+    // dispatcher, satisfying the callee's `#[target_feature(enable = "avx2")]` requirement.
     unsafe { rust_avx2_mul_impl::<false>(c, input, out) }
 }
 
@@ -66,6 +70,8 @@ pub(crate) fn rust_avx2_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
         }
         return;
     }
+    // SAFETY: reached only after a runtime `is_x86_feature_detected!("avx2")` check in the
+    // dispatcher, satisfying the callee's `#[target_feature(enable = "avx2")]` requirement.
     unsafe { rust_avx2_mul_impl::<true>(c, input, out) }
 }
 
@@ -96,6 +102,7 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
         .chunks_exact(32)
         .zip(simd_out.chunks_exact_mut(32))
     {
+        // SAFETY: `chunks_exact(32)` yields exactly 32 valid bytes for this unaligned load.
         let input_vec = unsafe { _mm256_loadu_si256(input_chunk.as_ptr().cast()) };
         let low = _mm256_and_si256(input_vec, nibble_mask);
         let high = _mm256_and_si256(_mm256_srli_epi64::<4>(input_vec), nibble_mask);
@@ -104,7 +111,9 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
             _mm256_shuffle_epi8(high_tbl, high),
         );
         if XOR {
+            // SAFETY: `chunks_exact_mut(32)` yields exactly 32 valid bytes for this unaligned load of the current output.
             let out_vec = unsafe { _mm256_loadu_si256(out_chunk.as_ptr().cast()) };
+            // SAFETY: `chunks_exact_mut(32)` yields exactly 32 valid bytes for this unaligned store.
             unsafe {
                 _mm256_storeu_si256(
                     out_chunk.as_mut_ptr().cast(),
@@ -112,6 +121,7 @@ unsafe fn rust_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mut [u8
                 )
             };
         } else {
+            // SAFETY: `chunks_exact_mut(32)` yields exactly 32 valid bytes for this unaligned store.
             unsafe { _mm256_storeu_si256(out_chunk.as_mut_ptr().cast(), product) };
         }
     }

@@ -430,6 +430,9 @@ fn dit4_at_direct<W: AsMut<[u8]>>(
         if d < work.len() {
             let b = a + dist;
             let c = a + dist * 2;
+            // SAFETY: d < work.len() checked above and a < b < c < d (dist > 0),
+            // so all four indices are in bounds and pairwise distinct — the
+            // four &mut lane views never alias.
             unsafe {
                 let ptr = work.as_mut_ptr();
                 let a_ref = (*ptr.add(a)).as_mut();

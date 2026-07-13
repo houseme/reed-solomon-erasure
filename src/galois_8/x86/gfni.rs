@@ -95,6 +95,7 @@ unsafe fn gfni_avx2_constants(c: u8) -> (core::arch::x86_64::__m256i, core::arch
     // SAFETY: `iso_bytes` is 16 bytes, `coeff_bytes` is 32 bytes — both stack-allocated.
     let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
     let iso256: __m256i = _mm256_broadcastsi128_si256(iso128);
+    // SAFETY: `coeff_bytes` is a 32-byte stack array; read via an unaligned load. GFNI+AVX2 available here.
     let coeff_vec: __m256i = unsafe { _mm256_loadu_si256(coeff_bytes.as_ptr().cast()) };
     let coeff_mapped = _mm256_gf2p8affine_epi64_epi8(coeff_vec, iso256, 0);
 
@@ -121,6 +122,7 @@ unsafe fn gfni_avx512_constants(
     // SAFETY: `iso_bytes` is 16 bytes, `coeff_bytes` is 64 bytes — both stack-allocated.
     let iso128: __m128i = unsafe { _mm_loadu_si128(iso_bytes.as_ptr().cast()) };
     let iso512: __m512i = _mm512_broadcast_i32x4(iso128);
+    // SAFETY: `coeff_bytes` is a 64-byte stack array; read via an unaligned load. GFNI+AVX512 available here.
     let coeff_vec: __m512i = unsafe { _mm512_loadu_si512(coeff_bytes.as_ptr().cast()) };
     let coeff_mapped = _mm512_gf2p8affine_epi64_epi8::<0>(coeff_vec, iso512);
 
@@ -146,6 +148,8 @@ pub(crate) fn rust_gfni_avx2_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
         out.copy_from_slice(input);
         return;
     }
+    // SAFETY: reached only after runtime `is_x86_feature_detected!` confirmed GFNI and AVX2 in the
+    // dispatcher, satisfying the callee's `#[target_feature(enable = "gfni,avx2")]` requirement.
     unsafe { rust_gfni_avx2_mul_impl::<false>(c, input, out) }
 }
 
@@ -169,6 +173,8 @@ pub(crate) fn rust_gfni_avx2_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) 
         }
         return;
     }
+    // SAFETY: reached only after runtime `is_x86_feature_detected!` confirmed GFNI and AVX2 in the
+    // dispatcher, satisfying the callee's `#[target_feature(enable = "gfni,avx2")]` requirement.
     unsafe { rust_gfni_avx2_mul_impl::<true>(c, input, out) }
 }
 
@@ -191,6 +197,8 @@ pub(crate) fn rust_gfni_avx512_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
         out.copy_from_slice(input);
         return;
     }
+    // SAFETY: reached only after runtime `is_x86_feature_detected!` confirmed GFNI, AVX512F and AVX512BW
+    // in the dispatcher, satisfying the callee's `#[target_feature(enable = "gfni,avx512f,avx512bw")]`.
     unsafe { rust_gfni_avx512_mul_impl::<false>(c, input, out) }
 }
 
@@ -214,6 +222,8 @@ pub(crate) fn rust_gfni_avx512_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]
         }
         return;
     }
+    // SAFETY: reached only after runtime `is_x86_feature_detected!` confirmed GFNI, AVX512F and AVX512BW
+    // in the dispatcher, satisfying the callee's `#[target_feature(enable = "gfni,avx512f,avx512bw")]`.
     unsafe { rust_gfni_avx512_mul_impl::<true>(c, input, out) }
 }
 
@@ -230,6 +240,7 @@ unsafe fn rust_gfni_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mu
         _mm256_storeu_si256, _mm256_xor_si256,
     };
 
+    // SAFETY: GFNI+AVX2 are available in this `#[target_feature]` fn, satisfying the callee's requirement.
     let (iso256, coeff_mapped): (__m256i, __m256i) = unsafe { gfni_avx2_constants(c) };
 
     // Round down to 32-byte boundary so all SIMD loads/stores are in-bounds.
@@ -249,6 +260,7 @@ unsafe fn rust_gfni_avx2_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &mu
         if XOR {
             // SAFETY: `chunks_exact(32)` guarantees 32 valid bytes for load/store.
             let out_vec = unsafe { _mm256_loadu_si256(out_chunk.as_ptr().cast()) };
+            // SAFETY: `chunks_exact_mut(32)` guarantees 32 valid bytes for this unaligned store.
             unsafe {
                 _mm256_storeu_si256(
                     out_chunk.as_mut_ptr().cast(),
@@ -281,6 +293,7 @@ unsafe fn rust_gfni_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &
         _mm512_storeu_si512, _mm512_xor_si512,
     };
 
+    // SAFETY: GFNI+AVX512 are available in this `#[target_feature]` fn, satisfying the callee's requirement.
     let (iso512, coeff_mapped): (__m512i, __m512i) = unsafe { gfni_avx512_constants(c) };
 
     // Round down to 64-byte boundary so all SIMD loads/stores are in-bounds.
@@ -300,6 +313,7 @@ unsafe fn rust_gfni_avx512_mul_impl<const XOR: bool>(c: u8, input: &[u8], out: &
         if XOR {
             // SAFETY: `chunks_exact(64)` guarantees 64 valid bytes for load/store.
             let out_vec = unsafe { _mm512_loadu_si512(out_chunk.as_ptr().cast()) };
+            // SAFETY: `chunks_exact_mut(64)` guarantees 64 valid bytes for this unaligned store.
             unsafe {
                 _mm512_storeu_si512(
                     out_chunk.as_mut_ptr().cast(),

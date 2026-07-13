@@ -18,6 +18,8 @@ pub(crate) fn rust_vsx_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
         return;
     }
 
+    // SAFETY: reached only after the backend dispatcher confirmed VSX availability,
+    // satisfying the callee's `#[target_feature(enable = "vsx")]` requirement.
     unsafe { rust_vsx_mul_slice_impl(c, input, out) }
 }
 
@@ -37,6 +39,8 @@ pub(crate) fn rust_vsx_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
         return;
     }
 
+    // SAFETY: reached only after the backend dispatcher confirmed VSX availability,
+    // satisfying the callee's `#[target_feature(enable = "vsx")]` requirement.
     unsafe { rust_vsx_mul_slice_xor_impl(c, input, out) }
 }
 

@@ -1542,6 +1542,9 @@ fn with_leopard_envs<R>(
     xor_clone: bool,
     f: impl FnOnce() -> R,
 ) -> R {
+    // SAFETY: `set_var`/`remove_var` are unsafe because they are not thread-safe;
+    // this helper runs single-threaded around a serial benchmark closure, so no
+    // other thread observes the environment concurrently.
     unsafe {
         if reuse_zero {
             std::env::set_var("RSE_LEOPARD_GF8_REUSE_ZERO", "1");
@@ -1560,6 +1563,7 @@ fn with_leopard_envs<R>(
         }
     }
     let result = f();
+    // SAFETY: single-threaded teardown of the same env vars; see the set-up block.
     unsafe {
         std::env::remove_var("RSE_LEOPARD_GF8_REUSE_ZERO");
         std::env::remove_var("RSE_LEOPARD_GF8_FORWARD_TABLES");

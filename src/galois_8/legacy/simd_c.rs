@@ -53,6 +53,9 @@ pub(crate) fn simd_c_mul_slice(c: u8, input: &[u8], out: &mut [u8]) {
     let out_ptr: *mut u8 = &mut out[0];
     let size: libc::size_t = input.len();
 
+    // SAFETY: `low`/`high` point to 16-byte multiply-table rows; `input_ptr`/`out_ptr` are valid,
+    // non-null (slices are non-empty), and both span `size` bytes (`assert_eq!(input.len(), out.len())`).
+    // The C routine performs only unaligned accesses (built with USE_ALIGNED_ACCESS=0).
     let bytes_done: usize =
         unsafe { reedsolomon_gal_mul(low, high, input_ptr, out_ptr, size) as usize };
 
@@ -90,6 +93,9 @@ pub(crate) fn simd_c_mul_slice_xor(c: u8, input: &[u8], out: &mut [u8]) {
     let out_ptr: *mut u8 = &mut out[0];
     let size: libc::size_t = input.len();
 
+    // SAFETY: `low`/`high` point to 16-byte multiply-table rows; `input_ptr`/`out_ptr` are valid,
+    // non-null (slices are non-empty), and both span `size` bytes (`assert_eq!(input.len(), out.len())`).
+    // The C routine performs only unaligned accesses (built with USE_ALIGNED_ACCESS=0).
     let bytes_done: usize =
         unsafe { reedsolomon_gal_mul_xor(low, high, input_ptr, out_ptr, size) as usize };
 
