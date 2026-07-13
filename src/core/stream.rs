@@ -479,6 +479,15 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     /// each block, and writes the resulting parity blocks.  This avoids
     /// loading the entire dataset into memory.
     ///
+    /// All data streams should supply the same number of bytes. When they do
+    /// not, shorter streams are zero-padded to the longest stream's length for
+    /// each block, and no original-length metadata is persisted. The generated
+    /// parity therefore only round-trips within this streaming API; interop
+    /// with the in-memory API (which rejects unequal lengths with
+    /// [`crate::Error::IncorrectShardSize`]) or with other Reed-Solomon
+    /// implementations requires the caller to track the original shard lengths
+    /// out of band.
+    ///
     /// # Errors
     ///
     /// Returns [`StreamError`] on I/O failure or codec error.
