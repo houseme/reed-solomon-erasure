@@ -49,6 +49,80 @@ impl crate::Field for Field {
     fn nth_internal(n: usize) -> [u8; 2] {
         [(n >> 8) as u8, n as u8]
     }
+
+    fn mul_slice(elem: [u8; 2], input: &[[u8; 2]], out: &mut [[u8; 2]]) {
+        gf16_mul_slice(elem, input, out, false);
+    }
+
+    fn mul_slice_add(elem: [u8; 2], input: &[[u8; 2]], out: &mut [[u8; 2]]) {
+        gf16_mul_slice(elem, input, out, true);
+    }
+}
+
+/// SIMD-accelerated `out[i] = elem * input[i]` (or `out[i] ^= elem * input[i]`
+/// when `accumulate`) over the `GF((2^8)^2)` tower field.
+///
+/// A GF(2^16) element `ax·X + ac` multiplied by the fixed `elem = cx·X + cc`
+/// reduces (via `X² = 2·X + 128`, from [`EXT_POLY`]) to two GF(2^8) output
+/// planes, each a linear combination of the `ax`/`ac` input byte planes:
+///
+/// * `out_x = A·ax ^ B·ac`, `out_c = C·ax ^ D·ac`
+/// * `A = cc ^ 2·cx`, `B = cx`, `C = 128·cx`, `D = cc` (all in GF(2^8)).
+///
+/// Each `·` is a fixed-multiplier GF(2^8) slice multiply, so this reuses the
+/// SIMD-accelerated [`galois_8::mul_slice`]/[`galois_8::mul_slice_xor`] backends
+/// (ssse3/avx2/gfni/avx512/neon/vsx with runtime dispatch). Byte planes are
+/// de-/re-interleaved in fixed stack chunks to stay `no_std` and allocation
+/// free; the whole path is byte-wise GF(2^8), so it is endian-agnostic.
+fn gf16_mul_slice(elem: [u8; 2], input: &[[u8; 2]], out: &mut [[u8; 2]], accumulate: bool) {
+    assert_eq!(input.len(), out.len());
+
+    let cx = elem[0];
+    let cc = elem[1];
+    let coef_a = cc ^ galois_8::mul(2, cx);
+    let coef_b = cx;
+    let coef_c = galois_8::mul(128, cx);
+    let coef_d = cc;
+
+    const CHUNK: usize = 1024;
+    let mut ax = [0u8; CHUNK];
+    let mut ac = [0u8; CHUNK];
+    let mut ox = [0u8; CHUNK];
+    let mut oc = [0u8; CHUNK];
+
+    let mut offset = 0;
+    while offset < input.len() {
+        let n = core::cmp::min(CHUNK, input.len() - offset);
+        let in_chunk = &input[offset..offset + n];
+        let out_chunk = &mut out[offset..offset + n];
+
+        for (i, e) in in_chunk.iter().enumerate() {
+            ax[i] = e[0];
+            ac[i] = e[1];
+        }
+
+        if accumulate {
+            for (i, e) in out_chunk.iter().enumerate() {
+                ox[i] = e[0];
+                oc[i] = e[1];
+            }
+            galois_8::mul_slice_xor(coef_a, &ax[..n], &mut ox[..n]);
+            galois_8::mul_slice_xor(coef_b, &ac[..n], &mut ox[..n]);
+            galois_8::mul_slice_xor(coef_c, &ax[..n], &mut oc[..n]);
+            galois_8::mul_slice_xor(coef_d, &ac[..n], &mut oc[..n]);
+        } else {
+            galois_8::mul_slice(coef_a, &ax[..n], &mut ox[..n]);
+            galois_8::mul_slice_xor(coef_b, &ac[..n], &mut ox[..n]);
+            galois_8::mul_slice(coef_c, &ax[..n], &mut oc[..n]);
+            galois_8::mul_slice_xor(coef_d, &ac[..n], &mut oc[..n]);
+        }
+
+        for (i, e) in out_chunk.iter_mut().enumerate() {
+            e[0] = ox[i];
+            e[1] = oc[i];
+        }
+        offset += n;
+    }
 }
 
 /// Type alias of ReedSolomon over GF(2^8).
@@ -318,6 +392,7 @@ impl Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Field as _;
     use quickcheck::Arbitrary;
 
     impl Arbitrary for Element {
@@ -407,5 +482,64 @@ mod tests {
     #[test]
     fn zero_to_zero_is_one() {
         assert_eq!(Element::zero().exp(0), Element::constant(1))
+    }
+
+    // Verifies the SIMD-decomposed `mul_slice`/`mul_slice_add` overrides against
+    // the element-wise scalar `Field::mul` reference across a range of lengths
+    // (including CHUNK boundary and tail) and multiplier values. If the A/B/C/D
+    // tower-field decomposition were wrong, this would catch it.
+    #[test]
+    fn mul_slice_matches_scalar_reference() {
+        const N: usize = 2100; // spans past the 1024 internal CHUNK, with a tail
+        let mut input = [[0u8; 2]; N];
+        for (i, e) in input.iter_mut().enumerate() {
+            *e = [
+                (i.wrapping_mul(31).wrapping_add(7)) as u8,
+                (i.wrapping_mul(17).wrapping_add(3)) as u8,
+            ];
+        }
+
+        let coeffs = [
+            [0u8, 0],  // zero
+            [0, 1],    // multiplicative identity
+            [0, 0x8e], // pure constant coefficient
+            [0x9a, 0], // pure X coefficient
+            [0x9a, 0x3f],
+            [0xff, 0xff],
+            [0x01, 0x80],
+        ];
+        let lens = [0usize, 1, 2, 7, 16, 17, 63, 1023, 1024, 1025, N];
+
+        for &c in &coeffs {
+            for &len in &lens {
+                let inp = &input[..len];
+
+                // mul_slice: out = c * inp
+                let mut out = [[0u8; 2]; N];
+                Field::mul_slice(c, inp, &mut out[..len]);
+                for (i, &e) in inp.iter().enumerate() {
+                    assert_eq!(
+                        out[i],
+                        Field::mul(c, e),
+                        "mul_slice c={c:?} len={len} i={i}"
+                    );
+                }
+
+                // mul_slice_add: out ^= c * inp, starting from a nonzero seed
+                let mut acc = [[0u8; 2]; N];
+                for (i, e) in acc.iter_mut().enumerate() {
+                    *e = [
+                        (i.wrapping_mul(13).wrapping_add(5)) as u8,
+                        (i.wrapping_mul(19).wrapping_add(11)) as u8,
+                    ];
+                }
+                let seed = acc;
+                Field::mul_slice_add(c, inp, &mut acc[..len]);
+                for (i, &e) in inp.iter().enumerate() {
+                    let expected = Field::add(seed[i], Field::mul(c, e));
+                    assert_eq!(acc[i], expected, "mul_slice_add c={c:?} len={len} i={i}");
+                }
+            }
+        }
     }
 }
