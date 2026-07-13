@@ -7,7 +7,7 @@
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
 [![Crates.io License](https://img.shields.io/crates/l/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
 
-English | [中文](README_CN.md)
+English | [Chinese](README_CN.md)
 
 `rustfs-erasure-codec` is a modern Rust implementation of Reed-Solomon erasure coding for
 memory-resident, progressive, and block-streaming workloads.
@@ -30,7 +30,8 @@ WASM bindings live in [wasm/README.md](wasm/README.md).
 - `galois_16::ReedSolomon` remains available for classic `GF(2^16)` workflows.
 - `CodecOptions` controls codec family, matrix mode, inversion-cache behavior, and parallel policy.
 - `VerifyWorkspace`, `ShardSlot<T>`, and aligned-shard helpers reduce hot-path allocation churn.
-- `galois_8::OptionVecReconstructWorkspace` reuses planning for repeated `Option<Vec<u8>>` reconstruct calls with a stable missing pattern.
+- `galois_8::OptionVecReconstructWorkspace` reuses planning for repeated `Option<Vec<u8>>` reconstruct calls with a
+  stable missing pattern.
 - `decode_idx(...)`, `reconstruct_some(...)`, and `ShardByShard` cover progressive and selective workflows.
 - `stream::StreamOptions` provides block-based streaming on the classic `galois_8` path.
 
@@ -114,14 +115,14 @@ use rustfs_erasure_codec::galois_8::ReedSolomon;
 
 let rs = ReedSolomon::new(10, 4).unwrap();
 let mut shards = vec![vec![0u8; 1024]; 14];
-rs.encode(&mut shards).unwrap();
+rs.encode( & mut shards).unwrap();
 
-let mut missing: Vec<Option<Vec<u8>>> = shards.into_iter().map(Some).collect();
+let mut missing: Vec<Option<Vec<u8> > > = shards.into_iter().map(Some).collect();
 missing[0] = None;
 missing[10] = None;
 
-let workspace = rs.prepare_reconstruct_opt_workspace(&missing).unwrap();
-rs.reconstruct_opt_with_workspace(&mut missing, &workspace).unwrap();
+let workspace = rs.prepare_reconstruct_opt_workspace( & missing).unwrap();
+rs.reconstruct_opt_with_workspace( & mut missing, & workspace).unwrap();
 ```
 
 ## Memory Reuse Helpers
@@ -162,11 +163,11 @@ For SIMD-sensitive `galois_8` workloads, aligned shard helpers are available:
 
 `CodecOptions::codec_family` selects the algorithm family:
 
-| Family | Status | Notes |
-|---|---|---|
-| `Classic` | fully supported | Default family. Supports `update`, `encode_single*`, `decode_idx`, `reconstruct_some`, and matrix-mode selection. |
-| `LeopardGF8` | supported on the `galois_8` path | FFT-based codec over `GF(2^8)`. Requires shard lengths that are multiples of 64 bytes and supports up to 256 total shards. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported. |
-| `LeopardGF16` | supported for high shard-count workflows | FFT-based codec over `GF(2^16)` for larger total shard counts. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported. |
+| Family        | Status                                   | Notes                                                                                                                                                                                                                |
+|---------------|------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Classic`     | fully supported                          | Default family. Supports `update`, `encode_single*`, `decode_idx`, `reconstruct_some`, and matrix-mode selection.                                                                                                    |
+| `LeopardGF8`  | supported on the `galois_8` path         | FFT-based codec over `GF(2^8)`. Requires shard lengths that are multiples of 64 bytes and supports up to 256 total shards. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported. |
+| `LeopardGF16` | supported for high shard-count workflows | FFT-based codec over `GF(2^16)` for larger total shard counts. Classic-only APIs such as `update`, `encode_single*`, and `decode_idx` are not supported.                                                             |
 
 Example:
 
@@ -175,12 +176,12 @@ use rustfs_erasure_codec::galois_8::ReedSolomon;
 use rustfs_erasure_codec::{CodecFamily, CodecOptions};
 
 let rs = ReedSolomon::with_options(
-    32,
-    16,
-    CodecOptions {
-        codec_family: CodecFamily::LeopardGF8,
-        ..CodecOptions::default()
-    },
+32,
+16,
+CodecOptions {
+codec_family: CodecFamily::LeopardGF8,
+..CodecOptions::default ()
+},
 )
 .unwrap();
 ```
@@ -210,14 +211,15 @@ use rustfs_erasure_codec::galois_8::ReedSolomon;
 use rustfs_erasure_codec::CodecOptions;
 
 let custom_rows = vec![vec![1u8, 1, 1], vec![1u8, 2, 4]];
-let rs = ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default()).unwrap();
+let rs = ReedSolomon::with_custom_matrix(3, 2, & custom_rows, CodecOptions::default ()).unwrap();
 ```
 
 ## Progressive And Targeted APIs
 
 ### Progressive Recovery
 
-`decode_idx(...)` is available on classic `galois_8::ReedSolomon` and is useful when input shards arrive in phases instead of a single reconstruct call.
+`decode_idx(...)` is available on classic `galois_8::ReedSolomon` and is useful when input shards arrive in phases
+instead of a single reconstruct call.
 
 ### Targeted Recovery
 
@@ -325,7 +327,8 @@ and reflects the Rust 2024 rewrite, runtime SIMD architecture, and Leopard work.
 
 ## Contributing
 
-Contributions are welcome. For backend-sensitive, benchmark-sensitive, or codec-family work, include focused validation where possible.
+Contributions are welcome. For backend-sensitive, benchmark-sensitive, or codec-family work, include focused validation
+where possible.
 
 ## License
 

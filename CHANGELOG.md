@@ -8,6 +8,13 @@ All notable changes to this project are documented in this file.
 
 ---
 
+## Unreleased
+
+### Changed
+- Raised the workspace minimum supported Rust version from 1.95 to 1.96.
+- Refreshed direct dependencies: `rand` 0.10.2, `spin` 0.12.1, and `wasm-bindgen` 0.2.126, along with their resolved transitive dependencies.
+- Polished the English and Chinese README language links, examples, and codec-family tables for readability.
+
 ## 7.0.1 (2026-06-28)
 
 > Maintained in [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)

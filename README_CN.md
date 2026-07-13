@@ -7,7 +7,7 @@
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
 [![Crates.io License](https://img.shields.io/crates/l/rustfs-erasure-codec)](https://crates.io/crates/rustfs-erasure-codec)
 
-[English](README.md) | 中文
+[英文](README.md) | 中文
 
 `rustfs-erasure-codec` 是一个现代 Rust Reed-Solomon 纠删码库，覆盖内存内编码、渐进式恢复、定向恢复以及按块流式处理场景。
 
@@ -141,11 +141,11 @@ fn main() {
 
 `CodecOptions::codec_family` 用于选择算法族：
 
-| 编解码器族 | 状态 | 说明 |
-|---|---|---|
-| `Classic` | 完整支持 | 默认族。支持 `update`、`encode_single*`、`decode_idx`、`reconstruct_some` 与矩阵模式切换。 |
-| `LeopardGF8` | 适用于 `galois_8` 路径 | 基于 FFT 的 `GF(2^8)` 路径。要求分片长度为 64 字节整数倍，总分片数不超过 256。`update`、`encode_single*`、`decode_idx` 等 Classic-only API 不支持。 |
-| `LeopardGF16` | 适用于更高总分片数场景 | 基于 FFT 的 `GF(2^16)` 路径。`update`、`encode_single*`、`decode_idx` 等 Classic-only API 不支持。 |
+| 编解码器族         | 状态                | 说明                                                                                                                |
+|---------------|-------------------|-------------------------------------------------------------------------------------------------------------------|
+| `Classic`     | 完整支持              | 默认族。支持 `update`、`encode_single*`、`decode_idx`、`reconstruct_some` 与矩阵模式切换。                                         |
+| `LeopardGF8`  | 适用于 `galois_8` 路径 | 基于 FFT 的 `GF(2^8)` 路径。要求分片长度为 64 字节整数倍，总分片数不超过 256。`update`、`encode_single*`、`decode_idx` 等 Classic-only API 不支持。 |
+| `LeopardGF16` | 适用于更高总分片数场景       | 基于 FFT 的 `GF(2^16)` 路径。`update`、`encode_single*`、`decode_idx` 等 Classic-only API 不支持。                             |
 
 示例：
 
@@ -154,12 +154,12 @@ use rustfs_erasure_codec::galois_8::ReedSolomon;
 use rustfs_erasure_codec::{CodecFamily, CodecOptions};
 
 let rs = ReedSolomon::with_options(
-    32,
-    16,
-    CodecOptions {
-        codec_family: CodecFamily::LeopardGF8,
-        ..CodecOptions::default()
-    },
+32,
+16,
+CodecOptions {
+codec_family: CodecFamily::LeopardGF8,
+..CodecOptions::default ()
+},
 )
 .unwrap();
 ```
@@ -188,7 +188,7 @@ use rustfs_erasure_codec::galois_8::ReedSolomon;
 use rustfs_erasure_codec::CodecOptions;
 
 let custom_rows = vec![vec![1u8, 1, 1], vec![1u8, 2, 4]];
-let rs = ReedSolomon::with_custom_matrix(3, 2, &custom_rows, CodecOptions::default()).unwrap();
+let rs = ReedSolomon::with_custom_matrix(3, 2, & custom_rows, CodecOptions::default ()).unwrap();
 ```
 
 ## 渐进式与定向 API
