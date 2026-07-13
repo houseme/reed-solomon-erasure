@@ -695,10 +695,16 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         }
 
         let missing_count = present.iter().filter(|&&p| !p).count();
+        let present_count = total - missing_count;
+        // An empty dataset (no present shards) has nothing to recover; return Ok,
+        // consistent with encode_stream returning Ok for empty input (rather than
+        // TooFewShardsPresent).
+        if present_count == 0 {
+            return Ok(());
+        }
         if missing_count > self.parity_shard_count {
             return Err(StreamError::codec(0, crate::Error::TooFewShardsPresent));
         }
-        let present_count = total - missing_count;
         let use_parallel_read = use_parallel_stream_io(options, present_count);
         let present_indices: Vec<usize> = present
             .iter()
