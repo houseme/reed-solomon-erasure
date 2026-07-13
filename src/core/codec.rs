@@ -257,7 +257,24 @@ impl<F: Field> ReedSolomon<F> {
         let total_shards = data_shards
             .checked_add(parity_shards)
             .ok_or(Error::TooManyShards)?;
-        if total_shards > F::ORDER {
+
+        // Resolve optional Leopard auto-selection before any family-dependent
+        // check. With `LeopardMode::Disabled` (the default) or an explicit
+        // non-Classic family this is a no-op, so prior behaviour is preserved
+        // byte-for-byte.
+        options.codec_family = super::leopard::resolve_codec_family(
+            options.codec_family,
+            options.leopard_mode,
+            super::leopard::is_byte_field::<F>(),
+            total_shards,
+            parity_shards,
+        );
+
+        // Family-aware shard cap: Classic is bounded by the field order, while
+        // LeopardGF16 supports up to 65536 shards even though it runs on the
+        // GF(2^8) field. A plain `total > F::ORDER` here would make an (explicit
+        // or auto-selected) GF16 codec with more than 256 shards unconstructible.
+        if total_shards > super::leopard::max_total_shards_for_family::<F>(options.codec_family) {
             return Err(Error::TooManyShards);
         }
 
@@ -277,9 +294,14 @@ impl<F: Field> ReedSolomon<F> {
             CodecFamily::Classic => {
                 Self::build_matrix_with_options(data_shards, total_shards, options)?
             }
-            CodecFamily::LeopardGF8 | CodecFamily::LeopardGF16 => {
-                Self::build_matrix(data_shards, total_shards)?
-            }
+            CodecFamily::LeopardGF8 => Self::build_matrix(data_shards, total_shards)?,
+            // LeopardGF16 encodes and reconstructs entirely with GF(2^16) FFT
+            // tables and never consults this GF(2^8) matrix (see
+            // `encode_leopard_sep_inner` / `leopard_gf16_reconstruct`). Building a
+            // Vandermonde here would call `Field::nth` past the 256-element
+            // GF(2^8) range for total > 256, and would needlessly allocate a
+            // total×data matrix (up to ~65536 rows). Use an empty placeholder.
+            CodecFamily::LeopardGF16 => Matrix::new(0, 0),
         };
         let family_state = super::leopard::build_family_state(
             options.codec_family,

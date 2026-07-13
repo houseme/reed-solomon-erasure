@@ -60,10 +60,9 @@ fn measure_encode(
     let codec = ReedSolomon::with_options(
         data_shards,
         parity_shards,
-        CodecOptions {
-            codec_family: CodecFamily::LeopardGF8,
-            ..CodecOptions::default()
-        },
+        CodecOptions::builder()
+            .codec_family(CodecFamily::LeopardGF8)
+            .build(),
     )
     .unwrap();
 

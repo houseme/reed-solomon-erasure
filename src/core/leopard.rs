@@ -6,7 +6,32 @@ use crate::Field;
 use crate::errors::Error;
 use crate::matrix::Matrix;
 
-use super::CodecFamily;
+use super::{CodecFamily, LeopardMode};
+
+/// Maximum total shards (`data + parity`) addressable by each Leopard family.
+///
+/// GF(2^8) Leopard is bounded by the byte field order; GF(2^16) Leopard uses
+/// 16-bit arithmetic and reaches 65536. These are the family-aware caps enforced
+/// in `with_options` (via [`max_total_shards_for_family`]) and re-checked by the
+/// per-family validators.
+pub(crate) const LEOPARD_GF8_MAX_SHARDS: usize = 256;
+pub(crate) const LEOPARD_GF16_MAX_SHARDS: usize = 65536;
+
+/// Parity ceiling at or below which [`LeopardMode::PreferLeopard`] resolves to
+/// GF(2^8) Leopard. Above it a GF(2^8) Leopard codec can be constructed but not
+/// encoded, so resolution falls back to GF(2^16).
+const LEOPARD_GF8_MAX_PARITY: usize = 128;
+
+/// Whether `F` is a byte-oriented field, i.e. `F::Elem` is exactly one byte.
+///
+/// This is the soundness precondition for every Leopard codec: they reinterpret
+/// `F::Elem` slices as raw `u8` bytes (see [`AsLeopardU8`]). Gating on the
+/// element size — rather than `F::ORDER == 256` — is the precise condition and
+/// also rejects any hypothetical field whose order is 256 but whose element has
+/// a wider representation.
+pub(crate) fn is_byte_field<F: Field>() -> bool {
+    core::mem::size_of::<F::Elem>() == 1
+}
 
 /// Trait for safely reinterpreting `F::Elem` as `u8` for leopard encode.
 ///
@@ -232,14 +257,82 @@ pub(crate) fn validate_leopard_family<F: Field>(
     }
 }
 
+/// Maximum representable `data + parity` shard count for a given codec family.
+///
+/// The generic `total > F::ORDER` guard in `with_options` is only correct for
+/// [`CodecFamily::Classic`]: the Leopard codecs run on the GF(2^8) field
+/// (`F::ORDER == 256`) but [`CodecFamily::LeopardGF16`] internally uses GF(2^16)
+/// arithmetic and supports up to 65536 shards. Using this family-aware cap is
+/// what makes an explicit (or auto-selected) `LeopardGF16` codec with more than
+/// 256 total shards constructible at all.
+pub(crate) fn max_total_shards_for_family<F: Field>(codec_family: CodecFamily) -> usize {
+    match codec_family {
+        CodecFamily::Classic => F::ORDER,
+        CodecFamily::LeopardGF8 => LEOPARD_GF8_MAX_SHARDS,
+        CodecFamily::LeopardGF16 => LEOPARD_GF16_MAX_SHARDS,
+    }
+}
+
+/// Resolve the effective [`CodecFamily`] for an optional [`LeopardMode`].
+///
+/// Returns the family the codec should actually build. Auto-selection is only
+/// eligible when the caller left `codec_family` at [`CodecFamily::Classic`] on a
+/// byte-oriented field (`is_byte_field`, i.e. the GF(2^8) field the Leopard
+/// codecs require); otherwise the requested family is returned unchanged. Once
+/// eligible, `mode` alone decides — [`LeopardMode::Disabled`] maps back to
+/// `Classic`, so the default is preserved byte-for-byte.
+///
+/// The mapping over `total = data + parity` mirrors klauspost/reedsolomon:
+///
+/// - [`Disabled`](LeopardMode::Disabled): always Classic.
+/// - [`AsNeeded`](LeopardMode::AsNeeded): Classic while it fits the byte field,
+///   else GF16.
+/// - [`PreferGF16`](LeopardMode::PreferGF16): always GF16.
+/// - [`PreferLeopard`](LeopardMode::PreferLeopard): GF8 when it fits the byte
+///   field and `parity ≤ LEOPARD_GF8_MAX_PARITY`, else GF16.
+pub(crate) fn resolve_codec_family(
+    requested: CodecFamily,
+    mode: LeopardMode,
+    is_byte_field: bool,
+    total_shards: usize,
+    parity_shards: usize,
+) -> CodecFamily {
+    // Only an untouched Classic request on a byte-oriented field is eligible for
+    // auto-selection; everything else passes through unchanged. `mode` is then
+    // the single source of truth for the resolved family.
+    if requested != CodecFamily::Classic || !is_byte_field {
+        return requested;
+    }
+
+    match mode {
+        LeopardMode::Disabled => CodecFamily::Classic,
+        LeopardMode::AsNeeded => {
+            if total_shards <= LEOPARD_GF8_MAX_SHARDS {
+                CodecFamily::Classic
+            } else {
+                CodecFamily::LeopardGF16
+            }
+        }
+        LeopardMode::PreferGF16 => CodecFamily::LeopardGF16,
+        LeopardMode::PreferLeopard => {
+            if total_shards <= LEOPARD_GF8_MAX_SHARDS && parity_shards <= LEOPARD_GF8_MAX_PARITY {
+                CodecFamily::LeopardGF8
+            } else {
+                CodecFamily::LeopardGF16
+            }
+        }
+    }
+}
+
 fn validate_leopard_gf8<F: Field>(data_shards: usize, parity_shards: usize) -> Result<(), Error> {
     let total_shards = data_shards.saturating_add(parity_shards);
 
-    if F::ORDER != 256 {
+    // Soundness gate: Leopard reinterprets `F::Elem` as raw bytes.
+    if !is_byte_field::<F>() {
         return Err(Error::UnsupportedCodecFamily);
     }
 
-    if total_shards == 0 || total_shards > 256 {
+    if total_shards == 0 || total_shards > LEOPARD_GF8_MAX_SHARDS {
         return Err(Error::UnsupportedCodecFamily);
     }
 
@@ -249,7 +342,8 @@ fn validate_leopard_gf8<F: Field>(data_shards: usize, parity_shards: usize) -> R
 fn validate_leopard_gf16<F: Field>(data_shards: usize, parity_shards: usize) -> Result<(), Error> {
     let total_shards = data_shards.saturating_add(parity_shards);
 
-    if F::ORDER != 256 {
+    // Soundness gate: Leopard reinterprets `F::Elem` as raw bytes.
+    if !is_byte_field::<F>() {
         return Err(Error::UnsupportedCodecFamily);
     }
 
@@ -262,7 +356,7 @@ fn validate_leopard_gf16<F: Field>(data_shards: usize, parity_shards: usize) -> 
         return Err(Error::UnsupportedCodecFamily);
     }
 
-    if total_shards == 0 || total_shards > 65536 {
+    if total_shards == 0 || total_shards > LEOPARD_GF16_MAX_SHARDS {
         return Err(Error::UnsupportedCodecFamily);
     }
 
@@ -312,4 +406,130 @@ pub(crate) fn leopard_gf16_reconstruct(
         parity_shards,
         tables,
     )
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod auto_activation_tests {
+    use super::{CodecFamily, LeopardMode, max_total_shards_for_family, resolve_codec_family};
+    use crate::{galois_8, galois_16};
+
+    // Resolution helper for the common case: an untouched `Classic` request on a
+    // byte-oriented field, which is where auto-selection actually applies.
+    fn resolve(mode: LeopardMode, total: usize, parity: usize) -> CodecFamily {
+        resolve_codec_family(CodecFamily::Classic, mode, true, total, parity)
+    }
+
+    #[test]
+    fn disabled_is_always_classic() {
+        for &(total, parity) in &[(2usize, 1usize), (256, 1), (257, 1), (65536, 4)] {
+            assert_eq!(
+                resolve(LeopardMode::Disabled, total, parity),
+                CodecFamily::Classic
+            );
+        }
+    }
+
+    #[test]
+    fn as_needed_switches_to_gf16_past_256() {
+        assert_eq!(resolve(LeopardMode::AsNeeded, 2, 1), CodecFamily::Classic);
+        assert_eq!(resolve(LeopardMode::AsNeeded, 256, 1), CodecFamily::Classic);
+        assert_eq!(
+            resolve(LeopardMode::AsNeeded, 257, 1),
+            CodecFamily::LeopardGF16
+        );
+        assert_eq!(
+            resolve(LeopardMode::AsNeeded, 65536, 4),
+            CodecFamily::LeopardGF16
+        );
+    }
+
+    #[test]
+    fn prefer_gf16_is_always_gf16() {
+        assert_eq!(
+            resolve(LeopardMode::PreferGF16, 2, 1),
+            CodecFamily::LeopardGF16
+        );
+        assert_eq!(
+            resolve(LeopardMode::PreferGF16, 256, 1),
+            CodecFamily::LeopardGF16
+        );
+        assert_eq!(
+            resolve(LeopardMode::PreferGF16, 65536, 4),
+            CodecFamily::LeopardGF16
+        );
+    }
+
+    #[test]
+    fn prefer_leopard_uses_gf8_only_when_small_and_low_parity() {
+        // total <= 256 and parity <= 128 -> GF8
+        assert_eq!(
+            resolve(LeopardMode::PreferLeopard, 256, 128),
+            CodecFamily::LeopardGF8
+        );
+        assert_eq!(
+            resolve(LeopardMode::PreferLeopard, 6, 2),
+            CodecFamily::LeopardGF8
+        );
+        // parity > 128 -> GF16 (D5: avoid configs that construct as GF8 but can't encode)
+        assert_eq!(
+            resolve(LeopardMode::PreferLeopard, 256, 129),
+            CodecFamily::LeopardGF16
+        );
+        // total > 256 -> GF16
+        assert_eq!(
+            resolve(LeopardMode::PreferLeopard, 257, 1),
+            CodecFamily::LeopardGF16
+        );
+    }
+
+    #[test]
+    fn explicit_family_is_never_rewritten() {
+        for mode in [
+            LeopardMode::AsNeeded,
+            LeopardMode::PreferGF16,
+            LeopardMode::PreferLeopard,
+        ] {
+            assert_eq!(
+                resolve_codec_family(CodecFamily::LeopardGF8, mode, true, 10, 2),
+                CodecFamily::LeopardGF8
+            );
+            assert_eq!(
+                resolve_codec_family(CodecFamily::LeopardGF16, mode, true, 10, 2),
+                CodecFamily::LeopardGF16
+            );
+        }
+    }
+
+    #[test]
+    fn non_byte_field_ignores_mode() {
+        // A non-byte-oriented field (e.g. GF(2^16) element = 2 bytes) never
+        // auto-activates Leopard; the request stays Classic.
+        assert_eq!(
+            resolve_codec_family(CodecFamily::Classic, LeopardMode::PreferGF16, false, 300, 4),
+            CodecFamily::Classic
+        );
+    }
+
+    #[test]
+    fn family_aware_caps() {
+        // Classic caps at the field order; Leopard caps by family regardless of F::ORDER.
+        assert_eq!(
+            max_total_shards_for_family::<galois_8::Field>(CodecFamily::Classic),
+            256
+        );
+        assert_eq!(
+            max_total_shards_for_family::<galois_16::Field>(CodecFamily::Classic),
+            65536
+        );
+        // Leopard runs on the GF(2^8) field (F::ORDER = 256) but GF16 allows 65536.
+        assert_eq!(
+            max_total_shards_for_family::<galois_8::Field>(CodecFamily::LeopardGF8),
+            256
+        );
+        assert_eq!(
+            max_total_shards_for_family::<galois_8::Field>(CodecFamily::LeopardGF16),
+            65536
+        );
+    }
 }

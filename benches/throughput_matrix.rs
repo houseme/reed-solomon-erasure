@@ -191,10 +191,9 @@ fn bench_leopard_setup(c: &mut Criterion, case: BenchCase) {
             let codec = ReedSolomon::with_options(
                 case.data_shards,
                 case.parity_shards,
-                CodecOptions {
-                    codec_family: CodecFamily::LeopardGF8,
-                    ..CodecOptions::default()
-                },
+                CodecOptions::builder()
+                    .codec_family(CodecFamily::LeopardGF8)
+                    .build(),
             )
             .unwrap();
             black_box(codec.leopard_setup_matrix_shape());
@@ -210,10 +209,9 @@ fn bench_leopard_encode(c: &mut Criterion, case: BenchCase) {
     let rs = ReedSolomon::with_options(
         case.data_shards,
         case.parity_shards,
-        CodecOptions {
-            codec_family: CodecFamily::LeopardGF8,
-            ..CodecOptions::default()
-        },
+        CodecOptions::builder()
+            .codec_family(CodecFamily::LeopardGF8)
+            .build(),
     )
     .unwrap();
 

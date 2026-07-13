@@ -190,10 +190,9 @@ fn run_operation(case: BenchCase, operation: Operation, iterations: usize) -> Sm
                 let codec = ReedSolomon::with_options(
                     case.data_shards,
                     case.parity_shards,
-                    CodecOptions {
-                        codec_family: CodecFamily::LeopardGF8,
-                        ..CodecOptions::default()
-                    },
+                    CodecOptions::builder()
+                        .codec_family(CodecFamily::LeopardGF8)
+                        .build(),
                 )
                 .unwrap();
                 let _ = codec.leopard_setup_matrix_shape();
@@ -202,10 +201,9 @@ fn run_operation(case: BenchCase, operation: Operation, iterations: usize) -> Sm
                 let codec = ReedSolomon::with_options(
                     case.data_shards,
                     case.parity_shards,
-                    CodecOptions {
-                        codec_family: CodecFamily::LeopardGF8,
-                        ..CodecOptions::default()
-                    },
+                    CodecOptions::builder()
+                        .codec_family(CodecFamily::LeopardGF8)
+                        .build(),
                 )
                 .unwrap();
                 let mut shards =
@@ -1232,10 +1230,9 @@ fn run_leopard_setup(case: BenchCase, iterations: usize) -> LeopardSetupResult {
         let codec = ReedSolomon::with_options(
             case.data_shards,
             case.parity_shards,
-            CodecOptions {
-                codec_family: CodecFamily::LeopardGF8,
-                ..CodecOptions::default()
-            },
+            CodecOptions::builder()
+                .codec_family(CodecFamily::LeopardGF8)
+                .build(),
         )
         .unwrap();
         shape = codec.leopard_setup_matrix_shape().unwrap_or((0, 0));
@@ -1308,10 +1305,9 @@ fn run_leopard_encode(case: BenchCase, iterations: usize) -> LeopardEncodeResult
     let codec = ReedSolomon::with_options(
         case.data_shards,
         case.parity_shards,
-        CodecOptions {
-            codec_family: CodecFamily::LeopardGF8,
-            ..CodecOptions::default()
-        },
+        CodecOptions::builder()
+            .codec_family(CodecFamily::LeopardGF8)
+            .build(),
     )
     .unwrap();
 
@@ -1342,10 +1338,9 @@ fn run_leopard_encode_profile(case: BenchCase, iterations: usize) -> LeopardEnco
     let codec = ReedSolomon::with_options(
         case.data_shards,
         case.parity_shards,
-        CodecOptions {
-            codec_family: CodecFamily::LeopardGF8,
-            ..CodecOptions::default()
-        },
+        CodecOptions::builder()
+            .codec_family(CodecFamily::LeopardGF8)
+            .build(),
     )
     .unwrap();
 
@@ -1586,10 +1581,9 @@ fn run_leopard_encode_ab_variant(
     let codec = ReedSolomon::with_options(
         case.data_shards,
         case.parity_shards,
-        CodecOptions {
-            codec_family: CodecFamily::LeopardGF8,
-            ..CodecOptions::default()
-        },
+        CodecOptions::builder()
+            .codec_family(CodecFamily::LeopardGF8)
+            .build(),
     )
     .unwrap();
 

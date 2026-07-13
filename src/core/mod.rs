@@ -39,7 +39,7 @@ pub use leopard_gf8::LeopardGf8ProfileStats;
 pub(crate) use leopard_gf8::{leopard_gf8_profile_stats, reset_leopard_gf8_profile_stats};
 #[cfg(feature = "std")]
 pub use metrics::{ReconstructionCacheAnalysis, ReconstructionCacheStats, RuntimeProfileStats};
-pub use options::{CodecFamily, CodecOptions, MatrixMode};
+pub use options::{CodecFamily, CodecOptions, LeopardMode, MatrixMode};
 #[cfg(feature = "std")]
 pub(crate) use parallel::RuntimeParallelPolicyCache;
 #[cfg(feature = "std")]

@@ -6,7 +6,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
-use super::{CodecFamily, CodecOptions, Error, MatrixMode, SBSError, ShardSlot, galois_8};
+use super::{
+    CodecFamily, CodecOptions, Error, LeopardMode, MatrixMode, SBSError, ShardSlot, galois_8,
+};
 #[cfg(feature = "std")]
 use super::{ParallelDecision, ParallelPolicy};
 use rand::{self, RngExt, rng};
@@ -6180,4 +6182,196 @@ fn test_codegen_encode_common_configs() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// #1234 — optional Leopard auto-activation (LeopardMode) + family-aware caps.
+// ---------------------------------------------------------------------------
+
+// Deterministic data shards of `count` shards each `len` bytes (len is a
+// multiple of 64 so it satisfies the Leopard shard-length requirement).
+fn det_data_shards(count: usize, len: usize, seed: usize) -> Vec<Vec<u8>> {
+    (0..count)
+        .map(|i| {
+            (0..len)
+                .map(|j| ((i * 131 + j * 7 + seed) & 0xFF) as u8)
+                .collect()
+        })
+        .collect()
+}
+
+// Encode/erase/reconstruct/verify round trip over the separate-parity API.
+fn leopard_roundtrip(codec: &ReedSolomon, data: Vec<Vec<u8>>, erase: &[usize]) {
+    let parity_count = codec.parity_shard_count();
+    let shard_len = data[0].len();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_len]; parity_count];
+    codec.encode_sep(&data, &mut parity).unwrap();
+
+    let originals: Vec<Vec<u8>> = data.clone();
+    let mut all: Vec<Option<Vec<u8>>> = data.into_iter().map(Some).collect();
+    all.extend(parity.into_iter().map(Some));
+    for &e in erase {
+        all[e] = None;
+    }
+    codec.reconstruct(&mut all).unwrap();
+    for (i, orig) in originals.iter().enumerate() {
+        assert_eq!(all[i].as_ref().unwrap(), orig, "shard {i} mismatch");
+    }
+}
+
+// Blocker ①: an *explicit* LeopardGF16 codec with more than 256 total shards
+// used to be rejected by the `total > F::ORDER` (=256) guard before family
+// validation ran. The family-aware cap makes it constructible.
+#[test]
+fn test_explicit_leopard_gf16_above_256_total_constructs_and_roundtrips() {
+    let codec = ReedSolomon::with_options(
+        254,
+        4,
+        CodecOptions::builder()
+            .codec_family(CodecFamily::LeopardGF16)
+            .build(),
+    )
+    .expect("LeopardGF16 with total=258 must be constructible after the family-aware cap fix");
+    assert_eq!(codec.codec_family(), CodecFamily::LeopardGF16);
+    assert_eq!(codec.total_shard_count(), 258);
+    leopard_roundtrip(&codec, det_data_shards(254, 64, 1), &[0, 255, 257]);
+}
+
+// The genuinely never-before-executed GF16 code path: parity (m) > 256.
+#[test]
+fn test_leopard_gf16_m_above_256_roundtrips() {
+    let codec = ReedSolomon::with_options(
+        2,
+        257,
+        CodecOptions::builder()
+            .codec_family(CodecFamily::LeopardGF16)
+            .build(),
+    )
+    .expect("LeopardGF16 with parity=257 (m>256) must be constructible");
+    assert_eq!(codec.total_shard_count(), 259);
+    // Erase one data shard and two parity shards; well within 257 parity.
+    leopard_roundtrip(&codec, det_data_shards(2, 64, 9), &[0, 3, 100]);
+}
+
+#[test]
+fn test_auto_as_needed_resolution() {
+    // total <= 256 stays Classic.
+    let small = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::AsNeeded)
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(small.codec_family(), CodecFamily::Classic);
+
+    // total > 256 auto-selects LeopardGF16 and round-trips.
+    let big = ReedSolomon::with_options(
+        254,
+        3,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::AsNeeded)
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(big.codec_family(), CodecFamily::LeopardGF16);
+    leopard_roundtrip(&big, det_data_shards(254, 64, 2), &[10, 256]);
+}
+
+#[test]
+fn test_auto_prefer_gf16_and_prefer_leopard() {
+    // PreferGF16 always resolves to GF16, even for tiny configs.
+    let g16 = ReedSolomon::with_options(
+        4,
+        2,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::PreferGF16)
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(g16.codec_family(), CodecFamily::LeopardGF16);
+
+    // PreferLeopard: small + low parity -> GF8.
+    let g8 = ReedSolomon::with_options(
+        6,
+        2,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::PreferLeopard)
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(g8.codec_family(), CodecFamily::LeopardGF8);
+
+    // PreferLeopard: total > 256 -> GF16.
+    let g16b = ReedSolomon::with_options(
+        300,
+        4,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::PreferLeopard)
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(g16b.codec_family(), CodecFamily::LeopardGF16);
+}
+
+// LeopardMode::Disabled (the default) must be byte-for-byte identical to an
+// explicit Classic construction.
+#[test]
+fn test_leopard_mode_disabled_is_byte_identical_to_classic() {
+    let data = det_data_shards(6, 256, 5);
+
+    let disabled = ReedSolomon::with_options(
+        6,
+        3,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::Disabled)
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(disabled.codec_family(), CodecFamily::Classic);
+    let classic = ReedSolomon::with_options(6, 3, CodecOptions::default()).unwrap();
+
+    let mut p_disabled = vec![vec![0u8; 256]; 3];
+    let mut p_classic = vec![vec![0u8; 256]; 3];
+    disabled.encode_sep(&data, &mut p_disabled).unwrap();
+    classic.encode_sep(&data, &mut p_classic).unwrap();
+    assert_eq!(
+        p_disabled, p_classic,
+        "Disabled must match explicit Classic byte-for-byte"
+    );
+}
+
+// Classic-only incremental APIs must fail clearly once auto-selection picked a
+// Leopard family.
+#[test]
+fn test_classic_only_api_errors_after_auto_leopard() {
+    let codec = ReedSolomon::with_options(
+        254,
+        3,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::AsNeeded)
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(codec.codec_family(), CodecFamily::LeopardGF16);
+
+    let mut shards: Vec<Vec<u8>> = det_data_shards(254, 64, 3);
+    shards.extend(vec![vec![0u8; 64]; 3]);
+    let err = codec.encode_single(0, &mut shards).unwrap_err();
+    assert_eq!(err, Error::UnsupportedCodecFamily);
+}
+
+// total > the GF16 cap (65536) is still rejected.
+#[test]
+fn test_auto_above_gf16_cap_is_too_many_shards() {
+    let err = ReedSolomon::with_options(
+        65533,
+        4,
+        CodecOptions::builder()
+            .leopard_mode(LeopardMode::AsNeeded)
+            .build(),
+    )
+    .unwrap_err();
+    assert_eq!(err, Error::TooManyShards);
 }

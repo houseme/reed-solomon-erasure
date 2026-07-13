@@ -18,6 +18,47 @@ pub enum CodecFamily {
     LeopardGF16,
 }
 
+/// Controls optional automatic selection of a Leopard codec when the requested
+/// [`CodecFamily`] is [`Classic`](CodecFamily::Classic).
+///
+/// Auto-selection only takes effect on a byte-oriented field (where
+/// `size_of::<Field::Elem>() == 1`, i.e. the GF(2^8) field the Leopard codecs
+/// are built on); on any other field the mode is ignored and the codec stays
+/// Classic. When the caller sets an explicit non-Classic `codec_family`, this
+/// mode is likewise ignored — the explicit family wins.
+///
+/// The resolution, as a function of `total = data + parity` shards, mirrors the
+/// klauspost/reedsolomon `New()` behaviour:
+///
+/// | `total` | [`AsNeeded`](LeopardMode::AsNeeded) | [`PreferLeopard`](LeopardMode::PreferLeopard) | [`PreferGF16`](LeopardMode::PreferGF16) |
+/// |---------|-----------|---------------|------------|
+/// | ≤ 256   | Classic   | LeopardGF8¹   | LeopardGF16 |
+/// | 257..=65536 | LeopardGF16 | LeopardGF16 | LeopardGF16 |
+///
+/// ¹ [`PreferLeopard`](LeopardMode::PreferLeopard) selects [`LeopardGF8`](CodecFamily::LeopardGF8)
+///   only when `total ≤ 256` **and** `parity ≤ 128`; otherwise it falls back to
+///   [`LeopardGF16`](CodecFamily::LeopardGF16).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum LeopardMode {
+    /// Never auto-select Leopard. The codec behaves exactly as an explicit
+    /// [`CodecFamily::Classic`] construction — byte-for-byte identical to
+    /// releases before auto-activation existed. This is the default.
+    #[default]
+    Disabled,
+    /// Use Classic while it can represent the configuration (`total ≤ 256`), and
+    /// automatically switch to [`LeopardGF16`](CodecFamily::LeopardGF16) once the
+    /// shard count exceeds what GF(2^8) can address.
+    AsNeeded,
+    /// Always use [`LeopardGF16`](CodecFamily::LeopardGF16) (for any supported
+    /// shard count up to 65536).
+    PreferGF16,
+    /// Prefer a Leopard codec whenever possible: [`LeopardGF8`](CodecFamily::LeopardGF8)
+    /// for small byte-friendly configurations (`total ≤ 256` and `parity ≤ 128`),
+    /// otherwise [`LeopardGF16`](CodecFamily::LeopardGF16).
+    PreferLeopard,
+}
+
 /// Selects the encoding matrix construction strategy for [`CodecFamily::Classic`].
 ///
 /// This option is ignored for Leopard families (they use FFT-based encoding).
@@ -47,7 +88,14 @@ pub enum MatrixMode {
 ///     .fast_one_parity(true)
 ///     .build();
 /// ```
+///
+/// `CodecOptions` is `#[non_exhaustive]`: construct it from
+/// [`CodecOptions::default()`] (optionally with `..Default::default()` in a
+/// struct-update expression) or via the [`builder`](CodecOptions::builder), not
+/// with an exhaustive struct literal. This lets future fields be added without a
+/// breaking change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct CodecOptions {
     /// When `true` and parity shard count is 1, use XOR-only fast path instead of
     /// full matrix multiplication. Default: `false`.
@@ -60,6 +108,10 @@ pub struct CodecOptions {
     pub inversion_cache_capacity: usize,
     /// The codec algorithm family to use. Default: [`CodecFamily::Classic`].
     pub codec_family: CodecFamily,
+    /// Optional automatic Leopard selection when `codec_family` is
+    /// [`CodecFamily::Classic`]. Default: [`LeopardMode::Disabled`] (no
+    /// auto-selection; behaviour identical to prior releases). See [`LeopardMode`].
+    pub leopard_mode: LeopardMode,
     /// The matrix construction strategy (only used for [`CodecFamily::Classic`]).
     /// Default: [`MatrixMode::Vandermonde`].
     pub matrix_mode: MatrixMode,
@@ -75,6 +127,7 @@ impl Default for CodecOptions {
             inversion_cache: true,
             inversion_cache_capacity: 0,
             codec_family: CodecFamily::Classic,
+            leopard_mode: LeopardMode::Disabled,
             matrix_mode: MatrixMode::Vandermonde,
             max_parallel_jobs: 0,
         }
@@ -102,6 +155,14 @@ impl CodecOptionsBuilder {
     /// Set the codec algorithm family.
     pub fn codec_family(mut self, family: CodecFamily) -> Self {
         self.options.codec_family = family;
+        self
+    }
+
+    /// Set the optional automatic Leopard selection mode (see [`LeopardMode`]).
+    /// Only takes effect when [`codec_family`](CodecOptionsBuilder::codec_family)
+    /// is [`CodecFamily::Classic`] and the field is byte-oriented.
+    pub fn leopard_mode(mut self, mode: LeopardMode) -> Self {
+        self.options.leopard_mode = mode;
         self
     }
 
