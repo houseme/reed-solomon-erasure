@@ -637,7 +637,7 @@ dependencies = [
 
 [[package]]
 name = "rustfs-erasure-codec-wasm"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "rustfs-erasure-codec",
  "wasm-bindgen",

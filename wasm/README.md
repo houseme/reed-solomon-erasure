@@ -6,7 +6,7 @@ This package lives inside the current
 [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
 repository and tracks the main Rust codebase in this checkout.
 
-**Package:** `rustfs-erasure-codec-wasm` v0.2.4
+**Package:** `rustfs-erasure-codec-wasm` v0.2.5
 **Dependencies:** [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen), [`wee_alloc`](https://github.com/rustwasm/wee_alloc)
 
 ## Building
