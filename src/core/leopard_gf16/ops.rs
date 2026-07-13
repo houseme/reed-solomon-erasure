@@ -1,3 +1,8 @@
+extern crate alloc;
+
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::{BITWIDTH16, LeopardGf16Tables, MODULUS16, ORDER16};
 
 /// GF(2^16) multiply using log/exp tables.
@@ -665,6 +670,61 @@ unsafe fn work_bytes_to_user_bytes_neon(src: &[u8], dst: &mut [u8]) {
             vst1q_u8(d[16..].as_mut_ptr(), vuzp1q_u8(p2, p3));
             vst1q_u8(d[48..].as_mut_ptr(), vuzp2q_u8(p2, p3));
         }
+    }
+}
+
+/// Convert user-layout bytes into aligned split-layout `u16` elements.
+///
+/// Fuses the byte-level split-layout shuffle with the byte-to-`u16` decode, so
+/// the codec never reinterprets an align-1 `&[u8]` as `&[u16]`. On little-endian
+/// the shuffle writes straight into the returned buffer's storage (a single
+/// allocation, no intermediate copy); on big-endian the split bytes are decoded
+/// element-wise as little-endian to preserve the on-the-wire layout.
+pub(super) fn user_bytes_to_work_u16(user: &[u8]) -> Vec<u16> {
+    debug_assert!(user.len().is_multiple_of(2));
+    let mut out = vec![0u16; user.len() / 2];
+
+    #[cfg(target_endian = "little")]
+    {
+        // SAFETY: `out` is `u16`-aligned (Vec guarantees alignment >= 2), so a
+        // `u8` view is always valid; its length is exactly `out`'s byte size.
+        // `u16` has no padding or invalid bit patterns, so writing arbitrary
+        // bytes is sound, and read back as little-endian the split-layout bytes
+        // are the field elements.
+        let bytes =
+            unsafe { core::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<u8>(), user.len()) };
+        user_bytes_to_work_bytes(user, bytes);
+    }
+    #[cfg(target_endian = "big")]
+    {
+        let mut split = vec![0u8; user.len()];
+        user_bytes_to_work_bytes(user, &mut split);
+        for (d, c) in out.iter_mut().zip(split.chunks_exact(2)) {
+            *d = u16::from_le_bytes([c[0], c[1]]);
+        }
+    }
+    out
+}
+
+/// Encode aligned `u16` elements into split-layout little-endian bytes.
+///
+/// Inverse of the decode in [`user_bytes_to_work_u16`]: alignment- and
+/// endian-safe. On little-endian this is a single bulk copy.
+pub(super) fn u16_to_work_bytes(src: &[u16], dst: &mut [u8]) {
+    debug_assert_eq!(dst.len(), src.len() * 2);
+
+    #[cfg(target_endian = "little")]
+    {
+        // SAFETY: `src` is `u16`-aligned, so a `u8` view is always valid; its
+        // length is exactly `dst.len()`. Little-endian `u16` bytes match the
+        // split-layout byte order, so a bulk copy is correct.
+        let src_bytes =
+            unsafe { core::slice::from_raw_parts(src.as_ptr().cast::<u8>(), dst.len()) };
+        dst.copy_from_slice(src_bytes);
+    }
+    #[cfg(target_endian = "big")]
+    for (c, &v) in dst.chunks_exact_mut(2).zip(src.iter()) {
+        c.copy_from_slice(&v.to_le_bytes());
     }
 }
 
