@@ -148,6 +148,36 @@ jobs:
       - name: Check target build (simd-accel)
         run: cargo check --verbose --workspace --exclude rustfs-erasure-codec-fuzz --target ${{ matrix.target }} --features simd-accel
 
+  build-ppc64le-vsx:
+    name: Build ppc64le VSX (nightly)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7 # v7
+
+      # The VSX backend is gated on `target_arch = "powerpc64"` and uses
+      # still-unstable PowerPC intrinsics, so it only compiles on nightly for this
+      # target and is invisible to the x86_64/aarch64 jobs. Cross-check it here so
+      # a `simd-vsx` build breakage cannot go unnoticed again.
+      - name: Install Rust nightly with ppc64le target
+        uses: dtolnay/rust-toolchain@master # v1
+        with:
+          toolchain: nightly
+          target: powerpc64le-unknown-linux-gnu
+          components: clippy
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1 # v2.9.1
+
+      - name: Check VSX backend (no_std)
+        run: cargo check -p rustfs-erasure-codec --target powerpc64le-unknown-linux-gnu --no-default-features --features simd-vsx
+
+      - name: Check VSX backend (std)
+        run: cargo check -p rustfs-erasure-codec --target powerpc64le-unknown-linux-gnu --features simd-vsx
+
+      - name: Clippy VSX backend
+        run: cargo clippy -p rustfs-erasure-codec --target powerpc64le-unknown-linux-gnu --features simd-vsx -- -D warnings
+
   test-linux:
     name: Test Linux (${{ matrix.toolchain }})
     runs-on: ubuntu-latest
