@@ -482,6 +482,14 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     /// # Errors
     ///
     /// Returns [`StreamError`] on I/O failure or codec error.
+    ///
+    /// # Limitations
+    ///
+    /// Only the classic Reed-Solomon family is supported. Leopard-family codecs
+    /// return [`crate::Error::UnsupportedCodecFamily`] (wrapped in a
+    /// [`StreamError`]), because their FFT engines require whole-shard,
+    /// 64-byte-aligned processing that the block-wise streaming path cannot
+    /// satisfy.
     pub fn encode_stream(
         &self,
         data: &mut [impl std::io::Read + Send],
@@ -496,6 +504,15 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let block_size = options
             .block_size
             .clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
+        // Leopard families (GF8/GF16, both built on ReedSolomon<galois_8::Field>)
+        // dispatch to FFT codecs that require whole-shard, 64-byte-aligned
+        // processing: a non-64-multiple final block fails with IncorrectShardSize,
+        // so streaming is effectively unusable. Reject them explicitly, matching
+        // the documented limitation.
+        if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
+            return Err(StreamError::codec(0, crate::Error::UnsupportedCodecFamily));
+        }
+
         let data_count = self.data_shard_count;
         let parity_count = self.parity_shard_count;
         let use_parallel_read = use_parallel_stream_io(options, data_count);
@@ -565,6 +582,11 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     /// Reads all shards in blocks, verifying each block independently.
     /// Returns `Ok(true)` if every block is valid, `Ok(false)` if any block
     /// fails verification.
+    ///
+    /// # Limitations
+    ///
+    /// Only the classic Reed-Solomon family is supported; Leopard-family codecs
+    /// return [`crate::Error::UnsupportedCodecFamily`].
     pub fn verify_stream(
         &self,
         shards: &mut [impl std::io::Read + Send],
@@ -578,6 +600,11 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let block_size = options
             .block_size
             .clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
+        // Leopard families are unsupported for streaming (see encode_stream).
+        if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
+            return Err(StreamError::codec(0, crate::Error::UnsupportedCodecFamily));
+        }
+
         let total = self.total_shard_count;
         let use_parallel_read = use_parallel_stream_io(options, total);
 
@@ -632,8 +659,9 @@ impl super::ReedSolomon<crate::galois_8::Field> {
     ///
     /// # Limitations
     ///
-    /// For Leopard-family codecs the entire dataset must fit in memory; this
-    /// streaming path is only supported for the classic Reed-Solomon family.
+    /// Only the classic Reed-Solomon family is supported; Leopard-family codecs
+    /// return [`crate::Error::UnsupportedCodecFamily`] rather than silently
+    /// producing incorrect results.
     pub fn reconstruct_stream(
         &self,
         shards: &mut [std::io::Cursor<Vec<u8>>],
@@ -653,6 +681,11 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         // release builds).
         if shards.len() != total {
             return Err(StreamError::codec(0, crate::Error::TooFewShards));
+        }
+
+        // Leopard families are unsupported for streaming (see encode_stream).
+        if self.is_leopard_gf8_family() || self.is_leopard_gf16_family() {
+            return Err(StreamError::codec(0, crate::Error::UnsupportedCodecFamily));
         }
 
         // Determine which shards are present (non-empty cursor).
