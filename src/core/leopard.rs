@@ -170,6 +170,15 @@ fn validate_leopard_gf16<F: Field>(data_shards: usize, parity_shards: usize) -> 
         return Err(Error::UnsupportedCodecFamily);
     }
 
+    // The GF16 Leopard codec handles bytes as little-endian `u16` split-layout
+    // pairs. Big-endian correctness is not yet verified end to end, so reject at
+    // construction rather than risk silently producing wrong results
+    // (rustfs/backlog#1238). Little-endian builds are unaffected; GF8 Leopard is
+    // byte-oriented and endian-agnostic, so it is not gated here.
+    if cfg!(target_endian = "big") {
+        return Err(Error::UnsupportedCodecFamily);
+    }
+
     if total_shards == 0 || total_shards > 65536 {
         return Err(Error::UnsupportedCodecFamily);
     }
