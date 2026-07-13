@@ -225,6 +225,22 @@ fn test_too_many_shards() {
 }
 
 #[test]
+fn test_shard_count_addition_overflow() {
+    // `data_shards + parity_shards` must not overflow `usize`: a checked add
+    // turns the overflow into `TooManyShards` instead of wrapping past the
+    // `> F::ORDER` guard (which on release would permit a huge allocation) or
+    // panicking on debug builds.
+    assert_eq!(
+        Error::TooManyShards,
+        ReedSolomon::new(usize::MAX, 2).unwrap_err()
+    );
+    assert_eq!(
+        Error::TooManyShards,
+        ReedSolomon::new(2, usize::MAX).unwrap_err()
+    );
+}
+
+#[test]
 fn test_shard_count() {
     let mut rng = rng();
     for _ in 0..10 {

@@ -254,7 +254,10 @@ impl<F: Field> ReedSolomon<F> {
         if parity_shards == 0 {
             return Err(Error::TooFewParityShards);
         }
-        if data_shards + parity_shards > F::ORDER {
+        let total_shards = data_shards
+            .checked_add(parity_shards)
+            .ok_or(Error::TooManyShards)?;
+        if total_shards > F::ORDER {
             return Err(Error::TooManyShards);
         }
 
@@ -263,8 +266,6 @@ impl<F: Field> ReedSolomon<F> {
             data_shards,
             parity_shards,
         )?;
-
-        let total_shards = data_shards + parity_shards;
 
         options.inversion_cache_capacity = Self::normalize_inversion_cache_capacity(
             data_shards,
@@ -480,7 +481,10 @@ impl<F: Field> ReedSolomon<F> {
         if parity_shards == 0 {
             return Err(Error::TooFewParityShards);
         }
-        if data_shards + parity_shards > F::ORDER {
+        let total_shards = data_shards
+            .checked_add(parity_shards)
+            .ok_or(Error::TooManyShards)?;
+        if total_shards > F::ORDER {
             return Err(Error::TooManyShards);
         }
 
@@ -490,7 +494,6 @@ impl<F: Field> ReedSolomon<F> {
             parity_shards,
         )?;
 
-        let total_shards = data_shards + parity_shards;
         options.matrix_mode = MatrixMode::Custom;
         options.inversion_cache_capacity = Self::normalize_inversion_cache_capacity(
             data_shards,
