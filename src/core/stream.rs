@@ -174,6 +174,22 @@ fn take_stream_error(
     guard.take().unwrap_or_else(fallback)
 }
 
+/// Record a parallel-write error, keeping the one with the smallest
+/// `shard_index`. When multiple writers fail at once, the reported error no
+/// longer depends on thread scheduling but deterministically points at the
+/// lowest shard index, aiding diagnostics and reproduction.
+fn record_min_error(first_error: &std::sync::Mutex<Option<StreamError>>, cand: StreamError) {
+    if let Ok(mut guard) = first_error.lock() {
+        let replace = match guard.as_ref() {
+            Some(existing) => cand.shard_index < existing.shard_index,
+            None => true,
+        };
+        if replace {
+            *guard = Some(cand);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -427,27 +443,22 @@ fn write_block_par<W: std::io::Write + Send>(
             while written < len {
                 match writer.write(&buf[written..len]) {
                     Ok(0) => {
-                        if let Ok(mut guard) = first_error.lock()
-                            && guard.is_none()
-                        {
-                            *guard = Some(StreamError::write(
+                        record_min_error(
+                            &first_error,
+                            StreamError::write(
                                 shard_offset + i,
                                 std::io::Error::new(
                                     std::io::ErrorKind::WriteZero,
                                     "write returned 0",
                                 ),
-                            ));
-                        }
+                            ),
+                        );
                         return Err(());
                     }
                     Ok(n) => written += n,
                     Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                     Err(e) => {
-                        if let Ok(mut guard) = first_error.lock()
-                            && guard.is_none()
-                        {
-                            *guard = Some(StreamError::write(shard_offset + i, e));
-                        }
+                        record_min_error(&first_error, StreamError::write(shard_offset + i, e));
                         return Err(());
                     }
                 }
