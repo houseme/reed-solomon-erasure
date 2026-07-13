@@ -501,8 +501,16 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let use_parallel_read = use_parallel_stream_io(options, data_count);
         let use_parallel_write = use_parallel_stream_io(options, parity_count);
 
-        debug_assert_eq!(data.len(), data_count);
-        debug_assert_eq!(parity.len(), parity_count);
+        // Validate stream counts at runtime (debug_assert is removed in release
+        // builds, which would otherwise lead to slice out-of-bounds panics or
+        // silent partial encoding). Consistent with the crate's
+        // check_piece_count! used on non-streaming paths.
+        if data.len() != data_count {
+            return Err(StreamError::codec(0, crate::Error::TooFewShards));
+        }
+        if parity.len() != parity_count {
+            return Err(StreamError::codec(0, crate::Error::TooFewShards));
+        }
 
         let mut data_bufs: Vec<Vec<u8>> = (0..data_count)
             .map(|_| Vec::with_capacity(block_size))
@@ -573,7 +581,11 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         let total = self.total_shard_count;
         let use_parallel_read = use_parallel_stream_io(options, total);
 
-        debug_assert_eq!(shards.len(), total);
+        // Validate the shard count at runtime (debug_assert is removed in
+        // release builds).
+        if shards.len() != total {
+            return Err(StreamError::codec(0, crate::Error::TooFewShards));
+        }
 
         let mut bufs: Vec<Vec<u8>> = (0..total).map(|_| Vec::with_capacity(block_size)).collect();
         let mut read_lengths = Vec::with_capacity(total);
@@ -637,7 +649,11 @@ impl super::ReedSolomon<crate::galois_8::Field> {
             .clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
         let total = self.total_shard_count;
 
-        debug_assert_eq!(shards.len(), total);
+        // Validate the shard count at runtime (debug_assert is removed in
+        // release builds).
+        if shards.len() != total {
+            return Err(StreamError::codec(0, crate::Error::TooFewShards));
+        }
 
         // Determine which shards are present (non-empty cursor).
         let mut present = vec![false; total];
