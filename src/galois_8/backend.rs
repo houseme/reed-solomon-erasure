@@ -135,20 +135,21 @@ const RUST_VSX_BACKEND: GaloisBackend = GaloisBackend {
 
 static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
 
+// The C SIMD backend is only compiled where `super::legacy::simd_c` itself is
+// (see galois_8/legacy/mod.rs): the ssse3/avx2/avx512/gfni/neon families on
+// x86_64/aarch64. It is deliberately NOT gated on `simd-vsx`/`powerpc64` — the
+// ppc64 path dispatches to RUST_VSX_BACKEND, and `legacy::simd_c` has no VSX
+// implementation, so including those here would reference a module that does
+// not exist for that target and break the ppc64 build.
 #[cfg(all(
     any(
         feature = "simd-neon",
         feature = "simd-ssse3",
         feature = "simd-avx2",
         feature = "simd-avx512",
-        feature = "simd-gfni",
-        feature = "simd-vsx"
+        feature = "simd-gfni"
     ),
-    any(
-        target_arch = "x86_64",
-        target_arch = "aarch64",
-        target_arch = "powerpc64"
-    ),
+    any(target_arch = "x86_64", target_arch = "aarch64"),
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
