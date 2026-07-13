@@ -165,19 +165,13 @@ impl StreamError {
 
 fn take_stream_error(
     first_error: &std::sync::Mutex<Option<StreamError>>,
-    fallback_message: &'static str,
+    fallback: impl FnOnce() -> StreamError,
 ) -> StreamError {
-    match first_error.lock() {
-        Ok(mut guard) => guard
-            .take()
-            .unwrap_or_else(|| StreamError::read(0, Error::other(fallback_message))),
-        Err(poisoned) => {
-            let mut guard = poisoned.into_inner();
-            guard
-                .take()
-                .unwrap_or_else(|| StreamError::read(0, Error::other(fallback_message)))
-        }
-    }
+    let mut guard = match first_error.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    guard.take().unwrap_or_else(fallback)
 }
 
 // ---------------------------------------------------------------------------
@@ -461,10 +455,14 @@ fn write_block_par<W: std::io::Write + Send>(
             Ok(())
         })
         .map_err(|()| {
-            take_stream_error(
-                &first_error,
-                "parallel stream writer error was not reported",
-            )
+            // The fallback must also be a write error (not a fabricated read(0))
+            // and point at this batch's starting shard index.
+            take_stream_error(&first_error, || {
+                StreamError::write(
+                    shard_offset,
+                    Error::other("parallel stream writer error was not reported"),
+                )
+            })
         })
 }
 
