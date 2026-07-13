@@ -18,3 +18,5 @@
   - stream benchmark commands, artifact schema, cooldown protocol, and optional release gate
 - `docs/release-7.0.1-checklist.md`
   - 7.0.1 release checklist for stream path benchmark governance and release gates
+- `docs/release-7.0.2-checklist.md`
+  - 7.0.2 release checklist for streaming-path correctness and robustness hardening

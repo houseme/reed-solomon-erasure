@@ -11,7 +11,7 @@
 
 `rustfs-erasure-codec` 是一个现代 Rust Reed-Solomon 纠删码库，覆盖内存内编码、渐进式恢复、定向恢复以及按块流式处理场景。
 
-当前 `7.0.1` 主线已经提供：
+当前 `7.0.2` 主线已经提供：
 
 - Classic `GF(2^8)` 与 `GF(2^16)` Reed-Solomon
 - 面向 `galois_8` 的运行时 SIMD 后端分发
@@ -38,26 +38,26 @@ WASM 绑定见 [wasm/README.md](wasm/README.md)。
 
 ```toml
 [dependencies]
-rustfs-erasure-codec = "7.0.1"
+rustfs-erasure-codec = "7.0.2"
 ```
 
 如果关注吞吐，建议开启 SIMD：
 
 ```toml
 [dependencies]
-rustfs-erasure-codec = { version = "7.0.1", features = ["simd-accel"] }
+rustfs-erasure-codec = { version = "7.0.2", features = ["simd-accel"] }
 ```
 
 也可以只启用目标平台需要的后端：
 
 ```toml
 [dependencies]
-rustfs-erasure-codec = { version = "7.0.1", features = ["simd-neon"] }   # aarch64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-ssse3"] } # x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-avx2"] }  # x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-avx512"] }# x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-gfni"] }  # x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-vsx"] }   # powerpc64
+rustfs-erasure-codec = { version = "7.0.2", features = ["simd-neon"] }   # aarch64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-ssse3"] } # x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-avx2"] }  # x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-avx512"] }# x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-gfni"] }  # x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-vsx"] }   # powerpc64
 ```
 
 说明：
@@ -219,8 +219,9 @@ let rs = ReedSolomon::with_custom_matrix(3, 2, & custom_rows, CodecOptions::defa
 
 - 实现在 classic `galois_8` 路径上
 - 通过 `StreamOptions` 做按块处理
-- `reconstruct_stream(...)` 当前使用 `Cursor<Vec<u8>>`
-- Leopard family 的流式重建当前不支持
+- `reconstruct_stream(...)` 当前使用 `Cursor<Vec<u8>>`，present cursor 从位置 `0` 开始读取
+- 入口会校验输入（分片数量、present 分片等长、块大小），非法输入返回 `StreamError` 而非产出错误或空结果
+- Leopard family 的流式 encode / verify / reconstruct 返回 `UnsupportedCodecFamily`
 
 当数据不适合整组分片常驻内存时，优先考虑这个路径。
 
@@ -297,7 +298,7 @@ bash scripts/collect_x86_simd_benchmarks.sh
 [Darren Ldl](https://github.com/darrenldl) 创建，并由
 [rust-rse](https://github.com/rust-rse) 社区继续维护。
 
-当前仓库中的 `7.0.1` 主线由
+当前仓库中的 `7.0.2` 主线由
 [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
 维护，代表了 Rust 2024 重构、运行时 SIMD 架构与 Leopard 相关工作的最新状态。
 

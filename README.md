@@ -12,7 +12,7 @@ English | [Chinese](README_CN.md)
 `rustfs-erasure-codec` is a modern Rust implementation of Reed-Solomon erasure coding for
 memory-resident, progressive, and block-streaming workloads.
 
-The current `7.0.1` line provides:
+The current `7.0.2` line provides:
 
 - classic Reed-Solomon over `GF(2^8)` and `GF(2^16)`
 - runtime-dispatched SIMD backends for `galois_8`
@@ -41,26 +41,26 @@ Add the crate:
 
 ```toml
 [dependencies]
-rustfs-erasure-codec = "7.0.1"
+rustfs-erasure-codec = "7.0.2"
 ```
 
 Enable SIMD acceleration when throughput matters:
 
 ```toml
 [dependencies]
-rustfs-erasure-codec = { version = "7.0.1", features = ["simd-accel"] }
+rustfs-erasure-codec = { version = "7.0.2", features = ["simd-accel"] }
 ```
 
 Or enable a narrower backend set:
 
 ```toml
 [dependencies]
-rustfs-erasure-codec = { version = "7.0.1", features = ["simd-neon"] }   # aarch64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-ssse3"] } # x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-avx2"] }  # x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-avx512"] }# x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-gfni"] }  # x86_64
-# rustfs-erasure-codec = { version = "7.0.1", features = ["simd-vsx"] }   # powerpc64
+rustfs-erasure-codec = { version = "7.0.2", features = ["simd-neon"] }   # aarch64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-ssse3"] } # x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-avx2"] }  # x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-avx512"] }# x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-gfni"] }  # x86_64
+# rustfs-erasure-codec = { version = "7.0.2", features = ["simd-vsx"] }   # powerpc64
 ```
 
 Notes:
@@ -243,8 +243,9 @@ Current scope and limitations:
 
 - implemented on the classic `galois_8` path
 - tuned for block-based processing via `StreamOptions`
-- `reconstruct_stream(...)` currently uses `Cursor<Vec<u8>>`
-- Leopard-family streaming reconstruction is not supported
+- `reconstruct_stream(...)` currently uses `Cursor<Vec<u8>>`; present cursors are read from position `0`
+- inputs are validated up front (shard counts, equal present-shard lengths, block size); invalid inputs return a `StreamError` instead of producing wrong or empty output
+- Leopard-family streaming (encode, verify, reconstruct) returns `UnsupportedCodecFamily`
 
 Use this path when your data should be processed in bounded blocks instead of holding the full shard matrix in memory.
 
@@ -321,7 +322,7 @@ Versions `0.9.0` through `6.0.0` were originally created by
 [Darren Ldl](https://github.com/darrenldl) and later maintained by the
 [rust-rse](https://github.com/rust-rse) community.
 
-The current `7.0.1` line in this repository is maintained under
+The current `7.0.2` line in this repository is maintained under
 [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
 and reflects the Rust 2024 rewrite, runtime SIMD architecture, and Leopard work.
 

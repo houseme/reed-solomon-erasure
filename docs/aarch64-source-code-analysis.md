@@ -1,6 +1,6 @@
 # aarch64 架构源码分析
 
-> 基于 rustfs-erasure-codec v7.0.1 (Rust Edition 2024) 源码<br>
+> 基于 rustfs-erasure-codec v7.0.2 (Rust Edition 2024) 源码<br>
 > 分析日期：2026-05-30
 
 ---

@@ -10,7 +10,26 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 7.0.2 (2026-07-13)
+
+> Maintained in [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
+> Patch release: streaming-path correctness and robustness hardening from a deep audit
+
+### Fixed
+- `reconstruct_stream`: validate that all present shards read the same length within a block, returning `IncorrectShardSize` instead of silently zero-padding a truncated / length-mismatched shard into wrong recovered data (which previously returned `Ok`).
+- `reconstruct_stream`: reset each present cursor's position to `0` before reading, so a cursor left at end-of-buffer (e.g. just written to) is no longer misread as empty, which previously skipped recovery while returning `Ok`.
+- `encode_stream` / `verify_stream` / `reconstruct_stream`: clamp `block_size` on entry to `[1 KiB, 16 MiB]`, preventing `block_size = 0` from silently producing empty output and preventing huge values from triggering `Vec::with_capacity` allocation failures.
+- `encode_stream` / `verify_stream` / `reconstruct_stream`: validate stream counts at runtime (returning `TooFewShards`) instead of `debug_assert`, which is removed in release builds and could otherwise cause slice out-of-bounds panics or silent partial encoding.
+- `encode_stream` / `verify_stream` / `reconstruct_stream`: reject Leopard-family codecs with `UnsupportedCodecFamily` instead of failing with an opaque `IncorrectShardSize` on the first non-64-aligned block.
+- `reconstruct_stream`: return `Ok` for an empty dataset (no present shards), consistent with `encode_stream` on empty input, instead of `TooFewShardsPresent`.
+- Parallel stream writes now report a write error on the fallback path (instead of a fabricated `Read(0)`) and keep the smallest `shard_index`, making error reporting deterministic.
+
+### Added
+- Regression tests covering the streaming-path fixes above.
+
 ### Changed
+- Documented that `reconstruct_stream` reads present cursors from position `0`, and documented the `encode_stream` zero-padding contract for unequal inputs and its interop limitations.
+- Simplified `use_parallel_stream_io_auto` by removing dead branches fully dominated by the final threshold (no behavior change).
 - Raised the workspace minimum supported Rust version from 1.95 to 1.96.
 - Refreshed direct dependencies: `rand` 0.10.2, `spin` 0.12.1, and `wasm-bindgen` 0.2.126, along with their resolved transitive dependencies.
 - Polished the English and Chinese README language links, examples, and codec-family tables for readability.
