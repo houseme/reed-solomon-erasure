@@ -54,6 +54,9 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Run clippy (all features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
       - name: Run check
         run: cargo check --all-targets
 
@@ -128,3 +131,32 @@ jobs:
           RSE_BACKEND_OVERRIDE: ${{ matrix.backend_override }}
         run: |
           cargo test reconstruct -- --nocapture
+
+  asan-simd:
+    name: AddressSanitizer (x86_64 SIMD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+
+      # Runs the GF16 encode/decode round-trip tests under AddressSanitizer on a
+      # real x86_64 host (AVX2 available), so the AVX2 SIMD paths — including the
+      # work_bytes_to_user_bytes_avx2 tail-store fix — are checked for
+      # out-of-bounds heap access that the aarch64 developer machines cannot reach.
+      - name: Run GF16 tests under AddressSanitizer
+        env:
+          RUSTFLAGS: "-Zsanitizer=address"
+          ASAN_OPTIONS: detect_leaks=0
+        run: >
+          cargo test --lib --all-features -Zbuild-std
+          --target x86_64-unknown-linux-gnu -- leopard_gf16

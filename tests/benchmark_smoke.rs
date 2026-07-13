@@ -2423,14 +2423,18 @@ fn benchmark_smoke_metadata_tracks_aarch64_scalar_and_neon_overrides() {
 
     // Also verify the env-var reads work in-process (the actual backend is
     // already cached by `Once`, so we only check `backend_override()`).
+    // SAFETY: single-threaded test; `set_var` is not thread-safe but no other
+    // thread observes the environment here.
     unsafe {
         std::env::set_var("RSE_BACKEND_OVERRIDE", "scalar");
     }
     assert_eq!("scalar", backend_override());
+    // SAFETY: single-threaded test, as above.
     unsafe {
         std::env::set_var("RSE_BACKEND_OVERRIDE", "rust-neon");
     }
     assert_eq!("rust-neon", backend_override());
+    // SAFETY: single-threaded teardown of the env vars set above.
     unsafe {
         std::env::remove_var("RSE_BACKEND_OVERRIDE");
         std::env::remove_var("RSE_STRICT_BACKEND_OVERRIDE");
