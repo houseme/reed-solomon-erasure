@@ -30,6 +30,11 @@
 use std::io::Error;
 use std::mem;
 
+/// Lower bound for the read/write block size (1 KiB).
+const MIN_BLOCK_SIZE_BYTES: usize = 1024;
+/// Upper bound for the read/write block size (16 MiB).
+const MAX_BLOCK_SIZE_BYTES: usize = 16 * 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // StreamOptions
 // ---------------------------------------------------------------------------
@@ -72,10 +77,8 @@ impl StreamOptions {
         Self::default()
     }
 
-    /// Set the block size (minimum 1 KiB).
+    /// Set the block size (clamped to `[1 KiB, 16 MiB]`).
     pub fn with_block_size(mut self, size: usize) -> Self {
-        const MIN_BLOCK_SIZE_BYTES: usize = 1024;
-        const MAX_BLOCK_SIZE_BYTES: usize = 16 * 1024 * 1024;
         self.block_size = size.clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
         self
     }
@@ -485,7 +488,14 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         parity: &mut [impl std::io::Write + Send],
         options: &StreamOptions,
     ) -> Result<(), StreamError> {
-        let block_size = options.block_size;
+        // block_size is a public field and may bypass with_block_size's clamp
+        // (e.g. a struct literal). Clamp it to the valid range here: 0 would be
+        // raised to the lower bound (otherwise reads hit EOF immediately and
+        // silently produce empty output), and a huge value is capped to the
+        // upper bound (otherwise Vec::with_capacity may OOM).
+        let block_size = options
+            .block_size
+            .clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
         let data_count = self.data_shard_count;
         let parity_count = self.parity_shard_count;
         let use_parallel_read = use_parallel_stream_io(options, data_count);
@@ -552,7 +562,14 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         shards: &mut [impl std::io::Read + Send],
         options: &StreamOptions,
     ) -> Result<bool, StreamError> {
-        let block_size = options.block_size;
+        // block_size is a public field and may bypass with_block_size's clamp
+        // (e.g. a struct literal). Clamp it to the valid range here: 0 would be
+        // raised to the lower bound (otherwise reads hit EOF immediately and
+        // silently produce empty output), and a huge value is capped to the
+        // upper bound (otherwise Vec::with_capacity may OOM).
+        let block_size = options
+            .block_size
+            .clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
         let total = self.total_shard_count;
         let use_parallel_read = use_parallel_stream_io(options, total);
 
@@ -610,7 +627,14 @@ impl super::ReedSolomon<crate::galois_8::Field> {
         shards: &mut [std::io::Cursor<Vec<u8>>],
         options: &StreamOptions,
     ) -> Result<(), StreamError> {
-        let block_size = options.block_size;
+        // block_size is a public field and may bypass with_block_size's clamp
+        // (e.g. a struct literal). Clamp it to the valid range here: 0 would be
+        // raised to the lower bound (otherwise reads hit EOF immediately and
+        // silently produce empty output), and a huge value is capped to the
+        // upper bound (otherwise Vec::with_capacity may OOM).
+        let block_size = options
+            .block_size
+            .clamp(MIN_BLOCK_SIZE_BYTES, MAX_BLOCK_SIZE_BYTES);
         let total = self.total_shard_count;
 
         debug_assert_eq!(shards.len(), total);
