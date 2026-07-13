@@ -1353,4 +1353,164 @@ mod tests {
         assert_eq!(shards[1].get_ref(), &data[1], "shard 1 mismatch");
         assert_eq!(shards[2].get_ref(), &data[2], "shard 2 mismatch");
     }
+
+    // -----------------------------------------------------------------------
+    // Streaming-path audit regression tests
+    // -----------------------------------------------------------------------
+
+    fn leopard_gf8_codec(data: usize, parity: usize) -> ReedSolomon {
+        use crate::{CodecFamily, CodecOptions};
+        ReedSolomon::with_options(
+            data,
+            parity,
+            CodecOptions {
+                codec_family: CodecFamily::LeopardGF8,
+                ..CodecOptions::default()
+            },
+        )
+        .unwrap()
+    }
+
+    /// A truncated / length-mismatched present shard must error with
+    /// `IncorrectShardSize` instead of silently recovering wrong data.
+    #[test]
+    fn test_reconstruct_stream_truncated_present_errors() {
+        let rs = make_codec(3, 2);
+        let shard = 4096;
+        let d: Vec<Vec<u8>> = (0..3).map(|_| random_data(shard)).collect();
+        let mut readers: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        let mut parity: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        rs.encode_stream(&mut readers, &mut parity, &StreamOptions::default())
+            .unwrap();
+
+        // shard0 missing; shard1 truncated to 50 bytes.
+        let mut shards: Vec<std::io::Cursor<Vec<u8>>> = vec![
+            std::io::Cursor::new(Vec::new()),
+            std::io::Cursor::new(d[1][..50].to_vec()),
+            std::io::Cursor::new(d[2].clone()),
+            std::io::Cursor::new(parity[0].clone()),
+            std::io::Cursor::new(parity[1].clone()),
+        ];
+        let err = rs
+            .reconstruct_stream(&mut shards, &StreamOptions::default())
+            .unwrap_err();
+        assert!(matches!(
+            err.kind,
+            StreamErrorKind::Codec(crate::Error::IncorrectShardSize)
+        ));
+    }
+
+    /// A present cursor whose position is not 0 (written first) still recovers
+    /// correctly.
+    #[test]
+    fn test_reconstruct_stream_nonzero_cursor_position() {
+        use std::io::Write;
+        let rs = make_codec(3, 2);
+        let shard = 4096;
+        let d: Vec<Vec<u8>> = (0..3).map(|_| random_data(shard)).collect();
+        let mut readers: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        let mut parity: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        rs.encode_stream(&mut readers, &mut parity, &StreamOptions::default())
+            .unwrap();
+
+        let mk = |bytes: &[u8]| {
+            let mut c = std::io::Cursor::new(Vec::new());
+            c.write_all(bytes).unwrap(); // position left at the end
+            c
+        };
+        let mut shards = vec![
+            std::io::Cursor::new(Vec::new()), // missing
+            mk(&d[1]),
+            mk(&d[2]),
+            mk(&parity[0]),
+            mk(&parity[1]),
+        ];
+        rs.reconstruct_stream(&mut shards, &StreamOptions::default())
+            .unwrap();
+        assert_eq!(shards[0].get_ref(), &d[0]);
+    }
+
+    /// `block_size = 0` (public field) is clamped and encodes normally instead
+    /// of silently producing empty output.
+    #[test]
+    fn test_encode_stream_zero_block_size_clamped() {
+        let rs = make_codec(3, 2);
+        let shard = 4096;
+        let d: Vec<Vec<u8>> = (0..3).map(|_| random_data(shard)).collect();
+        let mut readers: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        let opts = StreamOptions {
+            block_size: 0,
+            io_mode: StreamIoMode::Serial,
+        };
+        rs.encode_stream(&mut readers, &mut writers, &opts).unwrap();
+        assert_eq!(writers[0].len(), shard);
+        assert_eq!(writers[1].len(), shard);
+    }
+
+    /// A mismatched stream count returns an error at runtime (no panic, no
+    /// reliance on `debug_assert`).
+    #[test]
+    fn test_encode_stream_wrong_count_errors() {
+        let rs = make_codec(3, 2);
+        let d0 = random_data(64);
+        let mut readers: Vec<&[u8]> = vec![d0.as_slice(), d0.as_slice()]; // one short
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        let err = rs
+            .encode_stream(&mut readers, &mut writers, &StreamOptions::default())
+            .unwrap_err();
+        assert!(matches!(
+            err.kind,
+            StreamErrorKind::Codec(crate::Error::TooFewShards)
+        ));
+    }
+
+    /// Leopard families are rejected by all three streaming methods with
+    /// `UnsupportedCodecFamily`.
+    #[test]
+    fn test_stream_rejects_leopard_family() {
+        let rs = leopard_gf8_codec(4, 2);
+        let d: Vec<Vec<u8>> = (0..6).map(|_| random_data(128)).collect();
+
+        let mut enc_readers: Vec<&[u8]> = d[..4].iter().map(|s| s.as_slice()).collect();
+        let mut writers: Vec<Vec<u8>> = vec![Vec::new(); 2];
+        let err = rs
+            .encode_stream(&mut enc_readers, &mut writers, &StreamOptions::default())
+            .unwrap_err();
+        assert!(matches!(
+            err.kind,
+            StreamErrorKind::Codec(crate::Error::UnsupportedCodecFamily)
+        ));
+
+        let mut ver_readers: Vec<&[u8]> = d.iter().map(|s| s.as_slice()).collect();
+        let err = rs
+            .verify_stream(&mut ver_readers, &StreamOptions::default())
+            .unwrap_err();
+        assert!(matches!(
+            err.kind,
+            StreamErrorKind::Codec(crate::Error::UnsupportedCodecFamily)
+        ));
+
+        let mut rec_shards: Vec<std::io::Cursor<Vec<u8>>> =
+            d.iter().map(|s| std::io::Cursor::new(s.clone())).collect();
+        let err = rs
+            .reconstruct_stream(&mut rec_shards, &StreamOptions::default())
+            .unwrap_err();
+        assert!(matches!(
+            err.kind,
+            StreamErrorKind::Codec(crate::Error::UnsupportedCodecFamily)
+        ));
+    }
+
+    /// An empty dataset (all empty cursors) reconstructs to Ok, consistent with
+    /// `encode_stream` on empty input.
+    #[test]
+    fn test_reconstruct_stream_empty_dataset_ok() {
+        let rs = make_codec(3, 2);
+        let mut shards: Vec<std::io::Cursor<Vec<u8>>> =
+            (0..5).map(|_| std::io::Cursor::new(Vec::new())).collect();
+        rs.reconstruct_stream(&mut shards, &StreamOptions::default())
+            .unwrap();
+        assert!(shards.iter().all(|c| c.get_ref().is_empty()));
+    }
 }
