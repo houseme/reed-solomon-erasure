@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Run typos
         uses: crate-ci/typos@v1.46.2 # v1.46.2
@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable # v1
@@ -76,7 +76,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -99,7 +99,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -123,7 +123,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust with target
         uses: dtolnay/rust-toolchain@master # v1
@@ -162,7 +162,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -192,7 +192,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -222,7 +222,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -249,7 +249,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -290,7 +290,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1
@@ -319,7 +319,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6 # v6
+        uses: actions/checkout@v7 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master # v1

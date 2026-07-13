@@ -10,6 +10,9 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Changed
+- Updated GitHub Actions workflows from `actions/checkout@v6` to `actions/checkout@v7`.
+
 ## 7.0.2 (2026-07-13)
 
 > Maintained in [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)
