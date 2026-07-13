@@ -185,7 +185,9 @@ fn slice_xor_u64(input: &[u8], out: &mut [u8]) {
             let off = i * 8;
             // SAFETY: 8 bytes guaranteed by as_chunks::<64>().
             let s = unsafe { core::ptr::read_unaligned(src[off..].as_ptr().cast::<u64>()) };
+            // SAFETY: 8 bytes guaranteed by as_chunks_mut::<64>().
             let d = unsafe { core::ptr::read_unaligned(dst[off..].as_ptr().cast::<u64>()) };
+            // SAFETY: off+8 <= 64 within the as_chunks_mut::<64>() chunk; write in bounds.
             unsafe {
                 core::ptr::write_unaligned(dst[off..].as_mut_ptr().cast::<u64>(), d ^ s);
             }
@@ -220,7 +222,9 @@ unsafe fn slice_xor_avx2(input: &[u8], out: &mut [u8]) {
     for (src, dst) in in32.iter().zip(out32.iter_mut()) {
         // SAFETY: chunks_exact(32) guarantees 32 valid bytes for load/store.
         let s = unsafe { _mm256_loadu_si256(src.as_ptr().cast()) };
+        // SAFETY: as_chunks_mut::<32>() guarantees 32 valid bytes for load.
         let d = unsafe { _mm256_loadu_si256(dst.as_ptr().cast()) };
+        // SAFETY: as_chunks_mut::<32>() guarantees 32 valid bytes for store.
         unsafe { _mm256_storeu_si256(dst.as_mut_ptr().cast(), _mm256_xor_si256(d, s)) };
     }
 
@@ -244,7 +248,9 @@ unsafe fn slice_xor_neon(input: &[u8], out: &mut [u8]) {
     for (src, dst) in in64.iter().zip(out64.iter_mut()) {
         // SAFETY: chunks_exact(64) guarantees 64 valid bytes for load/store.
         let s = unsafe { vld1q_u8_x4(src.as_ptr()) };
+        // SAFETY: as_chunks_mut::<64>() guarantees 64 valid bytes for load.
         let d = unsafe { vld1q_u8_x4(dst.as_ptr()) };
+        // SAFETY: as_chunks_mut::<64>() guarantees 64 valid bytes for store.
         unsafe {
             vst1q_u8_x4(
                 dst.as_mut_ptr(),
@@ -264,7 +270,9 @@ unsafe fn slice_xor_neon(input: &[u8], out: &mut [u8]) {
     for (src, dst) in in16.iter().zip(out16.iter_mut()) {
         // SAFETY: chunks_exact(16) guarantees 16 valid bytes.
         let s = unsafe { vld1q_u8(src.as_ptr()) };
+        // SAFETY: as_chunks_mut::<16>() guarantees 16 valid bytes for load.
         let d = unsafe { vld1q_u8(dst.as_ptr()) };
+        // SAFETY: as_chunks_mut::<16>() guarantees 16 valid bytes for store.
         unsafe { vst1q_u8(dst.as_mut_ptr(), veorq_u8(d, s)) };
     }
 
@@ -346,11 +354,13 @@ unsafe fn lut_xor_avx2_prebuilt(
     // Broadcast 16-byte tables to both 128-bit lanes of 256-bit registers.
     let low_tbl: __m256i = {
         use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
+        // SAFETY: `low` is a valid 16-byte array, enough for a 128-bit load.
         let lo128: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
         _mm256_broadcastsi128_si256(lo128)
     };
     let high_tbl: __m256i = {
         use core::arch::x86_64::{__m128i, _mm_loadu_si128, _mm256_broadcastsi128_si256};
+        // SAFETY: `high` is a valid 16-byte array, enough for a 128-bit load.
         let hi128: __m128i = unsafe { _mm_loadu_si128(high.as_ptr().cast()) };
         _mm256_broadcastsi128_si256(hi128)
     };
@@ -362,6 +372,7 @@ unsafe fn lut_xor_avx2_prebuilt(
     for (s_chunk, d_chunk) in src32.iter().zip(dst32.iter_mut()) {
         // SAFETY: chunks_exact(32) guarantees 32 valid bytes for load/store.
         let sv = unsafe { _mm256_loadu_si256(s_chunk.as_ptr().cast()) };
+        // SAFETY: as_chunks_mut::<32>() guarantees 32 valid bytes for load.
         let dv = unsafe { _mm256_loadu_si256(d_chunk.as_ptr().cast()) };
         let lo = _mm256_and_si256(sv, nibble_mask);
         let hi = _mm256_and_si256(_mm256_srli_epi64::<4>(sv), nibble_mask);
@@ -369,6 +380,7 @@ unsafe fn lut_xor_avx2_prebuilt(
             _mm256_shuffle_epi8(low_tbl, lo),
             _mm256_shuffle_epi8(high_tbl, hi),
         );
+        // SAFETY: as_chunks_mut::<32>() guarantees 32 valid bytes for store.
         unsafe {
             _mm256_storeu_si256(d_chunk.as_mut_ptr().cast(), _mm256_xor_si256(dv, product));
         }
@@ -397,7 +409,9 @@ unsafe fn lut_xor_ssse3_prebuilt(
         _mm_storeu_si128, _mm_xor_si128,
     };
 
+    // SAFETY: `low` is a valid 16-byte array, enough for a 128-bit load.
     let low_tbl: __m128i = unsafe { _mm_loadu_si128(low.as_ptr().cast()) };
+    // SAFETY: `high` is a valid 16-byte array, enough for a 128-bit load.
     let high_tbl: __m128i = unsafe { _mm_loadu_si128(high.as_ptr().cast()) };
     let nibble_mask: __m128i = _mm_set1_epi8(0x0f);
 
@@ -405,7 +419,9 @@ unsafe fn lut_xor_ssse3_prebuilt(
     let (dst16, dst_tail) = dst.as_chunks_mut::<16>();
 
     for (s_chunk, d_chunk) in src16.iter().zip(dst16.iter_mut()) {
+        // SAFETY: as_chunks::<16>() guarantees 16 valid bytes for load.
         let sv = unsafe { _mm_loadu_si128(s_chunk.as_ptr().cast()) };
+        // SAFETY: as_chunks_mut::<16>() guarantees 16 valid bytes for load.
         let dv = unsafe { _mm_loadu_si128(d_chunk.as_ptr().cast()) };
         let lo = _mm_and_si128(sv, nibble_mask);
         let hi = _mm_and_si128(_mm_srli_epi64::<4>(sv), nibble_mask);
@@ -413,6 +429,7 @@ unsafe fn lut_xor_ssse3_prebuilt(
             _mm_shuffle_epi8(low_tbl, lo),
             _mm_shuffle_epi8(high_tbl, hi),
         );
+        // SAFETY: as_chunks_mut::<16>() guarantees 16 valid bytes for store.
         unsafe {
             _mm_storeu_si128(d_chunk.as_mut_ptr().cast(), _mm_xor_si128(dv, product));
         }
@@ -574,6 +591,7 @@ unsafe fn lut_xor_neon_prebuilt(
 
     // SAFETY: low and high are valid 16-byte arrays.
     let low_tbl: uint8x16_t = unsafe { vld1q_u8(low.as_ptr()) };
+    // SAFETY: `high` is a valid 16-byte array for a 128-bit load.
     let high_tbl: uint8x16_t = unsafe { vld1q_u8(high.as_ptr()) };
     let nibble_mask: uint8x16_t = vdupq_n_u8(0x0f);
 
@@ -583,10 +601,12 @@ unsafe fn lut_xor_neon_prebuilt(
     for (s_chunk, d_chunk) in src16.iter().zip(dst16.iter_mut()) {
         // SAFETY: chunks_exact(16) guarantees 16 valid bytes.
         let sv = unsafe { vld1q_u8(s_chunk.as_ptr()) };
+        // SAFETY: as_chunks_mut::<16>() guarantees 16 valid bytes for load.
         let dv = unsafe { vld1q_u8(d_chunk.as_ptr()) };
         let lo = vandq_u8(sv, nibble_mask);
         let hi = vandq_u8(vshrq_n_u8::<4>(sv), nibble_mask);
         let product = veorq_u8(vqtbl1q_u8(low_tbl, lo), vqtbl1q_u8(high_tbl, hi));
+        // SAFETY: as_chunks_mut::<16>() guarantees 16 valid bytes for store.
         unsafe { vst1q_u8(d_chunk.as_mut_ptr(), veorq_u8(dv, product)) };
     }
 

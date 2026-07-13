@@ -409,6 +409,7 @@ fn get_pair_mut_flat16(
     if i == j || i >= work.lanes() || j >= work.lanes() {
         return None;
     }
+    // SAFETY: i != j and both < lanes (checked above); lane_mut(i) and lane_mut(j) return slices over disjoint lanes, so the two &mut [u16] from the raw-pointer reborrow never alias.
     unsafe {
         let ptr = work as *mut FlatWork16;
         let lane_i = (*ptr).lane_mut(i);
@@ -441,6 +442,7 @@ fn dit4_decode_at_16(
         let b = a + dist;
         let c = a + dist * 2;
 
+        // SAFETY: d < work.lanes() (checked above) and a<b<c<d are distinct (dist >= 1), so the four lane_mut calls via the raw *mut reborrow return four disjoint, non-aliasing lane slices.
         unsafe {
             let ptr = work as *mut FlatWork16;
             let a_ref = &mut *(*ptr).lane_mut(a);

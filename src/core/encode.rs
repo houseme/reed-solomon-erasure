@@ -297,6 +297,8 @@ impl<F: Field> ReedSolomon<F> {
             .map(|d| unsafe { &*(d.as_ref() as *const [F::Elem] as *const [u8]) })
             .collect();
         let _parity_len = parity.len();
+        // SAFETY: only called when size_of::<F::Elem>() == 1, so F::Elem is u8.
+        // u8 and F::Elem share layout (align=1, size=1), so the pointer cast is valid.
         let mut _parity_u8: smallvec::SmallVec<[&mut [u8]; 32]> = parity
             .iter_mut()
             .map(|p| unsafe { &mut *(p.as_mut() as *mut [F::Elem] as *mut [u8]) })
@@ -306,6 +308,8 @@ impl<F: Field> ReedSolomon<F> {
             smallvec::SmallVec::with_capacity(parity_rows.len());
         for r in parity_rows.iter() {
             let slice: &[F::Elem] = r;
+            // SAFETY: only called when size_of::<F::Elem>() == 1, so F::Elem is u8;
+            // ptr/len come from a live `&[F::Elem]`, valid for `slice.len()` bytes.
             _parity_refs.push(unsafe {
                 core::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len())
             });

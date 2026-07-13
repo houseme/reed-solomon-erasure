@@ -17,7 +17,9 @@ pub(crate) struct FlatWork16 {
     len_elems: usize,
 }
 
+// SAFETY: FlatWork16 uniquely owns its heap buffer via a raw *mut u16, so moving it across threads is sound like a Box<[u16]>.
 unsafe impl Send for FlatWork16 {}
+// SAFETY: shared (&self) access only reads immutable metadata or returns lane slices bound to the borrow, so &FlatWork16 is safe to share across threads.
 unsafe impl Sync for FlatWork16 {}
 
 impl FlatWork16 {
@@ -26,6 +28,7 @@ impl FlatWork16 {
         let len_bytes = len_elems * core::mem::size_of::<u16>();
         let layout =
             Layout::from_size_align(len_bytes, WORK_ALIGNMENT).expect("FlatWork16 layout overflow");
+        // SAFETY: layout is non-zero-sized (len_bytes = lanes*lane_len*2 > 0 for the codec's inputs) with 64-byte alignment; zeroed bytes are a valid u16 bit pattern, and a null return is handled just below.
         let ptr = unsafe { alloc_zeroed(layout) }.cast::<u16>();
         if ptr.is_null() {
             handle_alloc_error(layout);
@@ -49,12 +52,14 @@ impl FlatWork16 {
     pub(crate) fn lane(&self, idx: usize) -> &[u16] {
         debug_assert!(idx < self.lanes);
         let start = idx * self.lane_len;
+        // SAFETY: idx < lanes (debug-asserted), so start..start+lane_len lies within the allocation; the &self borrow ties the slice lifetime to the buffer.
         unsafe { core::slice::from_raw_parts(self.ptr.add(start), self.lane_len) }
     }
 
     pub(crate) fn lane_mut(&mut self, idx: usize) -> &mut [u16] {
         debug_assert!(idx < self.lanes);
         let start = idx * self.lane_len;
+        // SAFETY: idx < lanes (debug-asserted), so start..start+lane_len lies within the allocation; the &mut self borrow guarantees the returned slice is unique.
         unsafe { core::slice::from_raw_parts_mut(self.ptr.add(start), self.lane_len) }
     }
 
@@ -71,6 +76,7 @@ impl FlatWork16 {
         let mut views: SmallVec<[&mut [u16]; 96]> = (0..lanes)
             .map(|i| {
                 let start = i * self.lane_len;
+                // SAFETY: i in 0..lanes with lanes <= self.lanes and size <= lane_len, so each start=i*lane_len yields a distinct, non-overlapping, in-bounds range of length size; the collected &mut slices are disjoint.
                 unsafe {
                     let ptr = self.ptr.add(start);
                     &mut *core::ptr::slice_from_raw_parts_mut(ptr, size)
@@ -87,6 +93,7 @@ impl Drop for FlatWork16 {
             let len_bytes = self.len_elems * core::mem::size_of::<u16>();
             let layout = Layout::from_size_align(len_bytes, WORK_ALIGNMENT)
                 .expect("FlatWork16 layout overflow");
+            // SAFETY: ptr came from alloc_zeroed with this exact layout (same len_bytes and 64-byte align), and len_elems > 0 guards against deallocating a zero-sized allocation.
             unsafe { dealloc(self.ptr.cast::<u8>(), layout) };
         }
     }

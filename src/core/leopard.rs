@@ -149,7 +149,10 @@ pub fn leopard_aligned_shard_len(data_len: usize, data_shards: usize) -> usize {
     clamped - (clamped % LEOPARD_SHARD_MULTIPLE)
 }
 
+// Colocated with `leopard_aligned_shard_len`; the dispatch helpers below are
+// unrelated, so allow the "items after test module" style lint here.
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod leopard_shard_len_tests {
     use super::{LEOPARD_SHARD_MULTIPLE, leopard_aligned_shard_len, validate_leopard_shard_len};
 

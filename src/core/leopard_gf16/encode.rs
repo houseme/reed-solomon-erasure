@@ -339,6 +339,7 @@ fn dit4_at_16(
         let d = a + dist * 3;
 
         if d < work.len() {
+            // SAFETY: d < work.len() (checked above) and a<b<c<d are distinct (dist >= 1), so reading the four &mut [u16] elements through the raw *mut and reborrowing yields four disjoint, non-aliasing lanes.
             let (a_ref, b_ref, c_ref, d_ref) = unsafe {
                 let ptr = work.as_mut_ptr();
                 let a_ref = &mut *(*ptr.add(a));

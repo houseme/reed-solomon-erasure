@@ -364,6 +364,11 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f, ") -> bool {{").unwrap();
     writeln!(f, "    match (data_shard_count, parity_shard_count) {{").unwrap();
     for &(d, p) in configs {
+        writeln!(
+            f,
+            "        // SAFETY: 运行时特性检测已确认 ISA 可用后才分发到此臂。"
+        )
+        .unwrap();
         writeln!(f, "        ({d}, {p}) => unsafe {{").unwrap();
         writeln!(
             f,
@@ -401,6 +406,11 @@ fn generate_encode_fn_avx2(f: &mut File, d: usize, p: usize) {
     writeln!(f, "        parity: &mut [&mut [u8]],").unwrap();
     writeln!(f, "        shard_len: usize,").unwrap();
     writeln!(f, "    ) {{").unwrap();
+    writeln!(
+        f,
+        "        // SAFETY: 所在 fn 是 #[target_feature],调用方保证 ISA 可用(见 # Safety 文档),所有指针均为非对齐 load 且访问在 shard_len 界内。"
+    )
+    .unwrap();
     writeln!(f, "        unsafe {{").unwrap();
 
     writeln!(
@@ -604,6 +614,11 @@ fn generate_encode_codegen_neon(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f, ") -> bool {{").unwrap();
     writeln!(f, "    match (data_shard_count, parity_shard_count) {{").unwrap();
     for &(d, p) in configs {
+        writeln!(
+            f,
+            "        // SAFETY: 运行时特性检测已确认 ISA 可用后才分发到此臂。"
+        )
+        .unwrap();
         writeln!(f, "        ({d}, {p}) => unsafe {{").unwrap();
         writeln!(
             f,
@@ -652,6 +667,11 @@ fn generate_encode_fn_neon(f: &mut File, d: usize, p: usize) {
     .unwrap();
     for pi in 0..p {
         for di in 0..d {
+            writeln!(
+                f,
+                "        // SAFETY: 所在 fn 是 #[target_feature] 且 aarch64 上 NEON 恒可用;vld1q_u8 对 16 字节乘法表行做非对齐 load。"
+            )
+            .unwrap();
             writeln!(f, "        let (coef_low_{pi}_{di}, coef_high_{pi}_{di}): (uint8x16_t, uint8x16_t) = unsafe {{").unwrap();
             writeln!(f, "            let c = parity_rows[{pi}][{di}];").unwrap();
             writeln!(
@@ -678,6 +698,11 @@ fn generate_encode_fn_neon(f: &mut File, d: usize, p: usize) {
     .unwrap();
     writeln!(f, "        let mut offset = 0usize;").unwrap();
     writeln!(f, "        while offset < bytes_done {{").unwrap();
+    writeln!(
+        f,
+        "        // SAFETY: 所在 fn 是 #[target_feature],调用方保证 ISA 可用(见 # Safety 文档),所有指针均为非对齐 load 且访问在 shard_len 界内。"
+    )
+    .unwrap();
     writeln!(f, "        unsafe {{").unwrap();
 
     // Load all data shards

@@ -14,7 +14,13 @@ pub(super) struct FlatWork {
     len: usize,
 }
 
+// SAFETY: FlatWork uniquely owns a heap allocation of plain `u8` bytes with no
+// interior mutability; moving it across threads transfers that ownership and
+// cannot create aliased references to the buffer.
 unsafe impl Send for FlatWork {}
+// SAFETY: a shared `&FlatWork` only hands out immutable views; every mutation
+// goes through `&mut self`, which the borrow checker keeps exclusive. There is
+// no interior mutability or shared mutable state.
 unsafe impl Sync for FlatWork {}
 
 impl FlatWork {

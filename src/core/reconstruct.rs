@@ -664,6 +664,9 @@ impl<F: Field> ReedSolomon<F> {
         let mut input_data: Vec<Option<&[u8]>> = Vec::with_capacity(total);
         for i in 0..total {
             if let Some(ptr) = raw_data[i] {
+                // SAFETY: `ptr` was captured from a present shard `slices[i].get()`
+                // whose length equals `shard_len` (all present shards share it);
+                // F::Elem = u8 for leopard, and the shard storage outlives `src`.
                 let src: &[u8] = unsafe { core::slice::from_raw_parts(ptr, shard_len) };
                 input_data.push(Some(src));
             } else {
@@ -683,6 +686,8 @@ impl<F: Field> ReedSolomon<F> {
             if present[i] {
                 continue;
             }
+            // SAFETY: F::Elem = u8 for all leopard codec families, so `[u8]` and
+            // `[F::Elem]` have identical layout and the reinterpret cast is valid.
             let elem_slice: &[F::Elem] =
                 unsafe { &*(output_bufs[i].as_slice() as *const [u8] as *const [F::Elem]) };
             match slices[i].get_or_initialize(shard_len) {
