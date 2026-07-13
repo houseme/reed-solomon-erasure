@@ -112,6 +112,92 @@ pub(crate) fn validate_leopard_shard_len(shard_len: usize) -> Result<(), Error> 
     Ok(())
 }
 
+/// Required byte multiple (and cache-line alignment) of every Leopard shard.
+///
+/// Leopard shards must be a non-zero multiple of this value; see
+/// [`validate_leopard_shard_len`]. Equal to
+/// [`SHARD_ALIGNMENT`](crate::galois_8::SHARD_ALIGNMENT).
+pub const LEOPARD_SHARD_MULTIPLE: usize = 64;
+
+/// Computes a per-shard length, in bytes, that Leopard will accept for a payload
+/// of `data_len` bytes spread across `data_shards` data shards.
+///
+/// The result is **always a non-zero multiple of [`LEOPARD_SHARD_MULTIPLE`]**, so
+/// it is guaranteed to pass [`validate_leopard_shard_len`], for every input:
+///
+/// * `data_len == 0` (or any payload smaller than one block) clamps up to
+///   [`LEOPARD_SHARD_MULTIPLE`].
+/// * `data_shards == 0` is treated as a single shard (no divide-by-zero).
+/// * Payloads near [`usize::MAX`] saturate to the largest multiple of
+///   [`LEOPARD_SHARD_MULTIPLE`] that fits in a `usize`, rather than overflowing.
+pub fn leopard_aligned_shard_len(data_len: usize, data_shards: usize) -> usize {
+    // A zero shard count is nonsensical; treat the whole payload as one shard
+    // instead of dividing by zero.
+    let shards = if data_shards == 0 { 1 } else { data_shards };
+
+    // Bytes per shard, rounding the payload up so every byte has a home.
+    // `div_ceil` cannot overflow and `shards >= 1`, so this is total.
+    let per_shard = data_len.div_ceil(shards);
+
+    // Round up to the next multiple of LEOPARD_SHARD_MULTIPLE. `per_shard +
+    // (MULTIPLE - remainder)` can overflow near usize::MAX, so saturate.
+    let remainder = per_shard % LEOPARD_SHARD_MULTIPLE;
+    let rounded = if remainder == 0 {
+        per_shard
+    } else {
+        per_shard.saturating_add(LEOPARD_SHARD_MULTIPLE - remainder)
+    };
+
+    // Guarantee a non-zero result (covers data_len == 0), then floor back onto a
+    // 64-boundary in case the saturation above landed on usize::MAX (which is
+    // not itself a multiple of 64). For all normal inputs this is a no-op.
+    let clamped = rounded.max(LEOPARD_SHARD_MULTIPLE);
+    clamped - (clamped % LEOPARD_SHARD_MULTIPLE)
+}
+
+#[cfg(test)]
+mod leopard_shard_len_tests {
+    use super::{LEOPARD_SHARD_MULTIPLE, leopard_aligned_shard_len, validate_leopard_shard_len};
+
+    #[test]
+    fn zero_data_len_clamps_to_multiple() {
+        let len = leopard_aligned_shard_len(0, 4);
+        assert_eq!(len, LEOPARD_SHARD_MULTIPLE);
+        assert!(validate_leopard_shard_len(len).is_ok());
+    }
+
+    #[test]
+    fn non_multiple_payload_rounds_up() {
+        // ceil(100 / 4) = 25 bytes/shard -> rounds up to 64.
+        let len = leopard_aligned_shard_len(100, 4);
+        assert_eq!(len, 64);
+        // 65 bytes/shard -> rounds up to 128.
+        let len2 = leopard_aligned_shard_len(65 * 4, 4);
+        assert_eq!(len2, 128);
+        assert!(len.is_multiple_of(LEOPARD_SHARD_MULTIPLE));
+        assert!(validate_leopard_shard_len(len).is_ok());
+        assert!(validate_leopard_shard_len(len2).is_ok());
+    }
+
+    #[test]
+    fn zero_shards_treated_as_one() {
+        // ceil(200 / 1) = 200 -> rounds up to 256.
+        let len = leopard_aligned_shard_len(200, 0);
+        assert_eq!(len, 256);
+        assert!(validate_leopard_shard_len(len).is_ok());
+    }
+
+    #[test]
+    fn near_usize_max_saturates_to_valid_multiple() {
+        let len = leopard_aligned_shard_len(usize::MAX, 1);
+        assert_ne!(len, 0);
+        assert!(len.is_multiple_of(LEOPARD_SHARD_MULTIPLE));
+        assert!(validate_leopard_shard_len(len).is_ok());
+        // Largest 64-multiple representable in a usize.
+        assert_eq!(len, usize::MAX - (usize::MAX % LEOPARD_SHARD_MULTIPLE));
+    }
+}
+
 pub(crate) fn build_family_state<F: Field>(
     codec_family: CodecFamily,
     data_shards: usize,
