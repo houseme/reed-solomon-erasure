@@ -3,13 +3,14 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+// Only the x86_64/aarch64 C-SIMD backends need the `cc` compiler crate; the
+// pure-Rust `simd-vsx` backend does not (it declares no `cc`/`libc` deps).
 #[cfg(any(
     feature = "simd-neon",
     feature = "simd-ssse3",
     feature = "simd-avx2",
     feature = "simd-avx512",
     feature = "simd-gfni",
-    feature = "simd-vsx",
 ))]
 extern crate cc;
 
@@ -17,13 +18,14 @@ const FIELD_SIZE: usize = 256;
 
 const GENERATING_POLYNOMIAL: usize = 29;
 
+// The C-SIMD build only ever targets x86_64/aarch64 (see `compile_simd_c`);
+// `simd-vsx` is a pure-Rust backend and must NOT drag in the `cc` build path.
 #[cfg(any(
     feature = "simd-neon",
     feature = "simd-ssse3",
     feature = "simd-avx2",
     feature = "simd-avx512",
     feature = "simd-gfni",
-    feature = "simd-vsx",
 ))]
 #[derive(Copy, Clone)]
 enum SimdCBuildTarget {
@@ -202,7 +204,11 @@ fn should_compile_simd_c_for_target() -> bool {
     let target_env = target_cfg("CARGO_CFG_TARGET_ENV");
     let target_os = target_cfg("CARGO_CFG_TARGET_OS");
 
-    let arch_supported = matches!(target_arch.as_str(), "x86_64" | "aarch64" | "powerpc64");
+    // The bundled `simd_c/reedsolomon.c` only implements x86 (SSSE3/AVX) and
+    // aarch64 (NEON) kernels — never PowerPC. On ppc64 the VSX path is pure Rust
+    // and `SIMD_C_BACKEND` is never selected, so compiling the C file there would
+    // be both pointless and liable to fail.
+    let arch_supported = matches!(target_arch.as_str(), "x86_64" | "aarch64");
     let env_supported = target_env != "msvc";
     let os_supported = !matches!(target_os.as_str(), "android" | "ios");
 
@@ -276,13 +282,17 @@ fn compile_simd_c() {
         .compile("reedsolomon");
 }
 
+// Fallback stub for every build that does NOT compile the C SIMD backend. This
+// must be the exact negation of the real `compile_simd_c` cfg above (the five
+// x86_64/aarch64 features) — `simd-vsx` is deliberately excluded, otherwise a
+// `simd-vsx`-only build would match neither definition and `main` would call an
+// undefined `compile_simd_c`.
 #[cfg(not(any(
     feature = "simd-neon",
     feature = "simd-ssse3",
     feature = "simd-avx2",
     feature = "simd-avx512",
-    feature = "simd-gfni",
-    feature = "simd-vsx"
+    feature = "simd-gfni"
 )))]
 fn compile_simd_c() {}
 

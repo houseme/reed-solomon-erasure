@@ -9,6 +9,15 @@
 //! the missing data.
 #![allow(dead_code)]
 #![cfg_attr(not(feature = "std"), no_std)]
+// The PowerPC VSX backend uses `core::arch::powerpc64` intrinsics and a
+// `#[target_feature(enable = "vsx")]`, both of which are still unstable in Rust.
+// `simd-vsx` therefore requires a nightly toolchain; the feature gates are only
+// activated when actually building that backend, so stable builds for every
+// other target are unaffected.
+#![cfg_attr(
+    all(feature = "simd-vsx", target_arch = "powerpc64"),
+    feature(stdarch_powerpc, powerpc_target_feature)
+)]
 
 #[cfg(test)]
 #[macro_use]
