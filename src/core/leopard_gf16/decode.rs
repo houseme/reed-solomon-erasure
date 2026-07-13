@@ -161,21 +161,19 @@ pub(crate) fn reconstruct_with_tables16(
     let ifft_plan = build_ifft_decode_dit16_plan(input_count, driver.n, &tables.fft_skew);
     let fft_plan = super::build_fft_dit16_plan(driver.work_size, driver.n, &tables.fft_skew);
 
-    // Convert all present input shards from user byte layout to Go's GF16 split layout.
-    let converted_inputs: Vec<Option<Vec<u8>>> = input_data
+    // Convert each present input shard from user byte layout into aligned
+    // split-layout `u16` elements (alignment- and endian-safe).
+    let converted_inputs: Vec<Option<Vec<u16>>> = input_data
         .iter()
-        .map(|opt| {
-            opt.map(|bytes| {
-                let mut split = vec![0u8; bytes.len()];
-                super::ops::user_bytes_to_work_bytes(bytes, &mut split);
-                split
-            })
-        })
+        .map(|opt| opt.map(super::ops::user_bytes_to_work_u16))
         .collect();
 
     let chunk_cap = core::cmp::min(shard_u16_len, driver.chunk_size);
     let mut work = FlatWork16::new(driver.n, chunk_cap);
     let mut scratch: Vec<u16> = Vec::new();
+    // Reusable aligned scratch holding a chunk of recovered u16 elements before
+    // they are encoded back into the byte output as little-endian.
+    let mut out_scratch: Vec<u16> = Vec::new();
 
     let mut offset = 0usize;
     while offset < shard_u16_len {
@@ -191,12 +189,9 @@ pub(crate) fn reconstruct_with_tables16(
         for i in 0..data_shards {
             let work_idx = driver.m + i;
             if present[i] {
-                let data_bytes = converted_inputs[i]
+                let data_u16 = converted_inputs[i]
                     .as_ref()
                     .ok_or(Error::TooFewShardsPresent)?;
-                let data_u16: &[u16] = unsafe {
-                    core::slice::from_raw_parts(data_bytes.as_ptr().cast::<u16>(), shard_u16_len)
-                };
                 mulgf16(
                     work.lane_mut(work_idx),
                     &data_u16[offset..end],
@@ -210,12 +205,9 @@ pub(crate) fn reconstruct_with_tables16(
         for i in 0..parity_shards {
             let shard_idx = data_shards + i;
             if present[shard_idx] {
-                let data_bytes = converted_inputs[shard_idx]
+                let data_u16 = converted_inputs[shard_idx]
                     .as_ref()
                     .ok_or(Error::TooFewShardsPresent)?;
-                let data_u16: &[u16] = unsafe {
-                    core::slice::from_raw_parts(data_bytes.as_ptr().cast::<u16>(), shard_u16_len)
-                };
                 mulgf16(
                     work.lane_mut(i),
                     &data_u16[offset..end],
@@ -255,14 +247,19 @@ pub(crate) fn reconstruct_with_tables16(
             let inv_err = (MODULUS16 as u16).wrapping_sub(err_locs[err_idx]);
 
             let out_bytes = &mut *outputs[i];
-            let out_u16: &mut [u16] = unsafe {
-                core::slice::from_raw_parts_mut(out_bytes.as_mut_ptr().cast::<u16>(), shard_u16_len)
-            };
+            if out_scratch.len() < size {
+                out_scratch.resize(size, 0);
+            }
             mulgf16(
-                &mut out_u16[offset..end],
+                &mut out_scratch[..size],
                 work.lane(work_idx),
                 inv_err,
                 tables,
+            );
+            // Write recovered elements back as split-layout little-endian bytes.
+            super::ops::u16_to_work_bytes(
+                &out_scratch[..size],
+                &mut out_bytes[offset * 2..end * 2],
             );
         }
         offset = end;

@@ -706,3 +706,77 @@ fn test_leopard_gf16_encode_coefficients() {
         }
     }
 }
+
+/// Regression for the GF16 u16-reinterpret soundness fix: shard buffers that
+/// start at an odd byte offset are 2-byte-misaligned for `u16`. The previous
+/// implementation reinterpreted `&[u8]` as `&[u16]` via `from_raw_parts`
+/// (undefined behaviour on such buffers). Encode + reconstruct over
+/// odd-offset buffers must succeed and match the aligned result. Run under
+/// `cargo +nightly miri test` to exercise the alignment guarantee directly.
+#[test]
+fn test_gf16_reconstruct_unaligned_odd_offset_buffers() {
+    let data_shards = 4usize;
+    let parity_shards = 2usize;
+    let total_shards = data_shards + parity_shards;
+    let shard_size = 128usize; // multiple of 64
+
+    // Aligned reference encode.
+    let data: Vec<Vec<u8>> = (0..data_shards)
+        .map(|i| {
+            (0..shard_size)
+                .map(|j| ((i * 31 + j * 17) & 0xFF) as u8)
+                .collect()
+        })
+        .collect();
+    let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; parity_shards];
+    encode::encode_with_tables16(data_shards, parity_shards, &data, &mut parity).unwrap();
+
+    // All shards in order (data then parity).
+    let mut all: Vec<Vec<u8>> = Vec::new();
+    for d in &data {
+        all.push(d.clone());
+    }
+    for p in &parity {
+        all.push(p.clone());
+    }
+
+    // Back each shard with `shard_size + 1` bytes and use the sub-slice `[1..]`
+    // so the data pointer is offset by one byte (odd address → u16-misaligned).
+    let mut backing: Vec<Vec<u8>> = (0..total_shards)
+        .map(|_| vec![0u8; shard_size + 1])
+        .collect();
+    for (i, b) in backing.iter_mut().enumerate() {
+        b[1..].copy_from_slice(&all[i]);
+    }
+
+    // Lose data shard 0; inputs borrow the odd-offset sub-slices directly.
+    let present: Vec<bool> = (0..total_shards).map(|i| i != 0).collect();
+    let input_data: Vec<Option<&[u8]>> = backing
+        .iter()
+        .enumerate()
+        .map(|(i, b)| if i != 0 { Some(&b[1..]) } else { None })
+        .collect();
+
+    // Odd-offset output buffers.
+    let mut out_backing: Vec<Vec<u8>> = (0..total_shards)
+        .map(|_| vec![0u8; shard_size + 1])
+        .collect();
+    let mut outputs: Vec<&mut [u8]> = out_backing.iter_mut().map(|b| &mut b[1..]).collect();
+
+    decode::reconstruct_with_tables16(
+        &present,
+        &mut outputs,
+        &input_data,
+        data_shards,
+        parity_shards,
+        init_leopard_gf16_tables(),
+    )
+    .unwrap();
+
+    // Recovered shard 0 must match the aligned original byte-for-byte.
+    assert_eq!(
+        &out_backing[0][1..],
+        all[0].as_slice(),
+        "odd-offset reconstruct mismatch for shard 0"
+    );
+}

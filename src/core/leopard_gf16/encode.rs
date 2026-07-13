@@ -102,21 +102,14 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
     // Convert data from user byte layout to Go's GF16 split layout.
     // Go interprets each 64-byte chunk as: element i = byte[i] | (byte[i+32] << 8).
     // We rearrange bytes so that `as u16 LE` gives the same elements.
-    let converted_data: Vec<Vec<u8>> = data
+    // Convert each shard from user byte layout into aligned split-layout `u16`
+    // elements (alignment- and endian-safe; see `user_bytes_to_work_u16`).
+    let converted_data: Vec<Vec<u16>> = data
         .iter()
-        .map(|d| {
-            let bytes = d.as_ref();
-            let mut split = vec![0u8; bytes.len()];
-            super::ops::user_bytes_to_work_bytes(bytes, &mut split);
-            split
-        })
+        .map(|d| super::ops::user_bytes_to_work_u16(d.as_ref()))
         .collect();
 
-    // Reinterpret split-layout data as u16 slices.
-    let data_u16: Vec<&[u16]> = converted_data
-        .iter()
-        .map(|d| unsafe { core::slice::from_raw_parts(d.as_ptr().cast::<u16>(), shard_u16_len) })
-        .collect();
+    let data_u16: Vec<&[u16]> = converted_data.iter().map(|d| d.as_slice()).collect();
 
     let mut offset = 0usize;
     while offset < shard_u16_len {
@@ -173,16 +166,13 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
 
             fft_dit16_with_plan(&mut work_views[..driver.m], &fft_plan, tables, &mut scratch);
 
-            // Write back parity shards (u16 → u8 reinterpretation).
+            // Write back parity shards as split-layout little-endian bytes.
             for (idx, output) in parity.iter_mut().enumerate() {
                 let out_bytes = output.as_mut();
-                let out_u16: &mut [u16] = unsafe {
-                    core::slice::from_raw_parts_mut(
-                        out_bytes.as_mut_ptr().cast::<u16>(),
-                        shard_u16_len,
-                    )
-                };
-                out_u16[offset..end].copy_from_slice(&work_views[idx][..size]);
+                super::ops::u16_to_work_bytes(
+                    &work_views[idx][..size],
+                    &mut out_bytes[offset * 2..end * 2],
+                );
             }
         });
         offset = end;
