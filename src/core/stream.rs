@@ -337,8 +337,14 @@ fn read_present_cursors_with_mode(
         .max()
         .unwrap_or(0);
     if actual_len != 0 {
-        for &idx in present_indices {
-            buffers[idx].resize(actual_len, 0);
+        // Within a block, every present shard must read the same number of
+        // bytes. A present shard that hits EOF early (fewer bytes than the
+        // others) is truncated or length-mismatched and must not be silently
+        // zero-padded into reconstruction, which would produce wrong recovered
+        // data while returning Ok. This matches the in-memory `reconstruct`'s
+        // `IncorrectShardSize` check.
+        if let Some(&(bad, _)) = read_lengths.iter().find(|(_, total)| *total != actual_len) {
+            return Err(StreamError::codec(bad, crate::Error::IncorrectShardSize));
         }
     }
 
