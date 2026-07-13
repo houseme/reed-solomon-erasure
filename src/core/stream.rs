@@ -203,13 +203,12 @@ fn use_parallel_stream_io(options: &StreamOptions, stream_count: usize) -> bool 
 }
 
 fn use_parallel_stream_io_auto(block_size: usize, stream_count: usize) -> bool {
-    if stream_count < 2 || block_size < 256 * 1024 {
-        return false;
-    }
-    if stream_count <= 6 && block_size <= 1024 * 1024 {
-        return false;
-    }
-
+    // Conservative single threshold: enable parallel I/O only when there are at
+    // least 10 streams and blocks are at least 4 MiB. The two earlier
+    // early-return guards (stream_count<2||block<256KiB and
+    // stream_count<=6&&block<=1MiB) were strictly dominated by this predicate,
+    // dead code that never changed the result, so they are removed to avoid
+    // implying a tiered policy.
     block_size >= 4 * 1024 * 1024 && stream_count >= 10
 }
 
