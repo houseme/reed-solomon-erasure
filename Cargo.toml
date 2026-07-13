@@ -32,7 +32,21 @@ version = "7.0.2"
 authors = ["Darren Ldl <darrenldldev@gmail.com>"]
 edition.workspace = true
 build = "build.rs"
-exclude = ["appveyor.yml", ".travis.yml", "docs", "benches"]
+exclude = [
+    ".gitattributes",
+    ".github",
+    ".gitignore",
+    ".travis.yml",
+    ".typos.toml",
+    "appveyor.yml",
+    "bench_clean_compare.sh",
+    "benches",
+    "benchmarks",
+    "docs",
+    "fuzz",
+    "sage",
+    "scripts",
+]
 rust-version.workspace = true
 description = "Rust implementation of Reed-Solomon erasure coding"
 documentation = "https://docs.rs/rustfs-erasure-codec"
