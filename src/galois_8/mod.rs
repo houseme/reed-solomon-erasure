@@ -12,6 +12,7 @@ mod profile;
 mod scalar;
 pub(crate) mod x86;
 
+pub use crate::{LEOPARD_SHARD_MULTIPLE, leopard_aligned_shard_len};
 pub use aligned::{
     AlignedShard, SHARD_ALIGNMENT, alloc_aligned_shards, alloc_shard_slots, mark_missing_slots,
     shards_to_slots,

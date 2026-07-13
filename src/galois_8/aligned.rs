@@ -1,3 +1,18 @@
+//! 64-byte-aligned shard storage for the Leopard codecs.
+//!
+//! [`AlignedShard`] backs a shard with a heap allocation whose base address is
+//! aligned to [`SHARD_ALIGNMENT`] (64 bytes). This alignment is a **cache and
+//! throughput optimisation, not a correctness requirement**: every SIMD kernel
+//! in this crate loads and stores with unaligned instructions
+//! (`_mm256_loadu_si256` / `_mm512_loadu_si512` / `vld1q_u8` /
+//! `core::ptr::read_unaligned`), so shards at any address decode correctly.
+//! Aligning to a 64-byte cache line simply avoids split-line accesses.
+//!
+//! These helpers serve both Leopard families. LeopardGF8 and LeopardGF16 are
+//! both built on `ReedSolomon<galois_8::Field>` and operate on byte-oriented
+//! shards, so `alloc_aligned` / [`alloc_aligned_shards`] produce correctly
+//! aligned buffers for either codec.
+
 extern crate alloc;
 
 use alloc::alloc::{alloc_zeroed, dealloc, handle_alloc_error};
@@ -12,14 +27,35 @@ use core::slice;
 
 use crate::ShardSlot;
 
+/// Byte alignment of every [`AlignedShard`] allocation (one cache line).
+///
+/// A performance knob, not a safety invariant — see the module docs. Callers
+/// that also need the shard **length** to be a multiple of this value (as the
+/// Leopard codecs require) should size shards with
+/// [`leopard_aligned_shard_len`](crate::galois_8::leopard_aligned_shard_len).
 pub const SHARD_ALIGNMENT: usize = 64;
 
+/// A shard whose backing allocation is aligned to [`SHARD_ALIGNMENT`].
+///
+/// The allocation is exactly `len` bytes (see [`AlignedShard::new_zeroed`]) —
+/// there is no rounding up and no spare capacity. Alignment is a cache/perf
+/// optimisation; correctness never depends on it (see the module docs).
+///
+/// Because `AlignedShard` implements [`AsRef`], [`AsMut`] and [`FromIterator`]
+/// over `u8`, a `Vec<Option<AlignedShard>>` is a valid input to reconstruction:
+/// missing (`None`) slots are materialised through the `FromIterator` impl, so
+/// recovered shards are 64-byte aligned like the rest.
 pub struct AlignedShard {
     ptr: NonNull<u8>,
     len: usize,
 }
 
 impl AlignedShard {
+    /// Allocates a zero-filled shard of **exactly** `len` bytes, 64-byte aligned.
+    ///
+    /// The allocation size equals `len` precisely: there is no round-up to the
+    /// alignment and no excess capacity. `len == 0` yields an empty,
+    /// non-allocating shard backed by a dangling (but aligned) pointer.
     pub fn new_zeroed(len: usize) -> Self {
         if len == 0 {
             return Self {
@@ -143,6 +179,12 @@ unsafe impl Send for AlignedShard {}
 // ensures is exclusive. No interior mutability or shared mutable state exists.
 unsafe impl Sync for AlignedShard {}
 
+/// Allocates `total_shards` zero-filled [`AlignedShard`]s of `shard_len` bytes.
+///
+/// Each shard is exactly `shard_len` bytes and 64-byte aligned. Suitable for
+/// both LeopardGF8 and LeopardGF16, which share the `galois_8::Field` byte
+/// layout. To pick a `shard_len` that Leopard will accept, use
+/// [`leopard_aligned_shard_len`](crate::galois_8::leopard_aligned_shard_len).
 pub fn alloc_aligned_shards(total_shards: usize, shard_len: usize) -> Vec<AlignedShard> {
     (0..total_shards)
         .map(|_| AlignedShard::new_zeroed(shard_len))
@@ -168,6 +210,12 @@ pub fn mark_missing_slots<T>(slots: &mut [ShardSlot<T>], missing_indices: &[usiz
 }
 
 impl crate::ReedSolomon<super::Field> {
+    /// Allocates one 64-byte-aligned shard per shard slot (`data + parity`),
+    /// each `shard_len` bytes.
+    ///
+    /// The buffers work with either Leopard family. Size `shard_len` with
+    /// [`leopard_aligned_shard_len`](crate::galois_8::leopard_aligned_shard_len)
+    /// so the length is a non-zero multiple of 64 as Leopard requires.
     pub fn alloc_aligned(&self, shard_len: usize) -> Vec<AlignedShard> {
         alloc_aligned_shards(self.total_shard_count(), shard_len)
     }

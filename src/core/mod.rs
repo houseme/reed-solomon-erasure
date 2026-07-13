@@ -32,6 +32,7 @@ use crate::matrix::Matrix;
 
 use leopard::FamilyState;
 
+pub use leopard::{LEOPARD_SHARD_MULTIPLE, leopard_aligned_shard_len};
 #[cfg(feature = "std")]
 pub use leopard_gf8::LeopardGf8ProfileStats;
 #[cfg(feature = "std")]
