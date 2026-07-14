@@ -72,8 +72,13 @@ impl crate::Field for Field {
 /// Each `·` is a fixed-multiplier GF(2^8) slice multiply, so this reuses the
 /// SIMD-accelerated [`galois_8::mul_slice`]/[`galois_8::mul_slice_xor`] backends
 /// (ssse3/avx2/gfni/avx512/neon/vsx with runtime dispatch). Byte planes are
-/// de-/re-interleaved in fixed stack chunks to stay `no_std` and allocation
-/// free; the whole path is byte-wise GF(2^8), so it is endian-agnostic.
+/// de-/re-interleaved in fixed stack chunks via [`deinterleave`]/[`interleave`]
+/// (SIMD ssse3/neon, scalar fallback) to stay `no_std` and allocation free; the
+/// whole path is byte-wise GF(2^8), so it is endian-agnostic.
+///
+/// On x86 with GFNI the GF(2^8) multiplies are so fast that a *scalar* byte
+/// de-/re-interleave dominates the runtime (Amdahl); SIMD-ing the layout
+/// conversion is what restores the tower decomposition's speed-up there.
 fn gf16_mul_slice(elem: [u8; 2], input: &[[u8; 2]], out: &mut [[u8; 2]], accumulate: bool) {
     assert_eq!(input.len(), out.len());
 
@@ -93,19 +98,22 @@ fn gf16_mul_slice(elem: [u8; 2], input: &[[u8; 2]], out: &mut [[u8; 2]], accumul
     let mut offset = 0;
     while offset < input.len() {
         let n = core::cmp::min(CHUNK, input.len() - offset);
-        let in_chunk = &input[offset..offset + n];
-        let out_chunk = &mut out[offset..offset + n];
 
-        for (i, e) in in_chunk.iter().enumerate() {
-            ax[i] = e[0];
-            ac[i] = e[1];
-        }
+        // Split the interleaved `[[u8; 2]]` input into the two GF(2^8) byte
+        // planes `ax`/`ac`. `as_flattened` is the safe `&[[u8; 2]] -> &[u8]`
+        // byte view; the split is a pure byte permutation (endian-agnostic).
+        deinterleave(
+            input[offset..offset + n].as_flattened(),
+            &mut ax[..n],
+            &mut ac[..n],
+        );
 
         if accumulate {
-            for (i, e) in out_chunk.iter().enumerate() {
-                ox[i] = e[0];
-                oc[i] = e[1];
-            }
+            deinterleave(
+                out[offset..offset + n].as_flattened(),
+                &mut ox[..n],
+                &mut oc[..n],
+            );
             galois_8::mul_slice_xor(coef_a, &ax[..n], &mut ox[..n]);
             galois_8::mul_slice_xor(coef_b, &ac[..n], &mut ox[..n]);
             galois_8::mul_slice_xor(coef_c, &ax[..n], &mut oc[..n]);
@@ -117,12 +125,235 @@ fn gf16_mul_slice(elem: [u8; 2], input: &[[u8; 2]], out: &mut [[u8; 2]], accumul
             galois_8::mul_slice_xor(coef_d, &ac[..n], &mut oc[..n]);
         }
 
-        for (i, e) in out_chunk.iter_mut().enumerate() {
-            e[0] = ox[i];
-            e[1] = oc[i];
-        }
+        // Re-interleave the `ox`/`oc` planes back into the output elements.
+        interleave(
+            &ox[..n],
+            &oc[..n],
+            out[offset..offset + n].as_flattened_mut(),
+        );
         offset += n;
     }
+}
+
+/// De-interleave interleaved GF(2^16) element bytes into two contiguous GF(2^8)
+/// byte planes: `even[i] = src[2*i]`, `odd[i] = src[2*i + 1]`.
+///
+/// Requires `src.len() == 2 * even.len()` and `even.len() == odd.len()`. This is
+/// a pure byte permutation, so it is endian-agnostic. SIMD-accelerated on
+/// ssse3 (x86_64) and neon (aarch64), with a scalar fallback that also handles
+/// the sub-32-element tail of the SIMD paths.
+#[allow(clippy::needless_return)]
+#[inline]
+fn deinterleave(src: &[u8], even: &mut [u8], odd: &mut [u8]) {
+    debug_assert_eq!(src.len(), even.len() * 2);
+    debug_assert_eq!(even.len(), odd.len());
+
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        // 128-bit ssse3 kernel — covers every AVX2/GFNI CPU too, so the fast
+        // GF(2^8) backends no longer stall on a scalar layout conversion.
+        if is_x86_feature_detected!("ssse3") {
+            // SAFETY: ssse3 confirmed at runtime, matching the callee's
+            // `#[target_feature(enable = "ssse3")]`; the length contract above
+            // matches what the kernel indexes.
+            unsafe {
+                deinterleave_ssse3(src, even, odd);
+                return;
+            }
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: NEON is baseline on aarch64, so calling the
+        // `#[target_feature(enable = "neon")]` fn is sound; the length contract
+        // above matches what the kernel indexes.
+        unsafe {
+            deinterleave_neon(src, even, odd);
+            return;
+        }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    deinterleave_scalar(src, even, odd);
+}
+
+/// Re-interleave two GF(2^8) byte planes into GF(2^16) element bytes:
+/// `dst[2*i] = even[i]`, `dst[2*i + 1] = odd[i]`. Inverse of [`deinterleave`].
+///
+/// Requires `dst.len() == 2 * even.len()` and `even.len() == odd.len()`.
+#[allow(clippy::needless_return)]
+#[inline]
+fn interleave(even: &[u8], odd: &[u8], dst: &mut [u8]) {
+    debug_assert_eq!(dst.len(), even.len() * 2);
+    debug_assert_eq!(even.len(), odd.len());
+
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("ssse3") {
+            // SAFETY: ssse3 confirmed at runtime, matching the callee; the
+            // length contract above matches what the kernel indexes.
+            unsafe {
+                interleave_ssse3(even, odd, dst);
+                return;
+            }
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: NEON is baseline on aarch64; the length contract above matches
+        // what the kernel indexes.
+        unsafe {
+            interleave_neon(even, odd, dst);
+            return;
+        }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    interleave_scalar(even, odd, dst);
+}
+
+fn deinterleave_scalar(src: &[u8], even: &mut [u8], odd: &mut [u8]) {
+    for (i, (e, o)) in even.iter_mut().zip(odd.iter_mut()).enumerate() {
+        *e = src[2 * i];
+        *o = src[2 * i + 1];
+    }
+}
+
+fn interleave_scalar(even: &[u8], odd: &[u8], dst: &mut [u8]) {
+    for (i, (e, o)) in even.iter().zip(odd.iter()).enumerate() {
+        dst[2 * i] = *e;
+        dst[2 * i + 1] = *o;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "ssse3")]
+unsafe fn deinterleave_ssse3(src: &[u8], even: &mut [u8], odd: &mut [u8]) {
+    use core::arch::x86_64::{_mm_loadu_si128, _mm_shuffle_epi8, _mm_storel_epi64};
+
+    // Extract even/odd bytes into the low 8 lanes; the high 8 are zeroed (0x80).
+    #[rustfmt::skip]
+    // SAFETY: the 16-byte array literal backs a valid 128-bit unaligned load of the shuffle mask.
+    let even_mask = unsafe { _mm_loadu_si128([
+        0u8, 2, 4, 6, 8, 10, 12, 14, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+    ].as_ptr().cast()) };
+    #[rustfmt::skip]
+    // SAFETY: the 16-byte array literal backs a valid 128-bit unaligned load of the shuffle mask.
+    let odd_mask = unsafe { _mm_loadu_si128([
+        1u8, 3, 5, 7, 9, 11, 13, 15, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+    ].as_ptr().cast()) };
+
+    let batches = even.len() / 32;
+    for b in 0..batches {
+        let s = &src[b * 64..b * 64 + 64];
+        let e = &mut even[b * 32..b * 32 + 32];
+        let o = &mut odd[b * 32..b * 32 + 32];
+        // SAFETY: the slices above are exactly 64/32/32 bytes, so the four
+        // 128-bit loads at 0/16/32/48 and the eight 8-byte `storel_epi64` stores
+        // at 0/8/16/24 of `e` and `o` are all in-bounds; ssse3 confirmed by caller.
+        unsafe {
+            let p0 = _mm_loadu_si128(s.as_ptr().cast());
+            let p1 = _mm_loadu_si128(s[16..].as_ptr().cast());
+            let p2 = _mm_loadu_si128(s[32..].as_ptr().cast());
+            let p3 = _mm_loadu_si128(s[48..].as_ptr().cast());
+            _mm_storel_epi64(e.as_mut_ptr().cast(), _mm_shuffle_epi8(p0, even_mask));
+            _mm_storel_epi64(e[8..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, even_mask));
+            _mm_storel_epi64(e[16..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, even_mask));
+            _mm_storel_epi64(e[24..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, even_mask));
+            _mm_storel_epi64(o.as_mut_ptr().cast(), _mm_shuffle_epi8(p0, odd_mask));
+            _mm_storel_epi64(o[8..].as_mut_ptr().cast(), _mm_shuffle_epi8(p1, odd_mask));
+            _mm_storel_epi64(o[16..].as_mut_ptr().cast(), _mm_shuffle_epi8(p2, odd_mask));
+            _mm_storel_epi64(o[24..].as_mut_ptr().cast(), _mm_shuffle_epi8(p3, odd_mask));
+        }
+    }
+    let done = batches * 32;
+    deinterleave_scalar(&src[done * 2..], &mut even[done..], &mut odd[done..]);
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "ssse3")]
+unsafe fn interleave_ssse3(even: &[u8], odd: &[u8], dst: &mut [u8]) {
+    use core::arch::x86_64::{
+        _mm_loadu_si128, _mm_storeu_si128, _mm_unpackhi_epi8, _mm_unpacklo_epi8,
+    };
+
+    let batches = even.len() / 32;
+    for b in 0..batches {
+        let e = &even[b * 32..b * 32 + 32];
+        let o = &odd[b * 32..b * 32 + 32];
+        let d = &mut dst[b * 64..b * 64 + 64];
+        // SAFETY: the slices above are exactly 32/32/64 bytes, so the four
+        // 128-bit loads at 0/16 of `e`/`o` and the four 128-bit stores at
+        // 0/16/32/48 of `d` are all in-bounds; ssse3 confirmed by caller.
+        unsafe {
+            let lo = _mm_loadu_si128(e.as_ptr().cast());
+            let hi = _mm_loadu_si128(o.as_ptr().cast());
+            _mm_storeu_si128(d.as_mut_ptr().cast(), _mm_unpacklo_epi8(lo, hi));
+            _mm_storeu_si128(d[16..].as_mut_ptr().cast(), _mm_unpackhi_epi8(lo, hi));
+            let lo2 = _mm_loadu_si128(e[16..].as_ptr().cast());
+            let hi2 = _mm_loadu_si128(o[16..].as_ptr().cast());
+            _mm_storeu_si128(d[32..].as_mut_ptr().cast(), _mm_unpacklo_epi8(lo2, hi2));
+            _mm_storeu_si128(d[48..].as_mut_ptr().cast(), _mm_unpackhi_epi8(lo2, hi2));
+        }
+    }
+    let done = batches * 32;
+    interleave_scalar(&even[done..], &odd[done..], &mut dst[done * 2..]);
+}
+
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn deinterleave_neon(src: &[u8], even: &mut [u8], odd: &mut [u8]) {
+    use core::arch::aarch64::{vld1q_u8, vst1q_u8, vuzp1q_u8, vuzp2q_u8};
+
+    let batches = even.len() / 32;
+    for b in 0..batches {
+        let s = &src[b * 64..b * 64 + 64];
+        let e = &mut even[b * 32..b * 32 + 32];
+        let o = &mut odd[b * 32..b * 32 + 32];
+        // vuzp1q extracts even-indexed bytes, vuzp2q the odd-indexed ones.
+        // SAFETY: the slices above are exactly 64/32/32 bytes, so the 128-bit
+        // loads at 0/16/32/48 of `s` and the 128-bit stores at 0/16 of `e`/`o`
+        // are in-bounds; NEON is baseline on aarch64.
+        unsafe {
+            let p0 = vld1q_u8(s.as_ptr());
+            let p1 = vld1q_u8(s[16..].as_ptr());
+            vst1q_u8(e.as_mut_ptr(), vuzp1q_u8(p0, p1));
+            vst1q_u8(o.as_mut_ptr(), vuzp2q_u8(p0, p1));
+            let p2 = vld1q_u8(s[32..].as_ptr());
+            let p3 = vld1q_u8(s[48..].as_ptr());
+            vst1q_u8(e[16..].as_mut_ptr(), vuzp1q_u8(p2, p3));
+            vst1q_u8(o[16..].as_mut_ptr(), vuzp2q_u8(p2, p3));
+        }
+    }
+    let done = batches * 32;
+    deinterleave_scalar(&src[done * 2..], &mut even[done..], &mut odd[done..]);
+}
+
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn interleave_neon(even: &[u8], odd: &[u8], dst: &mut [u8]) {
+    use core::arch::aarch64::{vld1q_u8, vst1q_u8, vzip1q_u8, vzip2q_u8};
+
+    let batches = even.len() / 32;
+    for b in 0..batches {
+        let e = &even[b * 32..b * 32 + 32];
+        let o = &odd[b * 32..b * 32 + 32];
+        let d = &mut dst[b * 64..b * 64 + 64];
+        // vzip1q/vzip2q interleave the low/high 16 bytes of the two planes.
+        // SAFETY: the slices above are exactly 32/32/64 bytes, so the 128-bit
+        // loads at 0/16 of `e`/`o` and the stores at 0/16/32/48 of `d` are
+        // in-bounds; NEON is baseline on aarch64.
+        unsafe {
+            let lo = vld1q_u8(e.as_ptr());
+            let hi = vld1q_u8(o.as_ptr());
+            vst1q_u8(d.as_mut_ptr(), vzip1q_u8(lo, hi));
+            vst1q_u8(d[16..].as_mut_ptr(), vzip2q_u8(lo, hi));
+            let lo2 = vld1q_u8(e[16..].as_ptr());
+            let hi2 = vld1q_u8(o[16..].as_ptr());
+            vst1q_u8(d[32..].as_mut_ptr(), vzip1q_u8(lo2, hi2));
+            vst1q_u8(d[48..].as_mut_ptr(), vzip2q_u8(lo2, hi2));
+        }
+    }
+    let done = batches * 32;
+    interleave_scalar(&even[done..], &odd[done..], &mut dst[done * 2..]);
 }
 
 /// Type alias of ReedSolomon over GF(2^8).
@@ -540,6 +771,53 @@ mod tests {
                     assert_eq!(acc[i], expected, "mul_slice_add c={c:?} len={len} i={i}");
                 }
             }
+        }
+    }
+
+    // Verifies the SIMD `deinterleave`/`interleave` (whatever path the host CPU
+    // dispatches to) is byte-exact against the scalar reference and round-trips
+    // to the identity, across lengths that exercise the 32-element SIMD batch
+    // boundary and every sub-32 tail. The runtime-dispatch `deinterleave`
+    // compared against `deinterleave_scalar` also cross-checks the active SIMD
+    // kernel on the build target (neon on aarch64, ssse3 on x86_64).
+    #[test]
+    fn deinterleave_interleave_match_scalar_and_round_trip() {
+        // Deterministic interleaved input; distinct even/odd byte streams so a
+        // swapped/misaligned plane would show up immediately.
+        fn src_byte(i: usize) -> u8 {
+            (i.wrapping_mul(37).wrapping_add(i / 2).wrapping_add(1)) as u8
+        }
+
+        let lens = [
+            0usize, 1, 2, 3, 7, 15, 16, 17, 31, 32, 33, 47, 63, 64, 65, 96, 127, 128, 1000, 1024,
+        ];
+
+        for &n in &lens {
+            let src: Vec<u8> = (0..2 * n).map(src_byte).collect();
+
+            let mut even = vec![0u8; n];
+            let mut odd = vec![0u8; n];
+            deinterleave(&src, &mut even, &mut odd);
+
+            let mut even_ref = vec![0u8; n];
+            let mut odd_ref = vec![0u8; n];
+            deinterleave_scalar(&src, &mut even_ref, &mut odd_ref);
+            assert_eq!(even, even_ref, "deinterleave even plane, n={n}");
+            assert_eq!(odd, odd_ref, "deinterleave odd plane, n={n}");
+            for i in 0..n {
+                assert_eq!(even[i], src[2 * i], "even[{i}] != src[2i], n={n}");
+                assert_eq!(odd[i], src[2 * i + 1], "odd[{i}] != src[2i+1], n={n}");
+            }
+
+            let mut dst = vec![0u8; 2 * n];
+            interleave(&even, &odd, &mut dst);
+
+            let mut dst_ref = vec![0u8; 2 * n];
+            interleave_scalar(&even, &odd, &mut dst_ref);
+            assert_eq!(dst, dst_ref, "interleave, n={n}");
+
+            // Full round-trip must reconstruct the original interleaved bytes.
+            assert_eq!(dst, src, "interleave(deinterleave(src)) != src, n={n}");
         }
     }
 }
