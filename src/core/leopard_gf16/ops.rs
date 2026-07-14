@@ -332,22 +332,7 @@ pub(super) fn fwht16_variable(data: &mut [u16]) {
         if dist4 <= n {
             let mut r = 0usize;
             while r < n {
-                let mut off = r;
-                for _ in 0..dist {
-                    let (t0, t1) = fwht2_alt16(data[off], data[off + dist]);
-                    data[off] = t0;
-                    data[off + dist] = t1;
-                    let (t2, t3) = fwht2_alt16(data[off + dist * 2], data[off + dist * 3]);
-                    data[off + dist * 2] = t2;
-                    data[off + dist * 3] = t3;
-                    let (t0, t2) = fwht2_alt16(data[off], data[off + dist * 2]);
-                    data[off] = t0;
-                    data[off + dist * 2] = t2;
-                    let (t1, t3) = fwht2_alt16(data[off + dist], data[off + dist * 3]);
-                    data[off + dist] = t1;
-                    data[off + dist * 3] = t3;
-                    off += 1;
-                }
+                super::fwht_simd::radix4_block(data, r, dist);
                 r += dist4;
             }
             dist = dist4;
@@ -356,13 +341,7 @@ pub(super) fn fwht16_variable(data: &mut [u16]) {
             if dist2 <= n {
                 let mut r = 0usize;
                 while r < n {
-                    let mut off = r;
-                    for _ in 0..dist {
-                        let (t0, t1) = fwht2_alt16(data[off], data[off + dist]);
-                        data[off] = t0;
-                        data[off + dist] = t1;
-                        off += 1;
-                    }
+                    super::fwht_simd::radix2_block(data, r, dist);
                     r += dist2;
                 }
             }
@@ -372,7 +351,7 @@ pub(super) fn fwht16_variable(data: &mut [u16]) {
 }
 
 #[inline]
-fn fwht2_alt16(a: u16, b: u16) -> (u16, u16) {
+pub(super) fn fwht2_alt16(a: u16, b: u16) -> (u16, u16) {
     (add_mod16(a, b), sub_mod16(a, b))
 }
 
