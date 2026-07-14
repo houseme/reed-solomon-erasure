@@ -200,6 +200,22 @@ fn with_env_var<R>(key: &str, value: &str, f: impl FnOnce() -> R) -> R {
     result
 }
 
+/// Serialises tests that read or mutate the process-global `RS_*` policy env
+/// vars. The parallel/reconstruct policy is sampled once at `ReedSolomon::new()`,
+/// so a test constructing a codec while another had an override set would observe
+/// the leaked value (nondeterministic under the parallel test runner). Every such
+/// test holds this guard for its whole body; poison-tolerant so a panicking
+/// guarded test cannot wedge the rest.
+#[cfg(feature = "std")]
+static POLICY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(feature = "std")]
+fn lock_policy_env() -> std::sync::MutexGuard<'static, ()> {
+    POLICY_ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[cfg(feature = "std")]
 fn benchmark_metrics_enabled() -> bool {
     cfg!(feature = "benchmark-metrics")
@@ -1833,6 +1849,7 @@ fn test_parallel_policy_creates_multiple_chunks_for_small_output_reconstruct_cas
 #[cfg(feature = "std")]
 #[test]
 fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
+    let _policy_env = lock_policy_env();
     let decision = with_env_var("RS_RECONSTRUCT_MIN_BYTES_PER_JOB", "65536", || {
         let r = ReedSolomon::new(10, 4).unwrap();
         r.reconstruct_parallel_decision_with(1024 * 1024, 2, 4, false, 8)
@@ -1845,6 +1862,7 @@ fn test_reconstruct_parallel_policy_respects_min_bytes_per_job_env() {
 #[cfg(all(feature = "std", target_arch = "aarch64"))]
 #[test]
 fn test_aarch64_reconstruct_parallel_policy_has_arch_specific_override() {
+    let _policy_env = lock_policy_env();
     // SAFETY: tests run in-process and we restore this env var before returning.
     unsafe {
         std::env::set_var("RS_AARCH64_RECONSTRUCT_MIN_PARALLEL_SHARD_BYTES", "131072");
@@ -1871,6 +1889,7 @@ fn test_aarch64_reconstruct_parallel_policy_has_arch_specific_override() {
 #[cfg(all(feature = "std", target_arch = "aarch64"))]
 #[test]
 fn test_aarch64_reconstruct_stage_policies_allow_data_parity_split() {
+    let _policy_env = lock_policy_env();
     // SAFETY: tests run in-process and we restore these env vars before returning.
     // Env vars must be set BEFORE ReedSolomon::new() because the policy cache
     // is resolved at construction time.
@@ -1899,6 +1918,7 @@ fn test_aarch64_reconstruct_stage_policies_allow_data_parity_split() {
 #[cfg(all(feature = "std", not(target_arch = "aarch64")))]
 #[test]
 fn test_reconstruct_parallel_policy_default_arch_stays_on_default_chunk() {
+    let _policy_env = lock_policy_env();
     let r = ReedSolomon::new(10, 4).unwrap();
     let decision = r.reconstruct_parallel_decision_with(1024 * 1024, 1, 2, false, 8);
 
@@ -1964,6 +1984,7 @@ fn test_reconstruct_data_one_missing_skips_small_output_chunk_parallel_path() {
 #[cfg(feature = "std")]
 #[test]
 fn test_effective_parallel_policy_env_overrides() {
+    let _policy_env = lock_policy_env();
     let policy = with_env_var(
         "RS_PARALLEL_POLICY_MIN_PARALLEL_SHARD_BYTES",
         "131072",
@@ -1985,6 +2006,7 @@ fn test_effective_parallel_policy_env_overrides() {
 #[cfg(feature = "std")]
 #[test]
 fn test_parallel_policy_respects_env_max_jobs_cap() {
+    let _policy_env = lock_policy_env();
     let decision = with_env_var("RS_PARALLEL_POLICY_MAX_JOBS", "2", || {
         let r = ReedSolomon::new(10, 4).unwrap();
         r.parallel_policy_with(1024 * 1024, 16, 16)
@@ -1997,6 +2019,7 @@ fn test_parallel_policy_respects_env_max_jobs_cap() {
 #[cfg(feature = "std")]
 #[test]
 fn test_parallel_policy_env_override_is_sampled_at_construction() {
+    let _policy_env = lock_policy_env();
     let r = ReedSolomon::new(10, 4).unwrap();
     let policy = with_env_var("RS_PARALLEL_POLICY_MIN_BYTES_PER_JOB", "65536", || {
         r.effective_parallel_policy()
