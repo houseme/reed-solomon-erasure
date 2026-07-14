@@ -498,6 +498,57 @@ fn test_leopard_gf16_reconstruct_data_only() {
     assert_eq!(all_shards[1].as_ref().unwrap(), &original_data[1]);
 }
 
+// Exercises the per-(config, erasure-pattern) decode-plan cache: several DISTINCT
+// erasure patterns are reconstructed interleaved (and one repeated), and all must
+// recover exactly — i.e. the memoised error-locator/FFT plan must never be served
+// for a different pattern. Two shard sizes confirm the cached plan is correctly
+// shard-size independent.
+#[test]
+fn test_leopard_gf16_reconstruct_plan_cache_distinct_patterns() {
+    for &shard_size in &[128usize, 256] {
+        let codec = ReedSolomon::with_options(
+            6,
+            4,
+            CodecOptions {
+                codec_family: CodecFamily::LeopardGF16,
+                ..CodecOptions::default()
+            },
+        )
+        .unwrap();
+        let data: Vec<Vec<u8>> = (0..6)
+            .map(|i| {
+                (0..shard_size)
+                    .map(|j| ((i * 53 + j * 7 + 3) & 0xFF) as u8)
+                    .collect()
+            })
+            .collect();
+        let mut parity: Vec<Vec<u8>> = vec![vec![0u8; shard_size]; 4];
+        codec.encode_sep(&data, &mut parity).unwrap();
+        let mut full: Vec<Vec<u8>> = data.clone();
+        full.extend(parity);
+
+        let check = |erase: &[usize]| {
+            let mut s: Vec<Option<Vec<u8>>> = full.iter().cloned().map(Some).collect();
+            for &e in erase {
+                s[e] = None;
+            }
+            codec.reconstruct(&mut s).unwrap();
+            for (i, orig) in full.iter().enumerate() {
+                assert_eq!(
+                    s[i].as_ref().unwrap(),
+                    orig,
+                    "shard {i} wrong for erase {erase:?} @ shard_size {shard_size}"
+                );
+            }
+        };
+        check(&[1]); // pattern A
+        check(&[0, 6, 8]); // pattern B (data + parity)
+        check(&[2, 3, 7, 9]); // pattern C (max 4 erasures)
+        check(&[1]); // A again — cache hit, must still be correct
+        check(&[0, 6, 8]); // B again
+    }
+}
+
 #[test]
 fn test_leopard_custom_matrix_path_is_rejected_for_now() {
     let rows = vec![vec![1u8, 1, 1], vec![1u8, 2, 4]];

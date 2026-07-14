@@ -94,6 +94,94 @@ fn compute_error_locs16(
     err_locs
 }
 
+/// The erasure-pattern-dependent part of a GF(2^16) Leopard decode: the error
+/// locator (two full-length FWHTs + a point-wise multiply, the fixed per-call
+/// cost that dominates small-shard reconstructs) and the IFFT/FFT schedules.
+///
+/// It is a pure function of `(data_shards, parity_shards, present)` and the
+/// global tables — **not** of `shard_size` (the schedules use `driver.n` /
+/// `driver.work_size`, which derive only from the shard counts). So it can be
+/// memoised across every reconstruct that shares the same shard configuration
+/// and erasure pattern (e.g. a degraded array recovering many objects behind the
+/// same missing disks), which is what [`decode_plan_for`] does.
+pub(crate) struct LeopardGf16DecodePlan {
+    err_locs: [u16; super::ORDER16],
+    input_count: usize,
+    ifft_plan: IfftDit16Plan,
+    fft_plan: FftDit16Plan,
+}
+
+fn build_decode_plan(
+    driver: &LeopardGf16DecodeDriver,
+    present: &[bool],
+    missing_parity: &[usize],
+    missing_data: &[usize],
+    tables: &LeopardGf16Tables,
+) -> LeopardGf16DecodePlan {
+    let err_locs = compute_error_locs16(missing_parity, missing_data, driver, tables);
+
+    // input_count = m + last-present-data-index + 1 (matches Go's inputCount).
+    let mut input_count = driver.m;
+    for (i, &p) in present.iter().take(driver.data_shards).enumerate() {
+        if p {
+            input_count = driver.m + i + 1;
+        }
+    }
+
+    let ifft_plan = build_ifft_decode_dit16_plan(input_count, driver.n, &tables.fft_skew);
+    let fft_plan = super::build_fft_dit16_plan(driver.work_size, driver.n, &tables.fft_skew);
+
+    LeopardGf16DecodePlan {
+        err_locs,
+        input_count,
+        ifft_plan,
+        fft_plan,
+    }
+}
+
+/// Memoising wrapper over [`build_decode_plan`], keyed by
+/// `(data_shards, parity_shards, present)`. `std` only — `no_std` builds the plan
+/// fresh each call (no global allocator/mutex assumptions, and reconstruct is
+/// cold there).
+#[cfg(feature = "std")]
+fn decode_plan_for(
+    driver: &LeopardGf16DecodeDriver,
+    present: &[bool],
+    missing_parity: &[usize],
+    missing_data: &[usize],
+    tables: &LeopardGf16Tables,
+) -> alloc::sync::Arc<LeopardGf16DecodePlan> {
+    use alloc::sync::Arc;
+    use hashlink::LruCache;
+    use parking_lot::Mutex;
+    use std::sync::OnceLock;
+
+    type Key = (usize, usize, Vec<bool>);
+    // A handful of distinct erasure patterns per configuration is typical; each
+    // entry is ~128 KiB (the 65536-element error locator).
+    const CACHE_CAPACITY: usize = 16;
+    static CACHE: OnceLock<Mutex<LruCache<Key, Arc<LeopardGf16DecodePlan>>>> = OnceLock::new();
+
+    let key = (driver.data_shards, driver.parity_shards, present.to_vec());
+    let cache = CACHE.get_or_init(|| Mutex::new(LruCache::new(CACHE_CAPACITY)));
+
+    if let Some(plan) = cache.lock().get(&key) {
+        return plan.clone();
+    }
+    // Build outside the lock (the FWHTs are the expensive part); a concurrent
+    // duplicate build at most wastes work, never corrupts (the value is a pure
+    // function of the key).
+    let plan = Arc::new(build_decode_plan(
+        driver,
+        present,
+        missing_parity,
+        missing_data,
+        tables,
+    ));
+    cache.lock().insert(key, plan.clone());
+    plan
+}
+
 #[allow(clippy::needless_range_loop)]
 pub(crate) fn reconstruct_with_tables16(
     present: &[bool],
@@ -148,18 +236,17 @@ pub(crate) fn reconstruct_with_tables16(
         return Ok(());
     }
 
-    let err_locs = compute_error_locs16(&missing_parity, &missing_data, &driver, tables);
-
-    // Compute input_count: m + last_present_data_index + 1 (matches Go's inputCount).
-    let mut input_count = driver.m;
-    for i in 0..data_shards {
-        if present[i] {
-            input_count = driver.m + i + 1;
-        }
-    }
-
-    let ifft_plan = build_ifft_decode_dit16_plan(input_count, driver.n, &tables.fft_skew);
-    let fft_plan = super::build_fft_dit16_plan(driver.work_size, driver.n, &tables.fft_skew);
+    // The error locator + FFT/IFFT schedules depend only on the shard counts and
+    // erasure pattern (not the data or shard size), so memoise them (std). This
+    // is the fixed per-call cost — two full-length FWHTs — that dominates
+    // small-shard and repeated same-pattern reconstructs.
+    #[cfg(feature = "std")]
+    let plan = decode_plan_for(&driver, present, &missing_parity, &missing_data, tables);
+    #[cfg(not(feature = "std"))]
+    let plan = build_decode_plan(&driver, present, &missing_parity, &missing_data, tables);
+    let err_locs = &plan.err_locs;
+    let ifft_plan = &plan.ifft_plan;
+    let fft_plan = &plan.fft_plan;
 
     // Convert each present input shard from user byte layout into aligned
     // split-layout `u16` elements (alignment- and endian-safe).
@@ -226,13 +313,13 @@ pub(crate) fn reconstruct_with_tables16(
         }
 
         // Step 2: IFFT.
-        ifft_dit_decode16_with_plan(&mut work, size, &ifft_plan, tables, driver.n, &mut scratch);
+        ifft_dit_decode16_with_plan(&mut work, size, ifft_plan, tables, driver.n, &mut scratch);
 
         // Step 3: Formal derivative.
         compute_formal_derivative16(&mut work, driver.n, size);
 
         // Step 4: FFT.
-        fft_dit_decode16_with_plan(&mut work, size, &fft_plan, tables, driver.n, &mut scratch);
+        fft_dit_decode16_with_plan(&mut work, size, fft_plan, tables, driver.n, &mut scratch);
 
         // Step 5: Recover missing shards.
         for i in 0..total_shards {
