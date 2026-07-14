@@ -510,11 +510,13 @@ impl<F: Field> ReedSolomon<F> {
             return Err(Error::TooManyShards);
         }
 
-        super::leopard::validate_leopard_family::<F>(
-            options.codec_family,
-            data_shards,
-            parity_shards,
-        )?;
+        // A custom matrix is only meaningful for the Classic family — the Leopard
+        // families encode with FFT, not a user matrix. Reject any non-Classic
+        // family up front; this subsumes the Leopard-family precondition check,
+        // since no Leopard codec can be built through this entry point.
+        if options.codec_family != CodecFamily::Classic {
+            return Err(Error::UnsupportedCodecFamily);
+        }
 
         options.matrix_mode = MatrixMode::Custom;
         options.inversion_cache_capacity = Self::normalize_inversion_cache_capacity(
@@ -522,10 +524,6 @@ impl<F: Field> ReedSolomon<F> {
             parity_shards,
             options.inversion_cache_capacity,
         );
-
-        if options.codec_family != CodecFamily::Classic {
-            return Err(Error::UnsupportedCodecFamily);
-        }
 
         let matrix = Self::build_custom_matrix(data_shards, total_shards, custom_matrix)?;
         let family_state = super::leopard::build_family_state(

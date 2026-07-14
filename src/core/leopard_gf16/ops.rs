@@ -519,10 +519,12 @@ pub(super) fn user_bytes_to_work_bytes(src: &[u8], dst: &mut [u8]) {
 
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
-        if is_x86_feature_detected!("avx2") {
-            // SAFETY: is_x86_feature_detected!("avx2") implies SSSE3, so calling the #[target_feature(enable="ssse3")] fn is sound; src/dst are equal-length, 64-byte-multiple slices.
+        // The kernel is 128-bit SSE2/SSSE3, so it only needs SSSE3 — gating it on
+        // AVX2 would needlessly drop SSSE3-only x86_64 CPUs to the scalar path.
+        if is_x86_feature_detected!("ssse3") {
+            // SAFETY: SSSE3 confirmed at runtime, matching the callee's `#[target_feature(enable="ssse3")]`; src/dst are equal-length, 64-byte-multiple slices.
             unsafe {
-                user_bytes_to_work_bytes_avx2(src, dst);
+                user_bytes_to_work_bytes_ssse3(src, dst);
                 return;
             }
         }
@@ -552,7 +554,7 @@ fn user_bytes_to_work_bytes_scalar(src: &[u8], dst: &mut [u8]) {
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "ssse3")]
-unsafe fn user_bytes_to_work_bytes_avx2(src: &[u8], dst: &mut [u8]) {
+unsafe fn user_bytes_to_work_bytes_ssse3(src: &[u8], dst: &mut [u8]) {
     use core::arch::x86_64::{
         _mm_loadu_si128, _mm_storeu_si128, _mm_unpackhi_epi8, _mm_unpacklo_epi8,
     };
@@ -607,10 +609,13 @@ pub(super) fn work_bytes_to_user_bytes(src: &[u8], dst: &mut [u8]) {
 
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
-        if is_x86_feature_detected!("avx2") {
-            // SAFETY: is_x86_feature_detected!("avx2") confirmed AVX2 at runtime, so calling the #[target_feature(enable="avx2")] fn is sound; src/dst are equal-length, 64-byte-multiple slices.
+        // The kernel is 128-bit SSSE3 (`_mm_shuffle_epi8`), so it only needs
+        // SSSE3 — gating it on AVX2 would needlessly drop SSSE3-only x86_64 CPUs
+        // to the scalar path.
+        if is_x86_feature_detected!("ssse3") {
+            // SAFETY: SSSE3 confirmed at runtime, matching the callee's `#[target_feature(enable="ssse3")]`; src/dst are equal-length, 64-byte-multiple slices.
             unsafe {
-                work_bytes_to_user_bytes_avx2(src, dst);
+                work_bytes_to_user_bytes_ssse3(src, dst);
                 return;
             }
         }
@@ -639,8 +644,8 @@ fn work_bytes_to_user_bytes_scalar(src: &[u8], dst: &mut [u8]) {
 }
 
 #[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "avx2")]
-unsafe fn work_bytes_to_user_bytes_avx2(src: &[u8], dst: &mut [u8]) {
+#[target_feature(enable = "ssse3")]
+unsafe fn work_bytes_to_user_bytes_ssse3(src: &[u8], dst: &mut [u8]) {
     use core::arch::x86_64::{_mm_loadu_si128, _mm_shuffle_epi8, _mm_storel_epi64};
 
     // Mask to extract even-indexed bytes: [0,2,4,6,8,10,12,14], rest zeroed (0x80).
@@ -658,7 +663,7 @@ unsafe fn work_bytes_to_user_bytes_avx2(src: &[u8], dst: &mut [u8]) {
 
     for (s, d) in src.chunks(64).zip(dst.chunks_mut(64)) {
         // SAFETY: each chunk is 64 bytes, so the four 128-bit loads at 0/16/32/48
-        // are in-bounds and AVX2 is confirmed by the caller. Only the low 8 bytes
+        // are in-bounds and SSSE3 is confirmed by the caller. Only the low 8 bytes
         // of each shuffle are meaningful (the mask zeroes the rest), so the 8-byte
         // `storel_epi64` stores at 0/8/…/56 tile the 64-byte chunk exactly, with
         // no write past its end.
