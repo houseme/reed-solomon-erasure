@@ -344,6 +344,56 @@ fn test_leopard_gf16_codec_creation() {
     assert_eq!(codec.parity_shard_count(), 16);
 }
 
+#[cfg(feature = "std")]
+#[test]
+fn test_leopard_gf16_reconstruct_opt_large_shard_dispatches_to_leopard() {
+    // Regression: `reconstruct_opt` / `reconstruct_data_opt` only special-cased the
+    // GF8 Leopard family, so a LeopardGF16 codec with a shard >= the parallel
+    // threshold (256 KiB) fell through to the Classic parallel plan
+    // (`get_data_decode_matrix`) and panicked with an out-of-bounds matrix access.
+    // Both families must decode via the Leopard FFT reconstruct path and recover
+    // the dropped shards byte-for-byte.
+    let (data, parity) = (10usize, 4usize);
+    let total = data + parity;
+    let shard_len = 256 * 1024; // >= PARALLEL_MIN_SHARD_BYTES => parallel decision
+
+    let codec = ReedSolomon::with_options(
+        data,
+        parity,
+        CodecOptions {
+            codec_family: CodecFamily::LeopardGF16,
+            ..CodecOptions::default()
+        },
+    )
+    .unwrap();
+
+    let encoded: Vec<Vec<u8>> = {
+        let mut shards: Vec<Vec<u8>> = (0..total)
+            .map(|i| {
+                (0..shard_len)
+                    .map(|j| (i.wrapping_mul(31).wrapping_add(j)) as u8)
+                    .collect()
+            })
+            .collect();
+        codec.encode_opt(&mut shards).unwrap();
+        shards
+    };
+
+    // reconstruct_opt: one data + one parity erasure.
+    let mut shards: Vec<Option<Vec<u8>>> = encoded.iter().cloned().map(Some).collect();
+    shards[0] = None;
+    shards[data] = None;
+    codec.reconstruct_opt(&mut shards).unwrap();
+    assert_eq!(shards[0].as_ref().unwrap(), &encoded[0]);
+    assert_eq!(shards[data].as_ref().unwrap(), &encoded[data]);
+
+    // reconstruct_data_opt: a single data erasure.
+    let mut data_shards: Vec<Option<Vec<u8>>> = encoded.iter().cloned().map(Some).collect();
+    data_shards[2] = None;
+    codec.reconstruct_data_opt(&mut data_shards).unwrap();
+    assert_eq!(data_shards[2].as_ref().unwrap(), &encoded[2]);
+}
+
 #[test]
 fn test_leopard_gf16_encode_populates_parity() {
     let codec = ReedSolomon::with_options(

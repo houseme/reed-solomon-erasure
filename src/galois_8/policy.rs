@@ -588,6 +588,13 @@ impl crate::ReedSolomon<super::Field> {
             return Ok(());
         }
 
+        // The workspace holds a Classic inversion-matrix plan, which does not
+        // apply to Leopard. Both Leopard families decode via the FFT reconstruct
+        // path, so route them to the serial dispatch and ignore the workspace.
+        if self.is_leopard_family() {
+            return self.reconstruct(shards);
+        }
+
         let mut invalid_indices = smallvec::SmallVec::<[usize; 32]>::new();
         let mut shard_len = None;
         let mut number_present = 0usize;
@@ -745,7 +752,9 @@ impl crate::ReedSolomon<super::Field> {
 
     #[cfg(feature = "std")]
     pub fn reconstruct_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
-        if self.is_leopard_gf8_family() {
+        // Both Leopard families decode via the FFT reconstruct path, not the
+        // Classic parallel plan below — route them to the serial dispatch.
+        if self.is_leopard_family() {
             return self.reconstruct(shards);
         }
         let (shard_len, missing_data, missing) =
@@ -771,7 +780,7 @@ impl crate::ReedSolomon<super::Field> {
 
     #[cfg(feature = "std")]
     pub fn reconstruct_data_opt(&self, shards: &mut [Option<Vec<u8>>]) -> Result<(), crate::Error> {
-        if self.is_leopard_gf8_family() {
+        if self.is_leopard_family() {
             return self.reconstruct_data(shards);
         }
         let (shard_len, missing_data, missing) =
@@ -795,7 +804,7 @@ impl crate::ReedSolomon<super::Field> {
         shards: &mut [Option<Vec<u8>>],
         required: &[bool],
     ) -> Result<(), crate::Error> {
-        if self.is_leopard_gf8_family() {
+        if self.is_leopard_family() {
             return self.reconstruct_some(shards, required);
         }
         if required.len() != self.total_shard_count() {

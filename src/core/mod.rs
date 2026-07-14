@@ -175,4 +175,13 @@ impl<F: Field> ReedSolomon<F> {
     pub(crate) fn is_leopard_gf16_family(&self) -> bool {
         matches!(self.family_state, FamilyState::LeopardGF16)
     }
+
+    /// True for any Leopard codec family (GF8 or GF16). Both decode through the
+    /// Leopard FFT reconstruct path in [`ReedSolomon::reconstruct`], never the
+    /// Classic inversion-matrix machinery — so the `*_opt` entry points must
+    /// route either family to that serial dispatch rather than the Classic
+    /// parallel plan.
+    pub(crate) fn is_leopard_family(&self) -> bool {
+        self.is_leopard_gf8_family() || self.is_leopard_gf16_family()
+    }
 }
