@@ -46,6 +46,17 @@ use super::{LeopardGf16Tables, ORDER16};
 /// slices use the scalar path directly.
 pub(super) const SIMD_MIN_LEN: usize = 16;
 
+/// Whether this target has a little-endian SIMD kernel (x86_64 with std for
+/// runtime feature detection, or aarch64 with its baseline NEON). Single source
+/// of truth for the dispatch gating in [`should_use_simd`].
+const HAS_SIMD_KERNEL: bool = cfg!(all(
+    any(
+        all(feature = "std", target_arch = "x86_64"),
+        target_arch = "aarch64"
+    ),
+    target_endian = "little"
+));
+
 /// 4-nibble shuffle tables for a fixed multiplier `g^log_m` (128 bytes).
 ///
 /// `lo[i][nib]` / `hi[i][nib]` are the low / high byte of
@@ -148,23 +159,7 @@ pub(super) fn mulgf16_simd<const XOR: bool>(
 /// existing scalar loop (short slices, or targets/endianness without a kernel).
 #[inline]
 pub(super) fn should_use_simd(len: usize) -> bool {
-    if len < SIMD_MIN_LEN {
-        return false;
-    }
-    #[cfg(all(
-        any(all(feature = "std", target_arch = "x86_64"), target_arch = "aarch64"),
-        target_endian = "little"
-    ))]
-    {
-        true
-    }
-    #[cfg(not(all(
-        any(all(feature = "std", target_arch = "x86_64"), target_arch = "aarch64"),
-        target_endian = "little"
-    )))]
-    {
-        false
-    }
+    len >= SIMD_MIN_LEN && HAS_SIMD_KERNEL
 }
 
 // ------------------------------------------------------------------ aarch64 --
