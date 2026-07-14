@@ -53,12 +53,18 @@ pub(super) fn sub_mod16(a: u16, b: u16) -> u16 {
 
 /// Multiply each element of `input` by `g^log_m` in GF(2^16), writing to `out`.
 ///
-/// 4x unrolled to create independent dependency chains, hiding LUT latency.
+/// Large slices use the SIMD 4-nibble shuffle kernel (see [`super::mul_simd`]);
+/// short slices use the 4x-unrolled scalar log/exp path, which also serves as
+/// the SIMD remainder tail and the portable fallback.
 #[inline]
 pub(super) fn mulgf16(out: &mut [u16], input: &[u16], log_m: u16, tables: &LeopardGf16Tables) {
     debug_assert_eq!(input.len(), out.len());
     if log_m == MODULUS16 as u16 {
         out.copy_from_slice(input);
+        return;
+    }
+    if super::mul_simd::should_use_simd(input.len()) {
+        super::mul_simd::mulgf16_simd::<false>(out, input, log_m, tables);
         return;
     }
     let log_lut = &tables.log_lut;
@@ -85,6 +91,10 @@ pub(super) fn mulgf16_xor(out: &mut [u16], input: &[u16], log_m: u16, tables: &L
     debug_assert_eq!(input.len(), out.len());
     if log_m == MODULUS16 as u16 {
         slice_xor_u16(out, input);
+        return;
+    }
+    if super::mul_simd::should_use_simd(input.len()) {
+        super::mul_simd::mulgf16_simd::<true>(out, input, log_m, tables);
         return;
     }
     let log_lut = &tables.log_lut;

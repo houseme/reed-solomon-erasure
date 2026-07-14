@@ -9,6 +9,7 @@ use crate::errors::Error;
 pub(crate) mod decode;
 mod driver;
 pub(crate) mod encode;
+mod mul_simd;
 pub(crate) mod ops;
 pub(crate) mod tables;
 #[cfg(test)]
