@@ -11,9 +11,10 @@ use super::{CodecFamily, LeopardMode};
 /// Maximum total shards (`data + parity`) addressable by each Leopard family.
 ///
 /// GF(2^8) Leopard is bounded by the byte field order; GF(2^16) Leopard uses
-/// 16-bit arithmetic and reaches 65536. These are the family-aware caps enforced
-/// in `with_options` (via [`max_total_shards_for_family`]) and re-checked by the
-/// per-family validators.
+/// 16-bit arithmetic and reaches 65536. This is the single source of truth for
+/// the family-aware cap enforced in the constructors via
+/// [`max_total_shards_for_family`] (returning [`Error::TooManyShards`]); the
+/// per-family validators check only field/endian preconditions, not the cap.
 pub(crate) const LEOPARD_GF8_MAX_SHARDS: usize = 256;
 pub(crate) const LEOPARD_GF16_MAX_SHARDS: usize = 65536;
 
@@ -124,7 +125,7 @@ pub(crate) fn leopard_gf8_state<F: Field>(
 }
 
 pub(crate) fn validate_leopard_shard_len(shard_len: usize) -> Result<(), Error> {
-    if shard_len == 0 || !shard_len.is_multiple_of(64) {
+    if shard_len == 0 || !shard_len.is_multiple_of(LEOPARD_SHARD_MULTIPLE) {
         return Err(Error::IncorrectShardSize);
     }
 
@@ -324,24 +325,23 @@ pub(crate) fn resolve_codec_family(
     }
 }
 
-fn validate_leopard_gf8<F: Field>(data_shards: usize, parity_shards: usize) -> Result<(), Error> {
-    let total_shards = data_shards.saturating_add(parity_shards);
-
+// These validators check only family/field *preconditions*. The total-shard cap
+// is owned by `max_total_shards_for_family` and enforced in the constructors
+// (returning `Error::TooManyShards`) before any validator runs, so re-checking
+// `total > MAX` here would be unreachable and would return a different error for
+// the same failure — the cap lives in exactly one place.
+fn validate_leopard_gf8<F: Field>(_data_shards: usize, _parity_shards: usize) -> Result<(), Error> {
     // Soundness gate: Leopard reinterprets `F::Elem` as raw bytes.
     if !is_byte_field::<F>() {
         return Err(Error::UnsupportedCodecFamily);
     }
-
-    if total_shards == 0 || total_shards > LEOPARD_GF8_MAX_SHARDS {
-        return Err(Error::UnsupportedCodecFamily);
-    }
-
     Ok(())
 }
 
-fn validate_leopard_gf16<F: Field>(data_shards: usize, parity_shards: usize) -> Result<(), Error> {
-    let total_shards = data_shards.saturating_add(parity_shards);
-
+fn validate_leopard_gf16<F: Field>(
+    _data_shards: usize,
+    _parity_shards: usize,
+) -> Result<(), Error> {
     // Soundness gate: Leopard reinterprets `F::Elem` as raw bytes.
     if !is_byte_field::<F>() {
         return Err(Error::UnsupportedCodecFamily);
@@ -353,10 +353,6 @@ fn validate_leopard_gf16<F: Field>(data_shards: usize, parity_shards: usize) -> 
     // (rustfs/backlog#1238). Little-endian builds are unaffected; GF8 Leopard is
     // byte-oriented and endian-agnostic, so it is not gated here.
     if cfg!(target_endian = "big") {
-        return Err(Error::UnsupportedCodecFamily);
-    }
-
-    if total_shards == 0 || total_shards > LEOPARD_GF16_MAX_SHARDS {
         return Err(Error::UnsupportedCodecFamily);
     }
 
