@@ -601,10 +601,9 @@ fn run_operation(case: BenchCase, operation: SmallFileOp, iterations: usize) -> 
                 let codec = ReedSolomon::with_options(
                     case.data_shards,
                     case.parity_shards,
-                    rustfs_erasure_codec::CodecOptions {
-                        codec_family: rustfs_erasure_codec::CodecFamily::LeopardGF8,
-                        ..rustfs_erasure_codec::CodecOptions::default()
-                    },
+                    rustfs_erasure_codec::CodecOptions::builder()
+                        .codec_family(rustfs_erasure_codec::CodecFamily::LeopardGF8)
+                        .build(),
                 )
                 .unwrap();
                 let _ = codec.leopard_setup_matrix_shape();
@@ -614,10 +613,9 @@ fn run_operation(case: BenchCase, operation: SmallFileOp, iterations: usize) -> 
             let codec = ReedSolomon::with_options(
                 case.data_shards,
                 case.parity_shards,
-                rustfs_erasure_codec::CodecOptions {
-                    codec_family: rustfs_erasure_codec::CodecFamily::LeopardGF8,
-                    ..rustfs_erasure_codec::CodecOptions::default()
-                },
+                rustfs_erasure_codec::CodecOptions::builder()
+                    .codec_family(rustfs_erasure_codec::CodecFamily::LeopardGF8)
+                    .build(),
             )
             .unwrap();
             for _ in 0..iterations {

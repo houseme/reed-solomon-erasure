@@ -13,6 +13,23 @@ All notable changes to this project are documented in this file.
 ### Changed
 - Updated GitHub Actions workflows from `actions/checkout@v6` to `actions/checkout@v7`.
 
+## 8.0.0 (unreleased)
+
+> Major release: optional Leopard auto-activation. **`CodecOptions` is now `#[non_exhaustive]`** — the only breaking change for existing callers.
+
+### Breaking
+- `CodecOptions` is now `#[non_exhaustive]`. Construct it via `CodecOptions::default()` (optionally with `..Default::default()` **inside this crate**) or the `CodecOptions::builder()`; downstream struct literals such as `CodecOptions { codec_family: …, ..Default::default() }` no longer compile and must move to the builder (e.g. `CodecOptions::builder().codec_family(…).build()`). No field was removed or renamed, so builder-based and `default()`-based construction is unaffected.
+
+### Added
+- `LeopardMode` (`Disabled` (default), `AsNeeded`, `PreferGF16`, `PreferLeopard`) and `CodecOptions::leopard_mode` / `CodecOptionsBuilder::leopard_mode`. When `codec_family` is left at `Classic` on a byte-oriented field, the codec can now auto-select a Leopard family as a function of the total shard count, mirroring klauspost/reedsolomon `New()`. `Disabled` is the default and is byte-for-byte identical to prior releases.
+
+### Fixed
+- The `total > F::ORDER` shard-count guard is now family-aware, so an explicit (or auto-selected) `CodecFamily::LeopardGF16` codec with more than 256 total shards is constructible — previously it was unconditionally rejected with `TooManyShards` before family validation ran. `LeopardGF16` no longer builds an unused GF(2^8) Vandermonde matrix (which panicked via `Field::nth` past 256 and needlessly allocated up to a `total × data` matrix); it relies solely on its GF(2^16) FFT tables.
+- The Leopard soundness gate now checks `size_of::<Field::Elem>() == 1` (the precise byte-oriented-field condition) instead of `Field::ORDER == 256`.
+
+### Notes
+- Byte-level alignment of the `LeopardGF16` code path for parity `m > 256` against klauspost golden vectors is tracked as follow-up; this release verifies that path by encode/reconstruct round-trip.
+
 ## 7.0.2 (2026-07-13)
 
 > Maintained in [houseme/reed-solomon-erasure](https://github.com/houseme/reed-solomon-erasure)

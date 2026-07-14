@@ -59,6 +59,8 @@ pub use crate::core::CodecFamily;
 pub use crate::core::CodecOptions;
 #[cfg(feature = "std")]
 pub use crate::core::LeopardGf8ProfileStats;
+
+pub use crate::core::LeopardMode;
 pub use crate::core::MatrixMode;
 #[cfg(feature = "std")]
 pub use crate::core::PARALLEL_POLICY_VERSION;
