@@ -10,25 +10,46 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
-### Changed
-- Updated GitHub Actions workflows from `actions/checkout@v6` to `actions/checkout@v7`.
+## 8.0.0 (2026-07-14)
 
-## 8.0.0 (unreleased)
-
-> Major release: optional Leopard auto-activation. **`CodecOptions` is now `#[non_exhaustive]`** — the only breaking change for existing callers.
+> Major release: the full security / performance / robustness audit against [`klauspost/reedsolomon`](https://github.com/klauspost/reedsolomon), plus optional Leopard auto-activation. **The only breaking change for existing callers is that `CodecOptions` (and the new `LeopardMode`) are now `#[non_exhaustive]`.** Callers that only use `ReedSolomon::new` / `encode*` / `reconstruct*` / `verify*` — including downstream RustFS via `rustfs-ecstore` — need no source changes, only the dependency bump to `8`.
 
 ### Breaking
 - `CodecOptions` is now `#[non_exhaustive]`. Construct it via `CodecOptions::default()` (optionally with `..Default::default()` **inside this crate**) or the `CodecOptions::builder()`; downstream struct literals such as `CodecOptions { codec_family: …, ..Default::default() }` no longer compile and must move to the builder (e.g. `CodecOptions::builder().codec_family(…).build()`). No field was removed or renamed, so builder-based and `default()`-based construction is unaffected.
+- `LeopardMode` (and the `CodecFamily` / `MatrixMode` selectors) are `#[non_exhaustive]` enums; exhaustive downstream `match` needs a wildcard arm. Adding variants in future minor releases is therefore non-breaking.
 
 ### Added
-- `LeopardMode` (`Disabled` (default), `AsNeeded`, `PreferGF16`, `PreferLeopard`) and `CodecOptions::leopard_mode` / `CodecOptionsBuilder::leopard_mode`. When `codec_family` is left at `Classic` on a byte-oriented field, the codec can now auto-select a Leopard family as a function of the total shard count, mirroring klauspost/reedsolomon `New()`. `Disabled` is the default and is byte-for-byte identical to prior releases.
+- **Optional Leopard auto-activation (`LeopardMode`):** `Disabled` (default), `AsNeeded`, `PreferGF16`, `PreferLeopard`, via `CodecOptions::leopard_mode` / `CodecOptionsBuilder::leopard_mode`. When `codec_family` is left at `Classic` on a byte-oriented field, the codec can auto-select a Leopard family as a function of the total shard count, mirroring klauspost/reedsolomon `New()`. `Disabled` is the default and is byte-for-byte identical to prior releases.
+- `CodecOptions::builder()` fluent builder, and the `CodecFamily` / `MatrixMode` / `LeopardMode` selectors re-exported at the crate root.
+- Aligned-shard helpers and `LEOPARD_SHARD_MULTIPLE` / shard-length utilities.
+
+### Performance
+- **Classic GF(2¹⁶):** SIMD-accelerate `mul_slice` via a tower-field decomposition reusing the GF(2⁸) SIMD kernels (AVX2 / SSSE3 / GFNI / NEON), and SIMD-ize its de/re-interleave layout conversion so the x86 GFNI/AVX2 path is no longer bottlenecked on scalar byte shuffling.
+- **Leopard GF(2¹⁶) — FFT butterfly multiply** (`mulgf16` / `mulgf16_xor`): SIMD 4-nibble shuffle-table kernel (AVX2 / SSSE3 / NEON).
+- **Leopard GF(2¹⁶) — decode error-locator FWHT:** SIMD butterflies (AVX2 / SSE2 / NEON).
+- **Leopard GF(2¹⁶) — decode plan cache:** memoise the error locator and FFT/IFFT schedules (keyed by shard counts + erasure pattern), so repeated same-pattern reconstructs skip the fixed per-call cost (large speedups for small-shard / repeated-pattern reconstructs).
+- **Leopard GF(2¹⁶) — layout fusion:** fuse the split→user byte-layout conversion into a single pass on both encode and decode (drops an intermediate buffer, a second whole-shard pass, and an allocation); ~+12–18 % encode on the measured configuration.
+- **Leopard GF(2¹⁶) — parallel reconstruct:** shards larger than one 64 KiB work chunk now recover across cores (rayon). Warm reconstruct scales ~3.7× at 1 MiB / ~4.9× at 4 MiB on aarch64, exceeding encode throughput for ≥ 256 KiB shards. Single-chunk (≤ 64 KiB) and `no_std` keep the serial path.
 
 ### Fixed
-- The `total > F::ORDER` shard-count guard is now family-aware, so an explicit (or auto-selected) `CodecFamily::LeopardGF16` codec with more than 256 total shards is constructible — previously it was unconditionally rejected with `TooManyShards` before family validation ran. `LeopardGF16` no longer builds an unused GF(2^8) Vandermonde matrix (which panicked via `Field::nth` past 256 and needlessly allocated up to a `total × data` matrix); it relies solely on its GF(2^16) FFT tables.
-- The Leopard soundness gate now checks `size_of::<Field::Elem>() == 1` (the precise byte-oriented-field condition) instead of `Field::ORDER == 256`.
+- **GF(2¹⁶) alignment / endianness soundness:** replace unaligned host-endian `u16` reinterpretation with explicit little-endian encode/decode (removes potential UB), and **reject GF16 Leopard on big-endian targets** with an error instead of silently corrupting data.
+- **Family-aware shard-count guard:** the `total > F::ORDER` guard is now family-aware, so an explicit (or auto-selected) `CodecFamily::LeopardGF16` codec with more than 256 total shards is constructible — previously it was unconditionally rejected with `TooManyShards` before family validation ran. `LeopardGF16` no longer builds an unused GF(2⁸) Vandermonde matrix (which panicked via `Field::nth` past 256 and needlessly allocated up to a `total × data` matrix); it relies solely on its GF(2¹⁶) FFT tables. The Leopard soundness gate now checks `size_of::<Field::Elem>() == 1` instead of `Field::ORDER == 256`.
+- **`reconstruct_opt` panic on large shards:** a `LeopardGF16` codec reconstructing a shard at/above the parallel threshold (256 KiB) misdispatched to the Classic inversion-matrix path and panicked (or silently returned wrong data). All `*_opt` entry points now route any Leopard family to the Leopard FFT reconstruct.
+- **Multi-chunk partial-last-chunk overrun:** a shard whose length is not a multiple of 64 KiB could over-run the SIMD multiply (or panic on the identity fast path) on its final chunk; fixed by bounding the work lane to the chunk size.
+- **AVX2 tail heap overflow** in the GF16 path, plus SIMD `unsafe` SAFETY documentation / lint fixes.
+- Integer-overflow hardening (checked / saturating) for capacity, alignment, and shift arithmetic; production-path panic (`unwrap` / `expect`) triage and cleanup.
+- **ppc64le VSX backend now actually builds** (it never compiled before), with a dedicated ppc64le CI job.
+- Gate the AVX2 FWHT path on `feature = "std"` (runtime feature detection is std-only).
 
-### Notes
-- Byte-level alignment of the `LeopardGF16` code path for parity `m > 256` against klauspost golden vectors is tracked as follow-up; this release verifies that path by encode/reconstruct round-trip.
+### Internal / CI
+- x86_64 Linux SIMD verification: all-features clippy gate + AddressSanitizer; workspace clippy lint baseline; `actions/checkout@v7`.
+- Collapse repeated SIMD `cfg` predicates into `cfg` aliases; dedup the `mul_simd` and shard-count-cap dispatch.
+- Make the NEON profile-stats and `RS_*` policy env-var tests deterministic under the parallel test runner.
+- `chore(deps)`: `spin` 0.12.2.
+
+### Compatibility
+- **On-wire byte layout is unchanged**, including the Go/klauspost-compatible Leopard GF16 split layout (verified byte-exact by known-answer tests against Go reference vectors). Data written by 7.x is reconstructed unchanged.
+- Verified against downstream **RustFS** (`rustfs-ecstore`): its Classic GF(2⁸) usage compiles against 8.0.0 with no call changes.
 
 ## 7.0.2 (2026-07-13)
 
