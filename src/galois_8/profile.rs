@@ -107,6 +107,90 @@ impl RustNeonProfileMetrics {
             .saturating_mul(8)
             .saturating_add(vector_16b_chunks.saturating_mul(2));
         self.table_lookups.fetch_add(lookups, Ordering::Relaxed);
+
+        // Test-only per-thread mirror of the increment (compiled out of every
+        // non-test build). Lets a test observe exactly its own thread's calls,
+        // immune to concurrent tests hitting this shared global aggregate.
+        #[cfg(test)]
+        capture::record(
+            is_xor,
+            input_len,
+            vector_64b_chunks,
+            vector_16b_chunks,
+            tail_bytes,
+        );
+    }
+}
+
+/// Test-only per-thread capture of the NEON profile increments.
+///
+/// The production metrics ([`RUST_NEON_PROFILE_METRICS`]) are a single global
+/// aggregate — correct for benchmarking, but exact-delta assertions on it are
+/// racy because every NEON `mul_slice` on any thread (e.g. concurrent codec
+/// tests) increments it. In test builds `record_call` additionally feeds this
+/// thread-local accumulator, so a test reads only its own thread's calls.
+#[cfg(all(
+    test,
+    feature = "simd-neon",
+    target_arch = "aarch64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+pub(crate) mod capture {
+    use super::RustNeonProfileStats;
+    use core::cell::Cell;
+
+    const ZERO: RustNeonProfileStats = RustNeonProfileStats {
+        mul_calls: 0,
+        mul_xor_calls: 0,
+        total_bytes: 0,
+        vector_64b_chunks: 0,
+        vector_16b_chunks: 0,
+        tail_bytes: 0,
+        tail_calls: 0,
+        table_lookups: 0,
+    };
+
+    std::thread_local! {
+        static CAPTURE: Cell<RustNeonProfileStats> = const { Cell::new(ZERO) };
+    }
+
+    pub(crate) fn record(
+        is_xor: bool,
+        input_len: usize,
+        vector_64b_chunks: usize,
+        vector_16b_chunks: usize,
+        tail_bytes: usize,
+    ) {
+        CAPTURE.with(|cell| {
+            let mut s = cell.get();
+            if is_xor {
+                s.mul_xor_calls += 1;
+            } else {
+                s.mul_calls += 1;
+            }
+            s.total_bytes += input_len;
+            s.vector_64b_chunks += vector_64b_chunks;
+            s.vector_16b_chunks += vector_16b_chunks;
+            if tail_bytes > 0 {
+                s.tail_calls += 1;
+                s.tail_bytes += tail_bytes;
+            }
+            s.table_lookups += vector_64b_chunks
+                .saturating_mul(8)
+                .saturating_add(vector_16b_chunks.saturating_mul(2));
+            cell.set(s);
+        });
+    }
+
+    /// Reset this thread's accumulator to zero.
+    pub(crate) fn reset() {
+        CAPTURE.with(|cell| cell.set(ZERO));
+    }
+
+    /// This thread's accumulated increments since the last [`reset`].
+    pub(crate) fn snapshot() -> RustNeonProfileStats {
+        CAPTURE.with(|cell| cell.get())
     }
 }
 
