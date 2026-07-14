@@ -21,7 +21,7 @@ rand = "0.10.2"
 rayon = "1.12"
 rustfs-erasure-codec = { version = "8.0.0", path = "." }
 smallvec = "1.15"
-spin = { version = "0.12.1", default-features = false, features = ["once", "spin_mutex"] }
+spin = { version = "0.12.2", default-features = false, features = ["once", "spin_mutex"] }
 wasm-bindgen = "0.2.126"
 wee_alloc = "0.4"
 
