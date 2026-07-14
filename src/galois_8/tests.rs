@@ -8,15 +8,6 @@ use super::*;
 use crate::tests::fill_random;
 use rand;
 
-#[cfg(all(
-    feature = "std",
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
-static NEON_PROFILE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 #[cfg(feature = "std")]
 fn with_env_var<R>(key: &str, value: &str, f: impl FnOnce() -> R) -> R {
     // SAFETY: test-only scoped env var override, restored immediately after use.
@@ -389,9 +380,6 @@ fn test_simd_c_matches_scalar_mul_slice_xor() {
 ))]
 #[test]
 fn test_rust_neon_matches_scalar_mul_slice() {
-    let _guard = NEON_PROFILE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
     let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
     for &len in &lengths {
         for _ in 0..16 {
@@ -418,9 +406,6 @@ fn test_rust_neon_matches_scalar_mul_slice() {
 ))]
 #[test]
 fn test_rust_neon_mul_slice_xor_c1_vectorized_fastpath() {
-    let _guard = NEON_PROFILE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
     let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
     for &len in &lengths {
         for _ in 0..16 {
@@ -447,9 +432,6 @@ fn test_rust_neon_mul_slice_xor_c1_vectorized_fastpath() {
 ))]
 #[test]
 fn test_rust_neon_matches_scalar_mul_slice_xor() {
-    let _guard = NEON_PROFILE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
     let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
     for &len in &lengths {
         for _ in 0..16 {
@@ -478,9 +460,6 @@ fn test_rust_neon_matches_scalar_mul_slice_xor() {
 ))]
 #[test]
 fn test_rust_neon_matches_simd_c() {
-    let _guard = NEON_PROFILE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
     let lengths = [0usize, 1, 15, 16, 17, 31, 32, 33, 255, 1024, 10_003];
     for &len in &lengths {
         for _ in 0..16 {
@@ -507,21 +486,19 @@ fn test_rust_neon_matches_simd_c() {
 ))]
 #[test]
 fn test_rust_neon_profile_stats_track_vector_vs_tail() {
-    let _guard = NEON_PROFILE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    reset_rust_neon_profile_stats();
-
     let c = 25u8;
     let mut input = vec![0u8; 65];
     fill_random(&mut input);
     let mut out = vec![0u8; 65];
     let mut out_xor = vec![0u8; 65];
 
-    let before = rust_neon_profile_stats();
+    // Per-thread capture isolates this measurement from any concurrent test that
+    // hits the shared global NEON metrics (see `profile::capture`), so the exact
+    // per-call deltas below are deterministic under parallel `cargo test`.
+    super::profile::capture::reset();
     aarch64::neon::rust_neon_mul_slice(c, &input, &mut out);
     aarch64::neon::rust_neon_mul_slice_xor(c, &input, &mut out_xor);
-    let delta = rust_neon_profile_stats().saturating_sub(before);
+    let delta = super::profile::capture::snapshot();
 
     assert_eq!(1, delta.mul_calls);
     assert_eq!(1, delta.mul_xor_calls);
