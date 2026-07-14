@@ -1,6 +1,5 @@
 extern crate alloc;
 
-use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::errors::Error;
@@ -343,24 +342,15 @@ pub(crate) fn reconstruct_with_tables16(
                 inv_err,
                 tables,
             );
-            // Write recovered elements back as split-layout little-endian bytes.
-            super::ops::u16_to_work_bytes(
+            // Write recovered elements straight into user byte layout: the fused
+            // de-interleave skips the intermediate split-byte buffer and the
+            // second whole-shard pass the split->user conversion used to need.
+            super::ops::work_u16_to_user_bytes(
                 &out_scratch[..size],
                 &mut out_bytes[offset * 2..end * 2],
             );
         }
         offset = end;
-    }
-
-    // Convert recovered output shards from split layout back to user byte layout.
-    for i in 0..total_shards {
-        if present[i] {
-            continue;
-        }
-        let out_bytes = &mut *outputs[i];
-        let mut contiguous = vec![0u8; out_bytes.len()];
-        super::ops::work_bytes_to_user_bytes(out_bytes, &mut contiguous);
-        out_bytes.copy_from_slice(&contiguous);
     }
 
     Ok(())

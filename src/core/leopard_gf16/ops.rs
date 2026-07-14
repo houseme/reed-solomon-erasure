@@ -724,25 +724,35 @@ pub(super) fn user_bytes_to_work_u16(user: &[u8]) -> Vec<u16> {
     out
 }
 
-/// Encode aligned `u16` elements into split-layout little-endian bytes.
+/// Encode split-layout `u16` elements straight into user byte layout.
 ///
-/// Inverse of the decode in [`user_bytes_to_work_u16`]: alignment- and
-/// endian-safe. On little-endian this is a single bulk copy.
-pub(super) fn u16_to_work_bytes(src: &[u16], dst: &mut [u8]) {
+/// Fuses the element-bytes-to-split-layout encode with the split-layout-to-user
+/// de-interleave ([`work_bytes_to_user_bytes`]) into a single pass, so encode and
+/// decode write their `u16` results in final user layout without an intermediate
+/// split-byte buffer or a second whole-shard de-interleave. `src` must cover a
+/// whole number of 32-element (64-byte) blocks, which the encoder/decoder chunking
+/// guarantees. On little-endian the `u16` bytes already *are* the split-layout
+/// bytes, so this reuses the SIMD de-interleave directly.
+pub(super) fn work_u16_to_user_bytes(src: &[u16], dst: &mut [u8]) {
     debug_assert_eq!(dst.len(), src.len() * 2);
+    debug_assert!(dst.len().is_multiple_of(64));
 
     #[cfg(target_endian = "little")]
     {
         // SAFETY: `src` is `u16`-aligned, so a `u8` view is always valid; its
         // length is exactly `dst.len()`. Little-endian `u16` bytes match the
-        // split-layout byte order, so a bulk copy is correct.
+        // split-layout byte order, so de-interleaving them yields user layout.
         let src_bytes =
             unsafe { core::slice::from_raw_parts(src.as_ptr().cast::<u8>(), dst.len()) };
-        dst.copy_from_slice(src_bytes);
+        work_bytes_to_user_bytes(src_bytes, dst);
     }
     #[cfg(target_endian = "big")]
-    for (c, &v) in dst.chunks_exact_mut(2).zip(src.iter()) {
-        c.copy_from_slice(&v.to_le_bytes());
+    {
+        let mut split = alloc::vec![0u8; dst.len()];
+        for (c, &v) in split.chunks_exact_mut(2).zip(src.iter()) {
+            c.copy_from_slice(&v.to_le_bytes());
+        }
+        work_bytes_to_user_bytes(&split, dst);
     }
 }
 
