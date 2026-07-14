@@ -1,6 +1,5 @@
 extern crate alloc;
 
-use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::errors::Error;
@@ -166,10 +165,12 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
 
             fft_dit16_with_plan(&mut work_views[..driver.m], &fft_plan, tables, &mut scratch);
 
-            // Write back parity shards as split-layout little-endian bytes.
+            // Write parity shards straight into user byte layout: the fused
+            // de-interleave skips the intermediate split-byte buffer and the
+            // second whole-shard pass the split->user conversion used to need.
             for (idx, output) in parity.iter_mut().enumerate() {
                 let out_bytes = output.as_mut();
-                super::ops::u16_to_work_bytes(
+                super::ops::work_u16_to_user_bytes(
                     &work_views[idx][..size],
                     &mut out_bytes[offset * 2..end * 2],
                 );
@@ -186,15 +187,6 @@ pub(crate) fn encode_with_tables16<T: AsRef<[u8]>, U: AsRef<[u8]> + AsMut<[u8]>>
     FLAT_WORK16_CACHE.with(|cache| {
         *cache.borrow_mut() = Some(flat_work);
     });
-
-    // Convert parity output from split layout back to user byte layout.
-    // The parity was written as u16 values in split layout; convert bytes to contiguous.
-    for output in parity.iter_mut() {
-        let out_bytes = output.as_mut();
-        let mut contiguous = vec![0u8; out_bytes.len()];
-        super::ops::work_bytes_to_user_bytes(out_bytes, &mut contiguous);
-        out_bytes.copy_from_slice(&contiguous);
-    }
 
     Ok(driver)
 }
