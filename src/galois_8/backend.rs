@@ -40,12 +40,7 @@ const SCALAR_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::Scalar,
 };
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_aarch64_neon)]
 const RUST_NEON_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustNeon,
     mul_slice: super::aarch64::neon::rust_neon_mul_slice,
@@ -54,12 +49,7 @@ const RUST_NEON_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
-#[cfg(all(
-    feature = "simd-avx2",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_x86_avx2)]
 const RUST_AVX2_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustAvx2,
     mul_slice: super::x86::avx2::rust_avx2_mul_slice,
@@ -68,12 +58,7 @@ const RUST_AVX2_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
-#[cfg(all(
-    feature = "simd-avx512",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_x86_avx512)]
 const RUST_AVX512_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustAvx512,
     mul_slice: super::x86::avx512::rust_avx512_mul_slice,
@@ -82,12 +67,7 @@ const RUST_AVX512_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
-#[cfg(all(
-    feature = "simd-gfni",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_x86_gfni)]
 const RUST_GFNI_AVX2_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustGfniAvx2,
     mul_slice: super::x86::gfni::rust_gfni_avx2_mul_slice,
@@ -96,12 +76,7 @@ const RUST_GFNI_AVX2_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
-#[cfg(all(
-    feature = "simd-gfni",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_x86_gfni)]
 const RUST_GFNI_AVX512_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustGfniAvx512,
     mul_slice: super::x86::gfni::rust_gfni_avx512_mul_slice,
@@ -110,12 +85,7 @@ const RUST_GFNI_AVX512_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
-#[cfg(all(
-    feature = "simd-ssse3",
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_x86_ssse3)]
 const RUST_SSSE3_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustSsse3,
     mul_slice: super::x86::ssse3::rust_ssse3_mul_slice,
@@ -124,7 +94,7 @@ const RUST_SSSE3_BACKEND: GaloisBackend = GaloisBackend {
     kind: BackendKind::RustSimd,
 };
 
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64"))]
+#[cfg(rse_ppc64_vsx)]
 const RUST_VSX_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::RustVsx,
     mul_slice: super::ppc64::vsx::rust_vsx_mul_slice,
@@ -141,18 +111,7 @@ static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
 // ppc64 path dispatches to RUST_VSX_BACKEND, and `legacy::simd_c` has no VSX
 // implementation, so including those here would reference a module that does
 // not exist for that target and break the ppc64 build.
-#[cfg(all(
-    any(
-        feature = "simd-neon",
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_simd_any_arch)]
 const SIMD_C_BACKEND: GaloisBackend = GaloisBackend {
     id: BackendId::SimdC,
     mul_slice: super::legacy::simd_c::simd_c_mul_slice,
@@ -176,18 +135,7 @@ enum BackendOverride {
     RustVsx,
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 struct X86FeatureSet {
     sse2: bool,
@@ -198,39 +146,14 @@ struct X86FeatureSet {
     gfni: bool,
 }
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_aarch64_neon, feature = "std"))]
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 struct Aarch64FeatureSet {
     neon: bool,
     sve: bool,
 }
 
-#[cfg(any(
-    all(
-        any(
-            feature = "simd-ssse3",
-            feature = "simd-avx2",
-            feature = "simd-avx512",
-            feature = "simd-gfni"
-        ),
-        target_arch = "x86_64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(
-        feature = "simd-neon",
-        target_arch = "aarch64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(feature = "simd-vsx", target_arch = "powerpc64")
-))]
+#[cfg(rse_rust_simd)]
 fn runtime_select_backend() -> GaloisBackend {
     #[cfg(feature = "std")]
     if let Some(backend) = runtime_override_backend() {
@@ -263,71 +186,22 @@ fn runtime_override_backend() -> Option<GaloisBackend> {
     select_override_backend(parse_backend_override(value.trim())?)
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 fn auto_select_backend() -> GaloisBackend {
     select_x86_backend(detect_x86_features())
 }
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_aarch64_neon, feature = "std"))]
 fn auto_select_backend() -> GaloisBackend {
     select_aarch64_backend(detect_aarch64_features())
 }
 
-#[cfg(any(
-    all(
-        any(
-            feature = "simd-ssse3",
-            feature = "simd-avx2",
-            feature = "simd-avx512",
-            feature = "simd-gfni"
-        ),
-        target_arch = "x86_64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios")),
-        not(feature = "std")
-    ),
-    all(
-        feature = "simd-neon",
-        target_arch = "aarch64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios")),
-        not(feature = "std")
-    ),
-    all(feature = "simd-vsx", target_arch = "powerpc64", not(feature = "std"))
-))]
+#[cfg(all(rse_rust_simd, not(feature = "std")))]
 fn auto_select_backend() -> GaloisBackend {
     SCALAR_BACKEND
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 fn detect_x86_features() -> X86FeatureSet {
     X86FeatureSet {
         sse2: std::is_x86_feature_detected!("sse2"),
@@ -339,50 +213,17 @@ fn detect_x86_features() -> X86FeatureSet {
     }
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 fn supports_rust_avx2(features: X86FeatureSet) -> bool {
     features.avx2
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 fn supports_rust_avx512(features: X86FeatureSet) -> bool {
     features.avx512f && features.avx512bw
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 /// GFNI+AVX2 backend. Auto-selected with highest priority when available (Ice Lake+)
 /// because `_gf2p8mul` provides native GF(2^8) multiplication, eliminating nibble-lookup overhead.
 /// Priority: GFNI+AVX-512 > GFNI+AVX2 > AVX2 > AVX-512 > SSSE3 > SIMD-C > Scalar.
@@ -390,52 +231,19 @@ fn supports_rust_gfni_avx2(features: X86FeatureSet) -> bool {
     features.gfni && features.avx2
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 /// GFNI+AVX-512 backend. Auto-selected with highest priority when available.
 /// See `select_x86_backend` for full priority rationale.
 fn supports_rust_gfni_avx512(features: X86FeatureSet) -> bool {
     features.gfni && features.avx512f && features.avx512bw
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 fn supports_rust_ssse3(features: X86FeatureSet) -> bool {
     features.ssse3
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
     if cfg!(rse_simd_c_build_baseline) {
         return features.sse2;
@@ -443,18 +251,7 @@ fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
     false
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 fn select_x86_override_backend(
     backend_override: BackendOverride,
     features: X86FeatureSet,
@@ -479,18 +276,7 @@ fn select_x86_override_backend(
     }
 }
 
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_x86_simd, feature = "std"))]
 /// Selects the best available x86_64 backend via runtime feature detection.
 ///
 /// **Priority order**: GFNI+AVX-512 > GFNI+AVX2 > AVX2 > AVX-512 > SSSE3 > SIMD-C > Scalar.
@@ -521,13 +307,7 @@ fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
     SCALAR_BACKEND
 }
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_aarch64_neon, feature = "std"))]
 fn detect_aarch64_features() -> Aarch64FeatureSet {
     let sve = super::aarch64::sve::detect_sve_features().available;
     Aarch64FeatureSet {
@@ -536,35 +316,17 @@ fn detect_aarch64_features() -> Aarch64FeatureSet {
     }
 }
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_aarch64_neon, feature = "std"))]
 fn supports_rust_neon(features: Aarch64FeatureSet) -> bool {
     features.neon
 }
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_aarch64_neon, feature = "std"))]
 fn supports_simd_c_aarch64(features: Aarch64FeatureSet) -> bool {
     !cfg!(rse_simd_c_build_unknown) && features.neon
 }
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_aarch64_neon, feature = "std"))]
 fn select_aarch64_override_backend(
     backend_override: BackendOverride,
     features: Aarch64FeatureSet,
@@ -583,13 +345,7 @@ fn select_aarch64_override_backend(
     }
 }
 
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "std"
-))]
+#[cfg(all(rse_aarch64_neon, feature = "std"))]
 fn select_aarch64_backend(features: Aarch64FeatureSet) -> GaloisBackend {
     // SVE is detected but not yet used; reserved for future backend.
     let _sve = features.sve;
@@ -604,13 +360,13 @@ fn select_aarch64_backend(features: Aarch64FeatureSet) -> GaloisBackend {
 
 // --- ppc64le VSX backend selection ---
 
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+#[cfg(all(rse_ppc64_vsx, feature = "std"))]
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 struct PowerpcFeatureSet {
     vsx: bool,
 }
 
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+#[cfg(all(rse_ppc64_vsx, feature = "std"))]
 fn detect_powerpc_features() -> PowerpcFeatureSet {
     // VSX is always available on ppc64le (little-endian PowerPC).
     // There is no runtime feature detection macro for powerpc64 in std,
@@ -620,12 +376,12 @@ fn detect_powerpc_features() -> PowerpcFeatureSet {
     }
 }
 
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+#[cfg(all(rse_ppc64_vsx, feature = "std"))]
 fn supports_rust_vsx(features: PowerpcFeatureSet) -> bool {
     features.vsx
 }
 
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+#[cfg(all(rse_ppc64_vsx, feature = "std"))]
 fn select_powerpc_backend(features: PowerpcFeatureSet) -> GaloisBackend {
     if supports_rust_vsx(features) {
         return RUST_VSX_BACKEND;
@@ -633,7 +389,7 @@ fn select_powerpc_backend(features: PowerpcFeatureSet) -> GaloisBackend {
     SCALAR_BACKEND
 }
 
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+#[cfg(all(rse_ppc64_vsx, feature = "std"))]
 fn select_powerpc_override_backend(
     backend_override: BackendOverride,
     features: PowerpcFeatureSet,
@@ -652,65 +408,31 @@ fn select_powerpc_override_backend(
     }
 }
 
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64", feature = "std"))]
+#[cfg(all(rse_ppc64_vsx, feature = "std"))]
 fn auto_select_backend() -> GaloisBackend {
     select_powerpc_backend(detect_powerpc_features())
 }
 
 #[cfg(feature = "std")]
-#[cfg(all(
-    any(
-        feature = "simd-ssse3",
-        feature = "simd-avx2",
-        feature = "simd-avx512",
-        feature = "simd-gfni"
-    ),
-    target_arch = "x86_64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_x86_simd)]
 fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBackend> {
     select_x86_override_backend(backend_override, detect_x86_features())
 }
 
 #[cfg(feature = "std")]
-#[cfg(all(
-    feature = "simd-neon",
-    target_arch = "aarch64",
-    not(target_env = "msvc"),
-    not(any(target_os = "android", target_os = "ios"))
-))]
+#[cfg(rse_aarch64_neon)]
 fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBackend> {
     select_aarch64_override_backend(backend_override, detect_aarch64_features())
 }
 
 #[cfg(feature = "std")]
-#[cfg(all(feature = "simd-vsx", target_arch = "powerpc64"))]
+#[cfg(rse_ppc64_vsx)]
 fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBackend> {
     select_powerpc_override_backend(backend_override, detect_powerpc_features())
 }
 
 #[cfg(feature = "std")]
-#[cfg(not(any(
-    all(
-        any(
-            feature = "simd-ssse3",
-            feature = "simd-avx2",
-            feature = "simd-avx512",
-            feature = "simd-gfni"
-        ),
-        target_arch = "x86_64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(
-        feature = "simd-neon",
-        target_arch = "aarch64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(feature = "simd-vsx", target_arch = "powerpc64")
-)))]
+#[cfg(not(rse_rust_simd))]
 fn select_override_backend(backend_override: BackendOverride) -> Option<GaloisBackend> {
     match backend_override {
         BackendOverride::Auto => None,
@@ -738,50 +460,12 @@ pub(super) fn runtime_override_backend_id_for_test() -> Option<BackendId> {
     runtime_override_backend().map(|backend| backend.id)
 }
 
-#[cfg(any(
-    all(
-        any(
-            feature = "simd-ssse3",
-            feature = "simd-avx2",
-            feature = "simd-avx512",
-            feature = "simd-gfni"
-        ),
-        target_arch = "x86_64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(
-        feature = "simd-neon",
-        target_arch = "aarch64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(feature = "simd-vsx", target_arch = "powerpc64")
-))]
+#[cfg(rse_rust_simd)]
 pub(super) fn active_backend() -> &'static GaloisBackend {
     ACTIVE_BACKEND.call_once(runtime_select_backend)
 }
 
-#[cfg(not(any(
-    all(
-        any(
-            feature = "simd-ssse3",
-            feature = "simd-avx2",
-            feature = "simd-avx512",
-            feature = "simd-gfni"
-        ),
-        target_arch = "x86_64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(
-        feature = "simd-neon",
-        target_arch = "aarch64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios"))
-    ),
-    all(feature = "simd-vsx", target_arch = "powerpc64")
-)))]
+#[cfg(not(rse_rust_simd))]
 pub(super) fn active_backend() -> &'static GaloisBackend {
     ACTIVE_BACKEND.call_once(|| SCALAR_BACKEND)
 }
@@ -845,18 +529,7 @@ mod tests {
         assert!(parse_backend_override("bogus").is_none());
     }
 
-    #[cfg(all(
-        any(
-            feature = "simd-ssse3",
-            feature = "simd-avx2",
-            feature = "simd-avx512",
-            feature = "simd-gfni"
-        ),
-        target_arch = "x86_64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "std"
-    ))]
+    #[cfg(all(rse_x86_simd, feature = "std"))]
     #[test]
     fn test_select_x86_backend_priority() {
         // GFNI backends are preferred when available (native GF multiplication).
@@ -929,18 +602,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(
-        any(
-            feature = "simd-ssse3",
-            feature = "simd-avx2",
-            feature = "simd-avx512",
-            feature = "simd-gfni"
-        ),
-        target_arch = "x86_64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "std"
-    ))]
+    #[cfg(all(rse_x86_simd, feature = "std"))]
     #[test]
     fn test_select_x86_override_backend_allows_experimental_gfni() {
         assert_eq!(
@@ -984,13 +646,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(
-        feature = "simd-neon",
-        target_arch = "aarch64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "std"
-    ))]
+    #[cfg(all(rse_aarch64_neon, feature = "std"))]
     #[test]
     fn test_select_aarch64_backend_priority() {
         assert_eq!(
@@ -1012,13 +668,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(
-        feature = "simd-neon",
-        target_arch = "aarch64",
-        not(target_env = "msvc"),
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "std"
-    ))]
+    #[cfg(all(rse_aarch64_neon, feature = "std"))]
     #[test]
     fn test_select_aarch64_backend_sve_placeholder_does_not_change_current_priority() {
         assert_eq!(

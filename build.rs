@@ -774,6 +774,31 @@ fn generate_encode_fn_neon(f: &mut File, d: usize, p: usize) {
 }
 
 fn main() {
+    // Named `cfg` aliases for the SIMD-backend gating in `galois_8/backend.rs`.
+    // Each backend/arch predicate (feature + arch + platform exclusions) was
+    // repeated ~a dozen times and had to be hand-synchronised whenever a backend
+    // or architecture was added (e.g. the ppc64le VSX arm, #1244). Defining them
+    // once here collapses those to `#[cfg(rse_*)]`. `cfg_aliases` emits the
+    // matching `rustc-check-cfg` automatically. `std`-qualified variants stay
+    // `all(rse_*, feature = "std")` at the use site.
+    cfg_aliases::cfg_aliases! {
+        // Per-family x86_64 backends (each needs SSSE3/AVX2/AVX512/GFNI and a
+        // non-MSVC, non-android/ios platform for the C-ABI intrinsics path).
+        rse_x86_ssse3: { all(feature = "simd-ssse3", target_arch = "x86_64", not(target_env = "msvc"), not(any(target_os = "android", target_os = "ios"))) },
+        rse_x86_avx2: { all(feature = "simd-avx2", target_arch = "x86_64", not(target_env = "msvc"), not(any(target_os = "android", target_os = "ios"))) },
+        rse_x86_avx512: { all(feature = "simd-avx512", target_arch = "x86_64", not(target_env = "msvc"), not(any(target_os = "android", target_os = "ios"))) },
+        rse_x86_gfni: { all(feature = "simd-gfni", target_arch = "x86_64", not(target_env = "msvc"), not(any(target_os = "android", target_os = "ios"))) },
+        // Any x86_64 rust-SIMD family.
+        rse_x86_simd: { all(any(feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"), target_arch = "x86_64", not(target_env = "msvc"), not(any(target_os = "android", target_os = "ios"))) },
+        // aarch64 NEON and ppc64 VSX backends.
+        rse_aarch64_neon: { all(feature = "simd-neon", target_arch = "aarch64", not(target_env = "msvc"), not(any(target_os = "android", target_os = "ios"))) },
+        rse_ppc64_vsx: { all(feature = "simd-vsx", target_arch = "powerpc64") },
+        // The five rust-SIMD families across x86_64 + aarch64 (table-generation gate).
+        rse_simd_any_arch: { all(any(feature = "simd-neon", feature = "simd-ssse3", feature = "simd-avx2", feature = "simd-avx512", feature = "simd-gfni"), any(target_arch = "x86_64", target_arch = "aarch64"), not(target_env = "msvc"), not(any(target_os = "android", target_os = "ios"))) },
+        // Any rust-SIMD backend on any supported architecture (the 3-arm block).
+        rse_rust_simd: { any(rse_x86_simd, rse_aarch64_neon, rse_ppc64_vsx) },
+    }
+
     println!("cargo:rerun-if-env-changed=RUST_REED_SOLOMON_ERASURE_ARCH");
     println!("cargo:rerun-if-changed=simd_c/reedsolomon.c");
     println!("cargo:rerun-if-changed=simd_c/reedsolomon.h");
