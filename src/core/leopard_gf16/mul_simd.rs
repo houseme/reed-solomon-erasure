@@ -522,6 +522,7 @@ mod mul_simd_tests {
     // 64 KiB lane. Run: `cargo test --release --lib -- --ignored --nocapture
     // decision_gate_speedup`. If the speedup is < ~1.5x, escalate to Phase 2
     // (planar work-buffer refactor to drop the de-/re-interleave).
+    #[cfg(feature = "std")]
     #[test]
     #[ignore]
     fn decision_gate_speedup() {
