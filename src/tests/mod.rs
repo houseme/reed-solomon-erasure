@@ -395,6 +395,57 @@ fn test_leopard_gf16_reconstruct_opt_large_shard_dispatches_to_leopard() {
 }
 
 #[test]
+fn test_leopard_gf16_reconstruct_multichunk_roundtrip() {
+    // Shards larger than one 64 KiB work chunk take the multi-chunk reconstruct
+    // path (parallelised under `std`). Cover an aligned size and a non-64-KiB
+    // aligned size (partial last chunk) across several erasure patterns — the
+    // partial last chunk used to mismatch the full work-lane length. All must
+    // recover byte-for-byte.
+    let (data, parity) = (10usize, 4usize);
+    let total = data + parity;
+    for &shard_len in &[128 * 1024usize, 192 * 1024 + 64] {
+        let codec = ReedSolomon::with_options(
+            data,
+            parity,
+            CodecOptions {
+                codec_family: CodecFamily::LeopardGF16,
+                ..CodecOptions::default()
+            },
+        )
+        .unwrap();
+        let mut encoded: Vec<Vec<u8>> = (0..total)
+            .map(|i| {
+                (0..shard_len)
+                    .map(|j| (i.wrapping_mul(131).wrapping_add(j.wrapping_mul(7))) as u8)
+                    .collect()
+            })
+            .collect();
+        codec.encode(&mut encoded).unwrap();
+
+        for drops in [
+            vec![0usize],
+            vec![0, 3],
+            vec![0, 11],
+            vec![10, 11, 12, 13],
+            vec![0, 1, 2, 3],
+        ] {
+            let mut shards: Vec<Option<Vec<u8>>> = encoded.iter().cloned().map(Some).collect();
+            for &d in &drops {
+                shards[d] = None;
+            }
+            codec.reconstruct(&mut shards).unwrap();
+            for &d in &drops {
+                assert_eq!(
+                    shards[d].as_ref().unwrap(),
+                    &encoded[d],
+                    "shard {d} @ {shard_len}B drops {drops:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn test_leopard_gf16_encode_populates_parity() {
     let codec = ReedSolomon::with_options(
         4,

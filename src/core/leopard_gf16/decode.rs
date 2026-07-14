@@ -255,6 +255,46 @@ pub(crate) fn reconstruct_with_tables16(
         .collect();
 
     let chunk_cap = core::cmp::min(shard_u16_len, driver.chunk_size);
+
+    // Recovery targets: (shard index, work lane, inverse error-locator value) for
+    // each missing shard. The order is reused for the per-chunk output slices.
+    let missing: Vec<(usize, usize, u16)> = (0..total_shards)
+        .filter(|&i| !present[i])
+        .map(|i| {
+            let (work_idx, err_idx) = if i >= data_shards {
+                (i - data_shards, i - data_shards)
+            } else {
+                (driver.m + i, driver.m + i)
+            };
+            (
+                i,
+                work_idx,
+                (MODULUS16 as u16).wrapping_sub(err_locs[err_idx]),
+            )
+        })
+        .collect();
+
+    // Each `driver.chunk_size` (64 KiB) window is an independent IFFT ->
+    // formal-derivative -> FFT job writing a disjoint output byte range, so shards
+    // larger than one chunk parallelise across the rayon pool. Single-chunk shards
+    // (<= 64 KiB) and `no_std` take the serial path, reusing one set of buffers.
+    #[cfg(feature = "std")]
+    if shard_u16_len.div_ceil(driver.chunk_size) >= 2 {
+        return reconstruct_chunks_parallel(
+            &driver,
+            present,
+            outputs,
+            &converted_inputs,
+            err_locs,
+            ifft_plan,
+            fft_plan,
+            tables,
+            &missing,
+            shard_u16_len,
+            chunk_cap,
+        );
+    }
+
     let mut work = FlatWork16::new(driver.n, chunk_cap);
     let mut scratch: Vec<u16> = Vec::new();
     // Reusable aligned scratch holding a chunk of recovered u16 elements before
@@ -266,94 +306,200 @@ pub(crate) fn reconstruct_with_tables16(
         let end = core::cmp::min(offset + driver.chunk_size, shard_u16_len);
         let size = end - offset;
 
-        if scratch.len() < size {
-            scratch.resize(size, 0);
+        compute_reconstruct_chunk(
+            &mut work,
+            &mut scratch,
+            offset,
+            end,
+            size,
+            present,
+            &converted_inputs,
+            err_locs,
+            ifft_plan,
+            fft_plan,
+            tables,
+            &driver,
+        )?;
+
+        if out_scratch.len() < size {
+            out_scratch.resize(size, 0);
         }
-
-        // Step 1: Multiply received data by error locator values.
-        // Work layout: lanes 0..m = parity, lanes m..m+data_shards = data.
-        for i in 0..data_shards {
-            let work_idx = driver.m + i;
-            if present[i] {
-                let data_u16 = converted_inputs[i]
-                    .as_ref()
-                    .ok_or(Error::TooFewShardsPresent)?;
-                mulgf16(
-                    work.lane_mut(work_idx),
-                    &data_u16[offset..end],
-                    err_locs[work_idx],
-                    tables,
-                );
-            } else {
-                work.lane_mut(work_idx)[..size].fill(0);
-            }
-        }
-        for i in 0..parity_shards {
-            let shard_idx = data_shards + i;
-            if present[shard_idx] {
-                let data_u16 = converted_inputs[shard_idx]
-                    .as_ref()
-                    .ok_or(Error::TooFewShardsPresent)?;
-                mulgf16(
-                    work.lane_mut(i),
-                    &data_u16[offset..end],
-                    err_locs[i],
-                    tables,
-                );
-            } else {
-                work.lane_mut(i)[..size].fill(0);
-            }
-        }
-        for i in parity_shards..driver.m {
-            work.lane_mut(i)[..size].fill(0);
-        }
-        for i in driver.work_size..driver.n {
-            work.lane_mut(i)[..size].fill(0);
-        }
-
-        // Step 2: IFFT.
-        ifft_dit_decode16_with_plan(&mut work, size, ifft_plan, tables, driver.n, &mut scratch);
-
-        // Step 3: Formal derivative.
-        compute_formal_derivative16(&mut work, driver.n, size);
-
-        // Step 4: FFT.
-        fft_dit_decode16_with_plan(&mut work, size, fft_plan, tables, driver.n, &mut scratch);
-
-        // Step 5: Recover missing shards.
-        for i in 0..total_shards {
-            if present[i] {
-                continue;
-            }
-            let (work_idx, err_idx) = if i >= data_shards {
-                (i - data_shards, i - data_shards)
-            } else {
-                (driver.m + i, driver.m + i)
-            };
-            let inv_err = (MODULUS16 as u16).wrapping_sub(err_locs[err_idx]);
-
-            let out_bytes = &mut *outputs[i];
-            if out_scratch.len() < size {
-                out_scratch.resize(size, 0);
-            }
+        // Step 5: scale each missing shard's transform by the inverse error locator
+        // and write it straight into user byte layout at this chunk's byte range.
+        for &(shard_idx, work_idx, inv_err) in &missing {
             mulgf16(
                 &mut out_scratch[..size],
-                work.lane(work_idx),
+                &work.lane(work_idx)[..size],
                 inv_err,
                 tables,
             );
-            // Write recovered elements straight into user byte layout: the fused
-            // de-interleave skips the intermediate split-byte buffer and the
-            // second whole-shard pass the split->user conversion used to need.
             super::ops::work_u16_to_user_bytes(
                 &out_scratch[..size],
-                &mut out_bytes[offset * 2..end * 2],
+                &mut outputs[shard_idx][offset * 2..end * 2],
             );
         }
         offset = end;
     }
 
     Ok(())
+}
+
+/// Steps 1-4 of a single reconstruct chunk: multiply the received shards by the
+/// error locator, then IFFT -> formal derivative -> FFT. Leaves the recovered
+/// transform in `work` for the caller's Step 5 (per-missing-shard scaling +
+/// write-out). Shared by the serial and parallel reconstruct paths.
+#[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
+fn compute_reconstruct_chunk(
+    work: &mut FlatWork16,
+    scratch: &mut Vec<u16>,
+    offset: usize,
+    end: usize,
+    size: usize,
+    present: &[bool],
+    converted_inputs: &[Option<Vec<u16>>],
+    err_locs: &[u16; ORDER16],
+    ifft_plan: &IfftDit16Plan,
+    fft_plan: &FftDit16Plan,
+    tables: &LeopardGf16Tables,
+    driver: &LeopardGf16DecodeDriver,
+) -> Result<(), Error> {
+    if scratch.len() < size {
+        scratch.resize(size, 0);
+    }
+
+    // Step 1: multiply received data by error locator values.
+    // Work layout: lanes 0..m = parity, lanes m..m+data_shards = data.
+    for i in 0..driver.data_shards {
+        let work_idx = driver.m + i;
+        if present[i] {
+            let data_u16 = converted_inputs[i]
+                .as_ref()
+                .ok_or(Error::TooFewShardsPresent)?;
+            mulgf16(
+                &mut work.lane_mut(work_idx)[..size],
+                &data_u16[offset..end],
+                err_locs[work_idx],
+                tables,
+            );
+        } else {
+            work.lane_mut(work_idx)[..size].fill(0);
+        }
+    }
+    for i in 0..driver.parity_shards {
+        let shard_idx = driver.data_shards + i;
+        if present[shard_idx] {
+            let data_u16 = converted_inputs[shard_idx]
+                .as_ref()
+                .ok_or(Error::TooFewShardsPresent)?;
+            mulgf16(
+                &mut work.lane_mut(i)[..size],
+                &data_u16[offset..end],
+                err_locs[i],
+                tables,
+            );
+        } else {
+            work.lane_mut(i)[..size].fill(0);
+        }
+    }
+    for i in driver.parity_shards..driver.m {
+        work.lane_mut(i)[..size].fill(0);
+    }
+    for i in driver.work_size..driver.n {
+        work.lane_mut(i)[..size].fill(0);
+    }
+
+    // Step 2: IFFT.
+    ifft_dit_decode16_with_plan(work, size, ifft_plan, tables, driver.n, scratch);
+    // Step 3: formal derivative.
+    compute_formal_derivative16(work, driver.n, size);
+    // Step 4: FFT.
+    fft_dit_decode16_with_plan(work, size, fft_plan, tables, driver.n, scratch);
+
+    Ok(())
+}
+
+/// Reconstruct each 64 KiB chunk on the rayon pool. Chunks touch disjoint output
+/// byte ranges, so the per-shard outputs are split into per-chunk mutable slices
+/// (a safe `chunks_mut` transpose) and each job owns its slice group plus a
+/// per-thread work buffer reused across the jobs that thread runs.
+#[cfg(feature = "std")]
+#[allow(clippy::too_many_arguments)]
+fn reconstruct_chunks_parallel(
+    driver: &LeopardGf16DecodeDriver,
+    present: &[bool],
+    outputs: &mut [&mut [u8]],
+    converted_inputs: &[Option<Vec<u16>>],
+    err_locs: &[u16; ORDER16],
+    ifft_plan: &IfftDit16Plan,
+    fft_plan: &FftDit16Plan,
+    tables: &LeopardGf16Tables,
+    missing: &[(usize, usize, u16)],
+    shard_u16_len: usize,
+    chunk_cap: usize,
+) -> Result<(), Error> {
+    use rayon::prelude::*;
+
+    let chunk_bytes = driver.chunk_size * 2;
+    // One mutable-chunk iterator per missing shard, in the same order as `missing`.
+    let mut per_shard_chunks: Vec<_> = outputs
+        .iter_mut()
+        .enumerate()
+        .filter(|(i, _)| !present[*i])
+        .map(|(_, out)| out.chunks_mut(chunk_bytes))
+        .collect();
+
+    // Transpose to per-chunk jobs: (offset, size, one output slice per missing shard).
+    let mut jobs: Vec<(usize, usize, Vec<&mut [u8]>)> = Vec::new();
+    let mut offset = 0usize;
+    while offset < shard_u16_len {
+        let end = core::cmp::min(offset + driver.chunk_size, shard_u16_len);
+        let slices: Vec<&mut [u8]> = per_shard_chunks
+            .iter_mut()
+            .map(|it| it.next().expect("chunk count matches shard length"))
+            .collect();
+        jobs.push((offset, end - offset, slices));
+        offset = end;
+    }
+    drop(per_shard_chunks);
+
+    jobs.into_par_iter().try_for_each_init(
+        || {
+            (
+                FlatWork16::new(driver.n, chunk_cap),
+                Vec::<u16>::new(),
+                Vec::<u16>::new(),
+            )
+        },
+        |(work, scratch, out_scratch), (offset, size, mut chunk_out)| -> Result<(), Error> {
+            compute_reconstruct_chunk(
+                work,
+                scratch,
+                offset,
+                offset + size,
+                size,
+                present,
+                converted_inputs,
+                err_locs,
+                ifft_plan,
+                fft_plan,
+                tables,
+                driver,
+            )?;
+            if out_scratch.len() < size {
+                out_scratch.resize(size, 0);
+            }
+            for (k, &(_, work_idx, inv_err)) in missing.iter().enumerate() {
+                mulgf16(
+                    &mut out_scratch[..size],
+                    &work.lane(work_idx)[..size],
+                    inv_err,
+                    tables,
+                );
+                super::ops::work_u16_to_user_bytes(&out_scratch[..size], chunk_out[k]);
+            }
+            Ok(())
+        },
+    )
 }
 
 pub(super) fn ifft_dit_decode16_with_plan(
