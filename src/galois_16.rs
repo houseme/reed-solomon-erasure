@@ -622,6 +622,9 @@ impl Element {
 
 #[cfg(test)]
 mod tests {
+    extern crate alloc;
+    use alloc::{vec, vec::Vec};
+
     use super::*;
     use crate::Field as _;
     use quickcheck::Arbitrary;
