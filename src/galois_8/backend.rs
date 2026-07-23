@@ -282,6 +282,56 @@ fn supports_simd_c_x86(features: X86FeatureSet) -> bool {
     false
 }
 
+#[cfg(all(rse_x86_simd, feature = "std", rse_x86_ssse3))]
+fn rust_ssse3_backend(features: X86FeatureSet) -> Option<GaloisBackend> {
+    supports_rust_ssse3(features).then_some(RUST_SSSE3_BACKEND)
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", not(rse_x86_ssse3)))]
+fn rust_ssse3_backend(_features: X86FeatureSet) -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", rse_x86_avx2))]
+fn rust_avx2_backend(features: X86FeatureSet) -> Option<GaloisBackend> {
+    supports_rust_avx2(features).then_some(RUST_AVX2_BACKEND)
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", not(rse_x86_avx2)))]
+fn rust_avx2_backend(_features: X86FeatureSet) -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", rse_x86_avx512))]
+fn rust_avx512_backend(features: X86FeatureSet) -> Option<GaloisBackend> {
+    supports_rust_avx512(features).then_some(RUST_AVX512_BACKEND)
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", not(rse_x86_avx512)))]
+fn rust_avx512_backend(_features: X86FeatureSet) -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", rse_x86_gfni))]
+fn rust_gfni_avx2_backend(features: X86FeatureSet) -> Option<GaloisBackend> {
+    supports_rust_gfni_avx2(features).then_some(RUST_GFNI_AVX2_BACKEND)
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", not(rse_x86_gfni)))]
+fn rust_gfni_avx2_backend(_features: X86FeatureSet) -> Option<GaloisBackend> {
+    None
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", rse_x86_gfni))]
+fn rust_gfni_avx512_backend(features: X86FeatureSet) -> Option<GaloisBackend> {
+    supports_rust_gfni_avx512(features).then_some(RUST_GFNI_AVX512_BACKEND)
+}
+
+#[cfg(all(rse_x86_simd, feature = "std", not(rse_x86_gfni)))]
+fn rust_gfni_avx512_backend(_features: X86FeatureSet) -> Option<GaloisBackend> {
+    None
+}
+
 #[cfg(all(rse_x86_simd, feature = "std"))]
 fn select_x86_override_backend(
     backend_override: BackendOverride,
@@ -291,17 +341,11 @@ fn select_x86_override_backend(
         BackendOverride::Auto => None,
         BackendOverride::Scalar => Some(SCALAR_BACKEND),
         BackendOverride::SimdC => supports_simd_c_x86(features).then_some(SIMD_C_BACKEND),
-        BackendOverride::RustSsse3 => supports_rust_ssse3(features).then_some(RUST_SSSE3_BACKEND),
-        BackendOverride::RustAvx2 => supports_rust_avx2(features).then_some(RUST_AVX2_BACKEND),
-        BackendOverride::RustAvx512 => {
-            supports_rust_avx512(features).then_some(RUST_AVX512_BACKEND)
-        }
-        BackendOverride::RustGfniAvx2 => {
-            supports_rust_gfni_avx2(features).then_some(RUST_GFNI_AVX2_BACKEND)
-        }
-        BackendOverride::RustGfniAvx512 => {
-            supports_rust_gfni_avx512(features).then_some(RUST_GFNI_AVX512_BACKEND)
-        }
+        BackendOverride::RustSsse3 => rust_ssse3_backend(features),
+        BackendOverride::RustAvx2 => rust_avx2_backend(features),
+        BackendOverride::RustAvx512 => rust_avx512_backend(features),
+        BackendOverride::RustGfniAvx2 => rust_gfni_avx2_backend(features),
+        BackendOverride::RustGfniAvx512 => rust_gfni_avx512_backend(features),
         BackendOverride::RustNeon => None,
         BackendOverride::RustVsx => None,
     }
@@ -317,20 +361,20 @@ fn select_x86_override_backend(
 /// overhead. AVX2 is ranked above AVX-512 for non-GFNI because AVX-512 can
 /// cause frequency throttling on some microarchitectures.
 fn select_x86_backend(features: X86FeatureSet) -> GaloisBackend {
-    if supports_rust_gfni_avx512(features) {
-        return RUST_GFNI_AVX512_BACKEND;
+    if let Some(backend) = rust_gfni_avx512_backend(features) {
+        return backend;
     }
-    if supports_rust_gfni_avx2(features) {
-        return RUST_GFNI_AVX2_BACKEND;
+    if let Some(backend) = rust_gfni_avx2_backend(features) {
+        return backend;
     }
-    if supports_rust_avx2(features) {
-        return RUST_AVX2_BACKEND;
+    if let Some(backend) = rust_avx2_backend(features) {
+        return backend;
     }
-    if supports_rust_avx512(features) {
-        return RUST_AVX512_BACKEND;
+    if let Some(backend) = rust_avx512_backend(features) {
+        return backend;
     }
-    if supports_rust_ssse3(features) {
-        return RUST_SSSE3_BACKEND;
+    if let Some(backend) = rust_ssse3_backend(features) {
+        return backend;
     }
     if supports_simd_c_x86(features) {
         return SIMD_C_BACKEND;
@@ -590,47 +634,57 @@ mod tests {
     fn test_select_x86_backend_priority() {
         // GFNI backends are preferred when available (native GF multiplication).
         // Priority: GFNI+AVX-512 > GFNI+AVX2 > AVX2 > AVX-512 > SSSE3 > SIMD-C > Scalar.
-        assert_eq!(
-            BackendId::RustGfniAvx512,
-            select_x86_backend(X86FeatureSet {
-                gfni: true,
-                avx512f: true,
-                avx512bw: true,
-                avx2: true,
-                ..X86FeatureSet::default()
-            })
-            .id
-        );
+        #[cfg(rse_x86_gfni)]
+        {
+            assert_eq!(
+                BackendId::RustGfniAvx512,
+                select_x86_backend(X86FeatureSet {
+                    gfni: true,
+                    avx512f: true,
+                    avx512bw: true,
+                    avx2: true,
+                    ..X86FeatureSet::default()
+                })
+                .id
+            );
 
-        assert_eq!(
-            BackendId::RustGfniAvx2,
-            select_x86_backend(X86FeatureSet {
-                gfni: true,
-                avx2: true,
-                ..X86FeatureSet::default()
-            })
-            .id
-        );
+            assert_eq!(
+                BackendId::RustGfniAvx2,
+                select_x86_backend(X86FeatureSet {
+                    gfni: true,
+                    avx2: true,
+                    ..X86FeatureSet::default()
+                })
+                .id
+            );
+        }
 
-        assert_eq!(
-            BackendId::RustAvx2,
-            select_x86_backend(X86FeatureSet {
-                avx2: true,
-                ..X86FeatureSet::default()
-            })
-            .id
-        );
+        #[cfg(rse_x86_avx2)]
+        {
+            assert_eq!(
+                BackendId::RustAvx2,
+                select_x86_backend(X86FeatureSet {
+                    avx2: true,
+                    ..X86FeatureSet::default()
+                })
+                .id
+            );
+        }
 
-        assert_eq!(
-            BackendId::RustAvx512,
-            select_x86_backend(X86FeatureSet {
-                avx512f: true,
-                avx512bw: true,
-                ..X86FeatureSet::default()
-            })
-            .id
-        );
+        #[cfg(rse_x86_avx512)]
+        {
+            assert_eq!(
+                BackendId::RustAvx512,
+                select_x86_backend(X86FeatureSet {
+                    avx512f: true,
+                    avx512bw: true,
+                    ..X86FeatureSet::default()
+                })
+                .id
+            );
+        }
 
+        #[cfg(rse_x86_ssse3)]
         if cfg!(rse_simd_c_build_baseline) {
             assert_eq!(
                 BackendId::RustSsse3,
@@ -661,32 +715,35 @@ mod tests {
     #[cfg(all(rse_x86_simd, feature = "std"))]
     #[test]
     fn test_select_x86_override_backend_allows_experimental_gfni() {
-        assert_eq!(
-            Some(BackendId::RustGfniAvx512),
-            select_x86_override_backend(
-                BackendOverride::RustGfniAvx512,
-                X86FeatureSet {
-                    gfni: true,
-                    avx512f: true,
-                    avx512bw: true,
-                    ..X86FeatureSet::default()
-                },
-            )
-            .map(|backend| backend.id)
-        );
+        #[cfg(rse_x86_gfni)]
+        {
+            assert_eq!(
+                Some(BackendId::RustGfniAvx512),
+                select_x86_override_backend(
+                    BackendOverride::RustGfniAvx512,
+                    X86FeatureSet {
+                        gfni: true,
+                        avx512f: true,
+                        avx512bw: true,
+                        ..X86FeatureSet::default()
+                    },
+                )
+                .map(|backend| backend.id)
+            );
 
-        assert_eq!(
-            Some(BackendId::RustGfniAvx2),
-            select_x86_override_backend(
-                BackendOverride::RustGfniAvx2,
-                X86FeatureSet {
-                    gfni: true,
-                    avx2: true,
-                    ..X86FeatureSet::default()
-                },
-            )
-            .map(|backend| backend.id)
-        );
+            assert_eq!(
+                Some(BackendId::RustGfniAvx2),
+                select_x86_override_backend(
+                    BackendOverride::RustGfniAvx2,
+                    X86FeatureSet {
+                        gfni: true,
+                        avx2: true,
+                        ..X86FeatureSet::default()
+                    },
+                )
+                .map(|backend| backend.id)
+            );
+        }
 
         assert_eq!(
             None,

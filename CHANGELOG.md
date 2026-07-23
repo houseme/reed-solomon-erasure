@@ -10,6 +10,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Fixed
+- Reworked the x86_64 generated AVX2 full-encode dispatch into stack-bounded per-parity kernels after downstream RustFS e2e coverage exposed stack overflows on small worker-thread stacks.
+- Fixed x86_64 backend selection when only a single SIMD feature such as `simd-avx2` is enabled.
+
 ## 8.0.1 (2026-07-23)
 
 > Patch release: safely guard generated AVX2 encode dispatch while preserving the public API and the on-wire Reed-Solomon format.
