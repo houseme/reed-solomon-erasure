@@ -334,6 +334,7 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f).unwrap();
     writeln!(f, "#[cfg(all(").unwrap();
     writeln!(f, "    feature = \"simd-avx2\",").unwrap();
+    writeln!(f, "    feature = \"std\",").unwrap();
     writeln!(f, "    target_arch = \"x86_64\",").unwrap();
     writeln!(f, "    not(target_env = \"msvc\"),").unwrap();
     writeln!(
@@ -356,6 +357,7 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     // Re-export dispatch function at the module level
     writeln!(f, "#[cfg(all(").unwrap();
     writeln!(f, "    feature = \"simd-avx2\",").unwrap();
+    writeln!(f, "    feature = \"std\",").unwrap();
     writeln!(f, "    target_arch = \"x86_64\",").unwrap();
     writeln!(f, "    not(target_env = \"msvc\"),").unwrap();
     writeln!(
@@ -372,11 +374,14 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f, "    parity: &mut [&mut [u8]],").unwrap();
     writeln!(f, "    shard_len: usize,").unwrap();
     writeln!(f, ") -> bool {{").unwrap();
+    writeln!(f, "    if !std::is_x86_feature_detected!(\"avx2\") {{").unwrap();
+    writeln!(f, "        return false;").unwrap();
+    writeln!(f, "    }}").unwrap();
     writeln!(f, "    match (data_shard_count, parity_shard_count) {{").unwrap();
     for &(d, p) in configs {
         writeln!(
             f,
-            "        // SAFETY: 运行时特性检测已确认 ISA 可用后才分发到此臂。"
+            "        // SAFETY: the AVX2 runtime check above proved this CPU supports AVX2."
         )
         .unwrap();
         writeln!(f, "        ({d}, {p}) => unsafe {{").unwrap();

@@ -3,6 +3,7 @@
 
 #[cfg(all(
     feature = "simd-avx2",
+    feature = "std",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -11,6 +12,7 @@ include!(concat!(env!("OUT_DIR"), "/codegen_encode.rs"));
 
 #[cfg(not(all(
     feature = "simd-avx2",
+    feature = "std",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
