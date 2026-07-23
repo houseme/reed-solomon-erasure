@@ -29,6 +29,9 @@ All notable changes to this project are documented in this file.
 - `RSE_BACKEND_OVERRIDE` must be set before the process first uses the codec; generated-encode permission is cached consistently with backend selection.
 - In no_std builds compiled with `target-feature=+avx2`, deployment CPUs must support AVX2.
 
+### Internal
+- Updated the `cc` workspace build dependency to 1.3.0 and refreshed its lockfile-resolved transitive dependencies.
+
 ## 8.0.0 (2026-07-14)
 
 > Major release: the full security / performance / robustness audit against [`klauspost/reedsolomon`](https://github.com/klauspost/reedsolomon), plus optional Leopard auto-activation. **The only breaking change for existing callers is that `CodecOptions` (and the new `LeopardMode`) are now `#[non_exhaustive]`.** Callers that only use `ReedSolomon::new` / `encode*` / `reconstruct*` / `verify*` — including downstream RustFS via `rustfs-ecstore` — need no source changes, only the dependency bump to `8`.
