@@ -27,18 +27,22 @@ pub(crate) fn try_encode_codegen_avx2(
 }
 
 #[inline]
+#[cfg(feature = "std")]
 fn avx2_codegen_available() -> bool {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
-        return avx2_codegen_available_for(std::is_x86_feature_detected!("avx2"));
+        avx2_codegen_available_for(std::is_x86_feature_detected!("avx2"))
     }
 
     #[cfg(all(feature = "std", not(target_arch = "x86_64")))]
     {
         false
     }
+}
 
-    #[cfg(not(feature = "std"))]
+#[inline]
+#[cfg(not(feature = "std"))]
+fn avx2_codegen_available() -> bool {
     avx2_codegen_available_for(cfg!(all(target_arch = "x86_64", target_feature = "avx2")))
 }
 
