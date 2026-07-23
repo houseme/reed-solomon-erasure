@@ -334,7 +334,6 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f).unwrap();
     writeln!(f, "#[cfg(all(").unwrap();
     writeln!(f, "    feature = \"simd-avx2\",").unwrap();
-    writeln!(f, "    feature = \"std\",").unwrap();
     writeln!(f, "    target_arch = \"x86_64\",").unwrap();
     writeln!(f, "    not(target_env = \"msvc\"),").unwrap();
     writeln!(
@@ -357,7 +356,6 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     // Re-export dispatch function at the module level
     writeln!(f, "#[cfg(all(").unwrap();
     writeln!(f, "    feature = \"simd-avx2\",").unwrap();
-    writeln!(f, "    feature = \"std\",").unwrap();
     writeln!(f, "    target_arch = \"x86_64\",").unwrap();
     writeln!(f, "    not(target_env = \"msvc\"),").unwrap();
     writeln!(
@@ -374,8 +372,8 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f, "    parity: &mut [&mut [u8]],").unwrap();
     writeln!(f, "    shard_len: usize,").unwrap();
     writeln!(f, ") -> bool {{").unwrap();
-    writeln!(f, "    try_encode_codegen_avx2_with_runtime_avx2(").unwrap();
-    writeln!(f, "        std::is_x86_feature_detected!(\"avx2\"),").unwrap();
+    writeln!(f, "    try_encode_codegen_avx2_with_avx2_available(").unwrap();
+    writeln!(f, "        avx2_codegen_available(),").unwrap();
     writeln!(
         f,
         "        data_shard_count, parity_shard_count, parity_rows, data, parity, shard_len,"
@@ -384,8 +382,8 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f, "    )").unwrap();
     writeln!(f, "}}").unwrap();
     writeln!(f).unwrap();
-    writeln!(f, "fn try_encode_codegen_avx2_with_runtime_avx2(").unwrap();
-    writeln!(f, "    runtime_avx2: bool,").unwrap();
+    writeln!(f, "fn try_encode_codegen_avx2_with_avx2_available(").unwrap();
+    writeln!(f, "    avx2_available: bool,").unwrap();
     writeln!(f, "    data_shard_count: usize,").unwrap();
     writeln!(f, "    parity_shard_count: usize,").unwrap();
     writeln!(f, "    parity_rows: &[&[u8]],").unwrap();
@@ -393,7 +391,7 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f, "    parity: &mut [&mut [u8]],").unwrap();
     writeln!(f, "    shard_len: usize,").unwrap();
     writeln!(f, ") -> bool {{").unwrap();
-    writeln!(f, "    if !runtime_avx2 {{").unwrap();
+    writeln!(f, "    if !avx2_available {{").unwrap();
     writeln!(f, "        return false;").unwrap();
     writeln!(f, "    }}").unwrap();
     writeln!(f, "    match (data_shard_count, parity_shard_count) {{").unwrap();

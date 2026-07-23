@@ -105,6 +105,9 @@ const RUST_VSX_BACKEND: GaloisBackend = GaloisBackend {
 
 static ACTIVE_BACKEND: Once<GaloisBackend> = Once::new();
 
+#[cfg(feature = "std")]
+static GENERATED_ENCODE_ALLOWED: Once<bool> = Once::new();
+
 // The C SIMD backend is only compiled where `super::legacy::simd_c` itself is
 // (see galois_8/legacy/mod.rs): the ssse3/avx2/avx512/gfni/neon families on
 // x86_64/aarch64. It is deliberately NOT gated on `simd-vsx`/`powerpc64` — the
@@ -197,11 +200,16 @@ fn generated_encode_allowed_for_override(backend_override: Option<BackendOverrid
 /// This makes `RSE_BACKEND_OVERRIDE=scalar` a reliable way to avoid generated
 /// SIMD encode code as well as the ordinary multiplication backend.
 #[cfg(feature = "std")]
-pub(crate) fn generated_encode_allowed() -> bool {
+fn runtime_generated_encode_allowed() -> bool {
     let backend_override = std::env::var("RSE_BACKEND_OVERRIDE")
         .ok()
         .and_then(|value| parse_backend_override(value.trim()));
     generated_encode_allowed_for_override(backend_override)
+}
+
+#[cfg(feature = "std")]
+pub(crate) fn generated_encode_allowed() -> bool {
+    *GENERATED_ENCODE_ALLOWED.call_once(runtime_generated_encode_allowed)
 }
 
 #[cfg(not(feature = "std"))]

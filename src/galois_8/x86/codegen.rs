@@ -3,7 +3,6 @@
 
 #[cfg(all(
     feature = "simd-avx2",
-    feature = "std",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -12,7 +11,6 @@ include!(concat!(env!("OUT_DIR"), "/codegen_encode.rs"));
 
 #[cfg(not(all(
     feature = "simd-avx2",
-    feature = "std",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -28,10 +26,30 @@ pub(crate) fn try_encode_codegen_avx2(
     false
 }
 
+#[inline]
+fn avx2_codegen_available() -> bool {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        return avx2_codegen_available_for(std::is_x86_feature_detected!("avx2"));
+    }
+
+    #[cfg(all(feature = "std", not(target_arch = "x86_64")))]
+    {
+        false
+    }
+
+    #[cfg(not(feature = "std"))]
+    avx2_codegen_available_for(cfg!(all(target_arch = "x86_64", target_feature = "avx2")))
+}
+
+#[inline]
+fn avx2_codegen_available_for(avx2_available: bool) -> bool {
+    avx2_available
+}
+
 #[cfg(all(
     test,
     feature = "simd-avx2",
-    feature = "std",
     target_arch = "x86_64",
     not(target_env = "msvc"),
     not(any(target_os = "android", target_os = "ios"))
@@ -44,7 +62,7 @@ mod tests {
         let mut parity = [0xa5; 1];
         let mut parity_refs = [&mut parity[..]];
 
-        assert!(!try_encode_codegen_avx2_with_runtime_avx2(
+        assert!(!try_encode_codegen_avx2_with_avx2_available(
             false,
             4,
             2,

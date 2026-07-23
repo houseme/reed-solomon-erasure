@@ -6359,6 +6359,129 @@ fn test_codegen_encode_common_configs() {
     }
 }
 
+const GENERATED_CODEGEN_CONFIGS: &[(usize, usize)] =
+    &[(10, 4), (12, 4), (8, 3), (8, 4), (6, 3), (4, 2)];
+const SIMD_BOUNDARY_LENGTHS: &[usize] = &[
+    1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 255, 4095, 4096, 65_535, 65_536, 65_537,
+];
+
+fn encode_generic_galois8(codec: &ReedSolomon, data: &[Vec<u8>], parity: &mut [Vec<u8>]) {
+    let parity_rows = codec.get_parity_rows();
+    codec.code_some_slices(&parity_rows, data, parity);
+}
+
+#[test]
+fn generated_encode_matches_generic_across_layout_and_tail_matrix() {
+    for &(data_shard_count, parity_shard_count) in GENERATED_CODEGEN_CONFIGS {
+        let codec = ReedSolomon::new(data_shard_count, parity_shard_count).unwrap();
+
+        for &shard_len in SIMD_BOUNDARY_LENGTHS {
+            let data = deterministic_shards_u8(
+                shard_len,
+                data_shard_count,
+                ((data_shard_count as u64) << 48)
+                    ^ ((parity_shard_count as u64) << 32)
+                    ^ shard_len as u64,
+            );
+            let mut generated_parity = vec![vec![0xa5; shard_len]; parity_shard_count];
+            let mut generic_parity = generated_parity.clone();
+
+            codec.encode_sep(&data, &mut generated_parity).unwrap();
+            encode_generic_galois8(&codec, &data, &mut generic_parity);
+
+            assert_eq!(
+                generated_parity, generic_parity,
+                "config ({data_shard_count},{parity_shard_count}), shard length {shard_len}"
+            );
+
+            let mut shards = data.clone();
+            shards.extend(generated_parity);
+            assert!(
+                codec.verify(&shards).unwrap(),
+                "config ({data_shard_count},{parity_shard_count}), shard length {shard_len}"
+            );
+        }
+    }
+}
+
+#[test]
+fn four_plus_two_recovers_all_supported_missing_combinations() {
+    let codec = ReedSolomon::new(4, 2).unwrap();
+    let data = deterministic_shards_u8(65, 4, 0x1452);
+    let mut parity = vec![vec![0; 65]; 2];
+    encode_generic_galois8(&codec, &data, &mut parity);
+    let mut encoded = data;
+    encoded.extend(parity);
+
+    for first_missing in 0..encoded.len() {
+        let mut shards = encoded.iter().cloned().map(Some).collect::<Vec<_>>();
+        shards[first_missing] = None;
+        codec.reconstruct(&mut shards).unwrap();
+        assert_eq!(
+            shards.iter().map(Option::as_ref).collect::<Vec<_>>(),
+            encoded.iter().map(Some).collect::<Vec<_>>(),
+            "failed to recover missing shard {first_missing}"
+        );
+
+        for second_missing in first_missing + 1..encoded.len() {
+            let mut shards = encoded.iter().cloned().map(Some).collect::<Vec<_>>();
+            shards[first_missing] = None;
+            shards[second_missing] = None;
+            codec.reconstruct(&mut shards).unwrap();
+            assert_eq!(
+                shards.iter().map(Option::as_ref).collect::<Vec<_>>(),
+                encoded.iter().map(Some).collect::<Vec<_>>(),
+                "failed to recover missing shards {first_missing} and {second_missing}"
+            );
+
+            for third_missing in second_missing + 1..encoded.len() {
+                let mut shards = encoded.iter().cloned().map(Some).collect::<Vec<_>>();
+                shards[first_missing] = None;
+                shards[second_missing] = None;
+                shards[third_missing] = None;
+                assert_eq!(
+                    codec.reconstruct(&mut shards).unwrap_err(),
+                    Error::TooFewShardsPresent,
+                    "unexpected result for missing shards {first_missing}, {second_missing}, {third_missing}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn four_plus_two_verify_detects_present_corruption_without_reconstructing_it() {
+    let codec = ReedSolomon::new(4, 2).unwrap();
+    let data = deterministic_shards_u8(65, 4, 0x1452);
+    let mut parity = vec![vec![0; 65]; 2];
+    encode_generic_galois8(&codec, &data, &mut parity);
+    let mut encoded = data;
+    encoded.extend(parity);
+
+    for shard_index in 0..encoded.len() {
+        for byte_index in [0, 32, 64] {
+            let mut corrupted = encoded.clone();
+            corrupted[shard_index][byte_index] ^= 0x80;
+            assert!(
+                !codec.verify(&corrupted).unwrap(),
+                "verify accepted corruption in shard {shard_index} at byte {byte_index}"
+            );
+
+            let expected_corrupted = corrupted.clone();
+            let mut present_shards = corrupted.into_iter().map(Some).collect::<Vec<_>>();
+            codec.reconstruct(&mut present_shards).unwrap();
+            assert_eq!(
+                present_shards
+                    .into_iter()
+                    .map(Option::unwrap)
+                    .collect::<Vec<_>>(),
+                expected_corrupted,
+                "reconstruct unexpectedly changed a present corrupted shard"
+            );
+        }
+    }
+}
+
 #[cfg(feature = "std")]
 #[test]
 fn test_scalar_override_4x2_encode_falls_back_and_round_trips() {
