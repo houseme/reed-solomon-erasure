@@ -235,6 +235,8 @@ let rs = ReedSolomon::with_custom_matrix(3, 2, & custom_rows, CodecOptions::defa
 - `RSE_STRICT_BACKEND_OVERRIDE=1`
 - `RUST_REED_SOLOMON_ERASURE_ARCH`
 
+未设置或设置为 `auto` 的 `RSE_BACKEND_OVERRIDE` 会在平台支持时允许 generated SIMD encode code。任何已识别的显式 override（包括 `scalar`）都会让 encode 使用所选的 generic backend，并绕过 generated SIMD codegen。因此 `RSE_BACKEND_OVERRIDE=scalar` 可以可靠地避免执行 generated SIMD。
+
 公开辅助函数：
 
 - `galois_8::active_backend_name()`

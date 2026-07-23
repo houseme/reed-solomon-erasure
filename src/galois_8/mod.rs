@@ -149,6 +149,10 @@ pub fn active_backend_id() -> BackendId {
     backend::active_backend().id
 }
 
+pub(crate) fn generated_encode_allowed() -> bool {
+    backend::generated_encode_allowed()
+}
+
 #[cfg(test)]
 fn mul_slice_scalar_for_test(c: u8, input: &[u8], out: &mut [u8]) {
     scalar::mul_slice_pure_rust(c, input, out);
