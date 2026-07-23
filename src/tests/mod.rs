@@ -6404,6 +6404,45 @@ fn generated_encode_matches_generic_across_layout_and_tail_matrix() {
     }
 }
 
+#[cfg(all(
+    feature = "std",
+    feature = "simd-avx2",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+#[test]
+fn forced_avx2_codegen_filter_falls_back_to_generic_4x2() {
+    let codec = ReedSolomon::new(4, 2).unwrap();
+    let data = deterministic_shards_u8(65, 4, 0x1453);
+    let mut expected_parity = vec![vec![0; 65]; 2];
+    encode_generic_galois8(&codec, &data, &mut expected_parity);
+
+    let mut filtered_parity = vec![vec![0xa5; 65]; 2];
+    crate::galois_8::x86::codegen::with_forced_avx2_codegen_availability(false, || {
+        codec.encode_sep(&data, &mut filtered_parity).unwrap();
+    });
+
+    assert_eq!(filtered_parity, expected_parity);
+
+    let mut shards = data;
+    shards.extend(filtered_parity);
+    assert!(codec.verify(&shards).unwrap());
+
+    let encoded = shards.clone();
+    let mut reconstructable = shards.into_iter().map(Some).collect::<Vec<_>>();
+    reconstructable[0] = None;
+    reconstructable[5] = None;
+    codec.reconstruct(&mut reconstructable).unwrap();
+    assert_eq!(
+        reconstructable
+            .into_iter()
+            .map(Option::unwrap)
+            .collect::<Vec<_>>(),
+        encoded
+    );
+}
+
 #[test]
 fn four_plus_two_recovers_all_supported_missing_combinations() {
     let codec = ReedSolomon::new(4, 2).unwrap();
