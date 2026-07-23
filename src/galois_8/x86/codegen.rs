@@ -25,3 +25,94 @@ pub(crate) fn try_encode_codegen_avx2(
 ) -> bool {
     false
 }
+
+#[inline]
+#[cfg(all(feature = "std", target_arch = "x86_64", test))]
+fn avx2_codegen_available() -> bool {
+    FORCED_AVX2_CODEGEN_AVAILABILITY
+        .with(|availability| availability.get())
+        .unwrap_or_else(|| avx2_codegen_available_for(std::is_x86_feature_detected!("avx2")))
+}
+
+#[inline]
+#[cfg(all(feature = "std", target_arch = "x86_64", not(test)))]
+fn avx2_codegen_available() -> bool {
+    avx2_codegen_available_for(std::is_x86_feature_detected!("avx2"))
+}
+
+#[inline]
+#[cfg(all(feature = "std", not(target_arch = "x86_64")))]
+fn avx2_codegen_available() -> bool {
+    false
+}
+
+#[inline]
+#[cfg(not(feature = "std"))]
+fn avx2_codegen_available() -> bool {
+    avx2_codegen_available_for(cfg!(all(target_arch = "x86_64", target_feature = "avx2")))
+}
+
+#[inline]
+fn avx2_codegen_available_for(avx2_available: bool) -> bool {
+    avx2_available
+}
+
+#[cfg(all(test, feature = "std", target_arch = "x86_64"))]
+thread_local! {
+    static FORCED_AVX2_CODEGEN_AVAILABILITY: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(all(test, feature = "std", target_arch = "x86_64"))]
+pub(crate) fn with_forced_avx2_codegen_availability<T>(
+    availability: bool,
+    callback: impl FnOnce() -> T,
+) -> T {
+    struct Restore<'a> {
+        slot: &'a std::cell::Cell<Option<bool>>,
+        previous: Option<bool>,
+    }
+
+    impl Drop for Restore<'_> {
+        fn drop(&mut self) {
+            self.slot.set(self.previous);
+        }
+    }
+
+    FORCED_AVX2_CODEGEN_AVAILABILITY.with(|slot| {
+        let restore = Restore {
+            slot,
+            previous: slot.replace(Some(availability)),
+        };
+        let result = callback();
+        drop(restore);
+        result
+    })
+}
+
+#[cfg(all(
+    test,
+    feature = "simd-avx2",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_runtime_avx2_returns_fallback_without_writing_parity() {
+        let mut parity = [0xa5; 1];
+        let mut parity_refs = [&mut parity[..]];
+
+        assert!(!try_encode_codegen_avx2_with_avx2_available(
+            false,
+            4,
+            2,
+            &[],
+            &[],
+            &mut parity_refs,
+            1,
+        ));
+        assert_eq!(parity, [0xa5; 1]);
+    }
+}

@@ -290,6 +290,10 @@ impl<F: Field> ReedSolomon<F> {
         parity: &mut [U],
         _shard_len: usize,
     ) -> bool {
+        if !crate::galois_8::generated_encode_allowed() {
+            return false;
+        }
+
         // SAFETY: We only call this when size_of::<F::Elem>() == 1, so F::Elem is u8.
         // u8 and F::Elem have identical layout (align=1, size=1), so pointer casts are valid.
         let _data_u8: smallvec::SmallVec<[&[u8]; 32]> = data

@@ -259,6 +259,8 @@ Environment variables:
 - `RSE_STRICT_BACKEND_OVERRIDE=1`
 - `RUST_REED_SOLOMON_ERASURE_ARCH`
 
+An unset or `auto` `RSE_BACKEND_OVERRIDE` allows generated SIMD encode code when the platform supports it. Any recognised explicit override, including `scalar`, uses the selected generic backend for encode and bypasses generated SIMD codegen. This makes `RSE_BACKEND_OVERRIDE=scalar` a reliable way to avoid generated SIMD execution.
+
 Public helpers:
 
 - `galois_8::active_backend_name()`

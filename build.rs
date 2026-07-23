@@ -372,11 +372,33 @@ fn generate_encode_codegen_avx2(f: &mut File, configs: &[(usize, usize)]) {
     writeln!(f, "    parity: &mut [&mut [u8]],").unwrap();
     writeln!(f, "    shard_len: usize,").unwrap();
     writeln!(f, ") -> bool {{").unwrap();
+    writeln!(f, "    try_encode_codegen_avx2_with_avx2_available(").unwrap();
+    writeln!(f, "        avx2_codegen_available(),").unwrap();
+    writeln!(
+        f,
+        "        data_shard_count, parity_shard_count, parity_rows, data, parity, shard_len,"
+    )
+    .unwrap();
+    writeln!(f, "    )").unwrap();
+    writeln!(f, "}}").unwrap();
+    writeln!(f).unwrap();
+    writeln!(f, "fn try_encode_codegen_avx2_with_avx2_available(").unwrap();
+    writeln!(f, "    avx2_available: bool,").unwrap();
+    writeln!(f, "    data_shard_count: usize,").unwrap();
+    writeln!(f, "    parity_shard_count: usize,").unwrap();
+    writeln!(f, "    parity_rows: &[&[u8]],").unwrap();
+    writeln!(f, "    data: &[&[u8]],").unwrap();
+    writeln!(f, "    parity: &mut [&mut [u8]],").unwrap();
+    writeln!(f, "    shard_len: usize,").unwrap();
+    writeln!(f, ") -> bool {{").unwrap();
+    writeln!(f, "    if !avx2_available {{").unwrap();
+    writeln!(f, "        return false;").unwrap();
+    writeln!(f, "    }}").unwrap();
     writeln!(f, "    match (data_shard_count, parity_shard_count) {{").unwrap();
     for &(d, p) in configs {
         writeln!(
             f,
-            "        // SAFETY: 运行时特性检测已确认 ISA 可用后才分发到此臂。"
+            "        // SAFETY: the AVX2 runtime check above proved this CPU supports AVX2."
         )
         .unwrap();
         writeln!(f, "        ({d}, {p}) => unsafe {{").unwrap();
