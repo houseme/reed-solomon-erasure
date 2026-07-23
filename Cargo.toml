@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/houseme/reed-solomon-erasure"
 
 [workspace.dependencies]
-cc = "1.2"
+cc = "1.3.0"
 cfg_aliases = "0.2"
 criterion = { version = "0.8.2", features = ["html_reports"] }
 hashlink = { version = "0.12", default-features = false }
@@ -20,7 +20,7 @@ parking_lot = "0.12.5"
 quickcheck = "1.1.0"
 rand = "0.10.2"
 rayon = "1.12"
-rustfs-erasure-codec = { version = "8.0.0", path = "." }
+rustfs-erasure-codec = { version = "8.0.1", path = "." }
 smallvec = "1.15"
 spin = { version = "0.12.2", default-features = false, features = ["once", "spin_mutex"] }
 wasm-bindgen = "0.2.126"
@@ -44,7 +44,7 @@ workspace = true
 
 [package]
 name = "rustfs-erasure-codec"
-version = "8.0.0"
+version = "8.0.1"
 authors = ["Darren Ldl <darrenldldev@gmail.com>"]
 edition.workspace = true
 build = "build.rs"
