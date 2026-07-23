@@ -10,6 +10,25 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 8.0.1 (2026-07-23)
+
+> Patch release: safely guard generated AVX2 encode dispatch while preserving the public API and the on-wire Reed-Solomon format.
+
+### Fixed
+- Generated x86_64 AVX2 encode dispatch now checks runtime availability before entering AVX2 code and falls back to the generic encoder when AVX2 is unavailable, preventing illegal-instruction failures on older x86_64 CPUs.
+- A recognised `RSE_BACKEND_OVERRIDE`, including `scalar`, consistently bypasses generated encode code as well as the selected multiplication backend.
+- Updated the `cfg_aliases` build dependency to avoid a nightly compiler warning promoted to an error by the workspace Clippy gate.
+
+### Validation
+- Added deterministic generated-vs-generic conformance coverage across supported layouts and SIMD tail boundaries, plus a test-only forced-AVX2-filter 4+2 encode, verify, and reconstruction round trip.
+- Verified the std and no_std SIMD combinations on a real no-AVX2 x86_64 host, including Rust 1.96 MSRV checks; CI covers Linux, Windows, macOS ARM64, Linux ARM64, ppc64le VSX, ASan, and explicit scalar/AVX2/GFNI backend overrides.
+- The downstream RustFS 6-drive `EC:2` multipart acceptance matrix remains tracked in rustfs/backlog#1453 and rustfs/rustfs#5076.
+
+### Compatibility
+- No public Rust API, ABI, feature name, default std dispatch contract, or encoded data format changed.
+- `RSE_BACKEND_OVERRIDE` must be set before the process first uses the codec; generated-encode permission is cached consistently with backend selection.
+- In no_std builds compiled with `target-feature=+avx2`, deployment CPUs must support AVX2.
+
 ## 8.0.0 (2026-07-14)
 
 > Major release: the full security / performance / robustness audit against [`klauspost/reedsolomon`](https://github.com/klauspost/reedsolomon), plus optional Leopard auto-activation. **The only breaking change for existing callers is that `CodecOptions` (and the new `LeopardMode`) are now `#[non_exhaustive]`.** Callers that only use `ReedSolomon::new` / `encode*` / `reconstruct*` / `verify*` — including downstream RustFS via `rustfs-ecstore` — need no source changes, only the dependency bump to `8`.
