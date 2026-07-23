@@ -6359,6 +6359,49 @@ fn test_codegen_encode_common_configs() {
     }
 }
 
+#[cfg(feature = "std")]
+#[test]
+fn test_scalar_override_4x2_encode_falls_back_and_round_trips() {
+    use std::process::Command;
+
+    if std::env::var("RSE_CODEGEN_OVERRIDE_CHILD").as_deref() == Ok("scalar-4x2") {
+        assert!(!galois_8::generated_encode_allowed());
+
+        let codec = ReedSolomon::new(4, 2).unwrap();
+        let mut shards = deterministic_shards_u8(33, 6, 0x1449);
+        codec.encode(&mut shards).unwrap();
+        assert!(codec.verify(&shards).unwrap());
+
+        let encoded = shards.clone();
+        let mut reconstructable = shards.into_iter().map(Some).collect::<Vec<_>>();
+        reconstructable[0] = None;
+        reconstructable[5] = None;
+        codec.reconstruct(&mut reconstructable).unwrap();
+
+        for (actual, expected) in reconstructable.iter().zip(encoded.iter()) {
+            assert_eq!(actual.as_ref().unwrap(), expected);
+        }
+        return;
+    }
+
+    let current_exe = std::env::current_exe().unwrap();
+    let output = Command::new(current_exe)
+        .env("RSE_BACKEND_OVERRIDE", "scalar")
+        .env("RSE_CODEGEN_OVERRIDE_CHILD", "scalar-4x2")
+        .arg("--exact")
+        .arg("tests::test_scalar_override_4x2_encode_falls_back_and_round_trips")
+        .arg("--nocapture")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "scalar override fallback child failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 // ---------------------------------------------------------------------------
 // #1234 — optional Leopard auto-activation (LeopardMode) + family-aware caps.
 // ---------------------------------------------------------------------------

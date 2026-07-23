@@ -27,3 +27,32 @@ pub(crate) fn try_encode_codegen_avx2(
 ) -> bool {
     false
 }
+
+#[cfg(all(
+    test,
+    feature = "simd-avx2",
+    feature = "std",
+    target_arch = "x86_64",
+    not(target_env = "msvc"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_runtime_avx2_returns_fallback_without_writing_parity() {
+        let mut parity = [0xa5; 1];
+        let mut parity_refs = [&mut parity[..]];
+
+        assert!(!try_encode_codegen_avx2_with_runtime_avx2(
+            false,
+            4,
+            2,
+            &[],
+            &[],
+            &mut parity_refs,
+            1,
+        ));
+        assert_eq!(parity, [0xa5; 1]);
+    }
+}
