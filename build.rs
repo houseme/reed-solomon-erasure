@@ -440,155 +440,160 @@ fn generate_encode_fn_avx2(f: &mut File, d: usize, p: usize) {
     writeln!(f, "    ) {{").unwrap();
     writeln!(
         f,
-        "        // SAFETY: 所在 fn 是 #[target_feature],调用方保证 ISA 可用(见 # Safety 文档),所有指针均为非对齐 load 且访问在 shard_len 界内。"
+        "        // SAFETY: this function's safety contract applies to each generated row kernel."
     )
     .unwrap();
     writeln!(f, "        unsafe {{").unwrap();
-
-    writeln!(
-        f,
-        "        let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);"
-    )
-    .unwrap();
-
-    // Load coefficient tables for each (parity_row, data_shard) pair
-    writeln!(
-        f,
-        "        // Load GF multiplication table halves for all coefficients."
-    )
-    .unwrap();
-    writeln!(
-        f,
-        "        // Layout: coef_tables[p_idx][d_idx] = (low_tbl, high_tbl)"
-    )
-    .unwrap();
     for pi in 0..p {
-        for di in 0..d {
-            writeln!(
-                f,
-                "        let (coef_low_{pi}_{di}, coef_high_{pi}_{di}): (__m256i, __m256i) = {{"
-            )
-            .unwrap();
-            writeln!(f, "            let c = parity_rows[{pi}][{di}];").unwrap();
-            writeln!(
-                f,
-                "            let (lh, hh) = super::super::load_table_halves(c);"
-            )
-            .unwrap();
-            writeln!(
-                f,
-                "            let low128: __m128i = _mm_loadu_si128(lh.as_ptr().cast());"
-            )
-            .unwrap();
-            writeln!(
-                f,
-                "            let high128: __m128i = _mm_loadu_si128(hh.as_ptr().cast());"
-            )
-            .unwrap();
-            writeln!(f, "            (_mm256_broadcastsi128_si256(low128), _mm256_broadcastsi128_si256(high128))").unwrap();
-            writeln!(f, "        }};").unwrap();
-        }
+        writeln!(
+            f,
+            "            encode_{d}x{p}_parity_{pi}_avx2(parity_rows, data, parity, shard_len);"
+        )
+        .unwrap();
     }
+    writeln!(f, "        }}").unwrap();
+    writeln!(f, "    }}").unwrap();
+    writeln!(f).unwrap();
 
-    writeln!(f).unwrap();
-    writeln!(f, "        let bytes_done = shard_len & !31usize;").unwrap();
-    writeln!(f).unwrap();
+    for pi in 0..p {
+        generate_encode_parity_fn_avx2(f, d, p, pi);
+    }
+}
+
+fn generate_encode_parity_fn_avx2(f: &mut File, d: usize, p: usize, pi: usize) {
+    use std::io::Write;
+
+    writeln!(f, "    #[target_feature(enable = \"avx2\")]").unwrap();
+    writeln!(f, "    unsafe fn encode_{d}x{p}_parity_{pi}_avx2(").unwrap();
+    writeln!(f, "        parity_rows: &[&[u8]],").unwrap();
+    writeln!(f, "        data: &[&[u8]],").unwrap();
+    writeln!(f, "        parity: &mut [&mut [u8]],").unwrap();
+    writeln!(f, "        shard_len: usize,").unwrap();
+    writeln!(f, "    ) {{").unwrap();
     writeln!(
         f,
-        "        // Main SIMD loop: process 32 bytes per iteration."
+        "        // SAFETY: the parent dispatcher checked AVX2 availability and slice lengths."
     )
     .unwrap();
-    writeln!(f, "        let mut offset = 0usize;").unwrap();
-    writeln!(f, "        while offset < bytes_done {{").unwrap();
-
-    // Load all data shards
-    writeln!(f, "            // Load all {d} data shards.").unwrap();
+    writeln!(f, "        unsafe {{").unwrap();
+    writeln!(
+        f,
+        "            let nibble_mask: __m256i = _mm256_set1_epi8(0x0f);"
+    )
+    .unwrap();
     for di in 0..d {
-        writeln!(f, "            let d{di}: __m256i = _mm256_loadu_si256(data[{di}][offset..].as_ptr().cast());").unwrap();
+        writeln!(
+            f,
+            "            let (coef_low_{di}, coef_high_{di}): (__m256i, __m256i) = {{"
+        )
+        .unwrap();
+        writeln!(f, "                let c = parity_rows[{pi}][{di}];").unwrap();
+        writeln!(
+            f,
+            "                let (lh, hh) = super::super::load_table_halves(c);"
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                let low128: __m128i = _mm_loadu_si128(lh.as_ptr().cast());"
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                let high128: __m128i = _mm_loadu_si128(hh.as_ptr().cast());"
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                (_mm256_broadcastsi128_si256(low128), _mm256_broadcastsi128_si256(high128))"
+        )
+        .unwrap();
+        writeln!(f, "            }};").unwrap();
     }
+    writeln!(f).unwrap();
+    writeln!(f, "            let bytes_done = shard_len & !31usize;").unwrap();
+    writeln!(f, "            let mut offset = 0usize;").unwrap();
+    writeln!(f, "            while offset < bytes_done {{").unwrap();
+    writeln!(
+        f,
+        "                let data_vec: __m256i = _mm256_loadu_si256(data[0][offset..].as_ptr().cast());"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "                let low = _mm256_and_si256(data_vec, nibble_mask);"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "                let high = _mm256_and_si256(_mm256_srli_epi64::<4>(data_vec), nibble_mask);"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "                let mut acc: __m256i = _mm256_xor_si256("
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "                    _mm256_shuffle_epi8(coef_low_0, low),"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "                    _mm256_shuffle_epi8(coef_high_0, high),"
+    )
+    .unwrap();
+    writeln!(f, "                );").unwrap();
+    for di in 1..d {
+        writeln!(
+            f,
+            "                let data_vec: __m256i = _mm256_loadu_si256(data[{di}][offset..].as_ptr().cast());"
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                let low = _mm256_and_si256(data_vec, nibble_mask);"
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                let high = _mm256_and_si256(_mm256_srli_epi64::<4>(data_vec), nibble_mask);"
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                acc = _mm256_xor_si256(acc, _mm256_xor_si256("
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                    _mm256_shuffle_epi8(coef_low_{di}, low),"
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "                    _mm256_shuffle_epi8(coef_high_{di}, high),"
+        )
+        .unwrap();
+        writeln!(f, "                ));").unwrap();
+    }
+    writeln!(
+        f,
+        "                _mm256_storeu_si256(parity[{pi}][offset..].as_mut_ptr().cast(), acc);"
+    )
+    .unwrap();
+    writeln!(f, "                offset += 32;").unwrap();
+    writeln!(f, "            }}").unwrap();
 
     writeln!(f).unwrap();
-
-    // Compute each parity shard
-    for pi in 0..p {
-        writeln!(f, "            // Compute parity shard {pi}.").unwrap();
-        // For first data shard: direct multiply (no XOR accumulation)
-        writeln!(
-            f,
-            "            let low = _mm256_and_si256(d0, nibble_mask);"
-        )
-        .unwrap();
-        writeln!(
-            f,
-            "            let high = _mm256_and_si256(_mm256_srli_epi64::<4>(d0), nibble_mask);"
-        )
-        .unwrap();
-        writeln!(
-            f,
-            "            let mut acc_{pi}: __m256i = _mm256_xor_si256("
-        )
-        .unwrap();
-        writeln!(
-            f,
-            "                _mm256_shuffle_epi8(coef_low_{pi}_0, low),"
-        )
-        .unwrap();
-        writeln!(
-            f,
-            "                _mm256_shuffle_epi8(coef_high_{pi}_0, high),"
-        )
-        .unwrap();
-        writeln!(f, "            );").unwrap();
-
-        // For remaining data shards: XOR accumulate
-        for di in 1..d {
-            writeln!(
-                f,
-                "            let low = _mm256_and_si256(d{di}, nibble_mask);"
-            )
-            .unwrap();
-            writeln!(f, "            let high = _mm256_and_si256(_mm256_srli_epi64::<4>(d{di}), nibble_mask);").unwrap();
-            writeln!(
-                f,
-                "            acc_{pi} = _mm256_xor_si256(acc_{pi}, _mm256_xor_si256("
-            )
-            .unwrap();
-            writeln!(
-                f,
-                "                _mm256_shuffle_epi8(coef_low_{pi}_{di}, low),"
-            )
-            .unwrap();
-            writeln!(
-                f,
-                "                _mm256_shuffle_epi8(coef_high_{pi}_{di}, high),"
-            )
-            .unwrap();
-            writeln!(f, "            ));").unwrap();
-        }
-
-        writeln!(
-            f,
-            "            _mm256_storeu_si256(parity[{pi}][offset..].as_mut_ptr().cast(), acc_{pi});"
-        )
-        .unwrap();
+    writeln!(f, "            for i in bytes_done..shard_len {{").unwrap();
+    writeln!(f, "                let mut acc: u8 = 0;").unwrap();
+    for di in 0..d {
+        writeln!(f, "                acc ^= super::super::super::MUL_TABLE[parity_rows[{pi}][{di}] as usize][data[{di}][i] as usize];").unwrap();
     }
-
-    writeln!(f, "            offset += 32;").unwrap();
-    writeln!(f, "        }}").unwrap();
-
-    // Scalar tail
-    writeln!(f).unwrap();
-    writeln!(f, "        // Scalar tail for remaining bytes.").unwrap();
-    writeln!(f, "        for i in bytes_done..shard_len {{").unwrap();
-    for pi in 0..p {
-        writeln!(f, "            let mut acc: u8 = 0;").unwrap();
-        for di in 0..d {
-            writeln!(f, "            acc ^= super::super::super::MUL_TABLE[parity_rows[{pi}][{di}] as usize][data[{di}][i] as usize];").unwrap();
-        }
-        writeln!(f, "            parity[{pi}][i] = acc;").unwrap();
-    }
-    writeln!(f, "        }}").unwrap();
-
+    writeln!(f, "                parity[{pi}][i] = acc;").unwrap();
+    writeln!(f, "            }}").unwrap();
     writeln!(f, "        }}").unwrap();
     writeln!(f, "    }}").unwrap();
     writeln!(f).unwrap();

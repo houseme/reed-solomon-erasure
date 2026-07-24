@@ -100,6 +100,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn runtime_avx2_codegen_follows_runtime_availability() {
+        assert!(avx2_codegen_available_for(true));
+        assert!(!avx2_codegen_available_for(false));
+    }
+
+    #[test]
     fn no_runtime_avx2_returns_fallback_without_writing_parity() {
         let mut parity = [0xa5; 1];
         let mut parity_refs = [&mut parity[..]];
